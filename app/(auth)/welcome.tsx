@@ -1,0 +1,217 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  SafeAreaView,
+  Alert,
+  Image,
+} from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
+import { useRouter } from 'expo-router';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuthStore } from '@/store/authStore';
+import { auth } from '@/services/api';
+import { FONTS, COLORS } from '@/constants';
+
+WebBrowser.maybeCompleteAuthSession();
+
+export default function WelcomeScreen() {
+  const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const { setAuth } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [_request, response, promptAsync] = Google.useAuthRequest({
+    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+  });
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    try {
+      const result = await promptAsync();
+
+      if (result.type !== 'success') {
+        setIsLoading(false);
+        return;
+      }
+
+      const idToken = result.params?.id_token;
+      if (!idToken) {
+        throw new Error('No ID token received from Google');
+      }
+
+      const { token, user, needsOnboarding } = await auth.googleSignIn(idToken);
+      await setAuth(token, user, needsOnboarding);
+
+      if (needsOnboarding) {
+        router.replace('/(auth)/onboarding');
+      } else {
+        router.replace('/(app)/beacon');
+      }
+    } catch (err) {
+      Alert.alert(
+        'Sign-in Failed',
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Hero Section */}
+      <View style={styles.hero}>
+        {/* Lighthouse illustration placeholder — replace with your actual asset */}
+        <View style={[styles.logoContainer, { backgroundColor: colors.surface }]}>
+          <Text style={styles.logoEmoji}>🏠</Text>
+        </View>
+
+        <Text style={[styles.title, { color: colors.text }]}>TribeLife</Text>
+        <Text style={[styles.tagline, { color: colors.textMuted }]}>
+          Your community.{'\n'}Always within reach.
+        </Text>
+      </View>
+
+      {/* Feature highlights */}
+      <View style={styles.features}>
+        {[
+          { icon: '💬', text: 'Chat with people in your area' },
+          { icon: '✨', text: 'Beacon — smart community matching' },
+          { icon: '🤝', text: 'Connect one-on-one' },
+        ].map((f) => (
+          <View key={f.text} style={styles.featureRow}>
+            <Text style={styles.featureIcon}>{f.icon}</Text>
+            <Text style={[styles.featureText, { color: colors.textMuted }]}>{f.text}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* CTA */}
+      <View style={styles.cta}>
+        <TouchableOpacity
+          style={[styles.googleButton, isLoading && styles.buttonDisabled]}
+          onPress={handleGoogleSignIn}
+          disabled={isLoading}
+          activeOpacity={0.85}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : (
+            <>
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <Text style={[styles.terms, { color: colors.textMuted }]}>
+          By continuing, you agree to our Terms of Service{'\n'}and Privacy Policy
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  hero: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 40,
+  },
+  logoContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  logoEmoji: {
+    fontSize: 52,
+  },
+  title: {
+    fontSize: 42,
+    fontFamily: FONTS.bold,
+    letterSpacing: -1,
+    marginBottom: 12,
+  },
+  tagline: {
+    fontSize: 18,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+  features: {
+    paddingVertical: 32,
+    gap: 16,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  featureIcon: {
+    fontSize: 24,
+    width: 36,
+  },
+  featureText: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+  },
+  cta: {
+    paddingBottom: 40,
+    gap: 16,
+    alignItems: 'center',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    width: '100%',
+    gap: 10,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  googleIcon: {
+    fontSize: 18,
+    fontFamily: FONTS.bold,
+    color: '#FFF',
+    backgroundColor: '#FFF',
+    color: COLORS.primary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  googleButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: FONTS.semiBold,
+  },
+  terms: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+});
