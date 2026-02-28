@@ -14,19 +14,29 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.tribelife.app"
+      "bundleIdentifier": "com.tribelife.app",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.747431558513-l69psshcds1b5r2icjbv62tun0iqtrim"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
-      "package": "com.tribelife.app",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.tribelife.app"
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-dev-client",
+      "@react-native-google-signin/google-signin",
       [
         "expo-notifications",
         {

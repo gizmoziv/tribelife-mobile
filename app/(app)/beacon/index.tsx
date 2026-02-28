@@ -97,7 +97,7 @@ function MyBeaconsPanel() {
       setInputText('');
       Alert.alert(
         '🏠 Beacon Lit!',
-        'Your beacon has been posted. We'll notify you when we find a match.',
+        "Your beacon has been posted. We'll notify you when we find a match.",
         [{ text: 'Great!' }]
       );
     } catch (err: any) {

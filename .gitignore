@@ -43,3 +43,5 @@ Desktop.ini
 # Google Services (contains API keys)
 google-services.json
 GoogleService-Info.plist
+.claude
+.omc

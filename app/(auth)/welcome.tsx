@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,42 +7,34 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Alert,
-  Image,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
 import { FONTS, COLORS } from '@/constants';
 
-WebBrowser.maybeCompleteAuthSession();
-
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { setAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
 
-  const [_request, response, promptAsync] = Google.useAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-  });
+  useEffect(() => {
+    GoogleSignin.configure({
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    });
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      const result = await promptAsync();
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
 
-      if (result.type !== 'success') {
-        setIsLoading(false);
-        return;
-      }
-
-      const idToken = result.params?.id_token;
+      const idToken = response.data?.idToken;
       if (!idToken) {
         throw new Error('No ID token received from Google');
       }
@@ -55,7 +47,11 @@ export default function WelcomeScreen() {
       } else {
         router.replace('/(app)/beacon');
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.code === 'SIGN_IN_CANCELLED') {
+        // User cancelled — do nothing
+        return;
+      }
       Alert.alert(
         'Sign-in Failed',
         err instanceof Error ? err.message : 'Something went wrong. Please try again.',
@@ -70,7 +66,6 @@ export default function WelcomeScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Hero Section */}
       <View style={styles.hero}>
-        {/* Lighthouse illustration placeholder — replace with your actual asset */}
         <View style={[styles.logoContainer, { backgroundColor: colors.surface }]}>
           <Text style={styles.logoEmoji}>🏠</Text>
         </View>
@@ -194,7 +189,6 @@ const styles = StyleSheet.create({
   googleIcon: {
     fontSize: 18,
     fontFamily: FONTS.bold,
-    color: '#FFF',
     backgroundColor: '#FFF',
     color: COLORS.primary,
     width: 24,
