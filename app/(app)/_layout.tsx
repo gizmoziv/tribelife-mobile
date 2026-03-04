@@ -5,25 +5,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi } from '@/services/api';
-import { LighthouseIcon } from '@/components/ui/LighthouseIcon';
+import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
 import { COLORS, FONTS } from '@/constants';
-
-// Simple SVG-based tab icons
-function ChatIcon({ color }: { color: string }) {
-  return (
-    <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: 20 }}>💬</Text>
-    </View>
-  );
-}
-
-function ProfileIcon({ color }: { color: string }) {
-  return (
-    <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: 20 }}>👤</Text>
-    </View>
-  );
-}
 
 export default function AppLayout() {
   const router = useRouter();
@@ -89,7 +72,7 @@ export default function AppLayout() {
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ color }) => <ChatIcon color={color} />,
+          tabBarIcon: ({ color, focused }) => <GradientTabIcon icon="chat" color={color} focused={focused} />,
           headerTitle: 'Chat',
         }}
       />
@@ -97,9 +80,7 @@ export default function AppLayout() {
         name="beacon"
         options={{
           title: 'Beacon',
-          tabBarIcon: ({ color, focused }) => (
-            <LighthouseIcon color={color} focused={focused} />
-          ),
+          tabBarIcon: ({ color, focused }) => <GradientTabIcon icon="beacon" color={color} focused={focused} />,
           headerTitle: 'Beacon',
         }}
       />
@@ -107,7 +88,7 @@ export default function AppLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <ProfileIcon color={color} />,
+          tabBarIcon: ({ color, focused }) => <GradientTabIcon icon="profile" color={color} focused={focused} />,
           headerTitle: 'My Profile',
         }}
       />

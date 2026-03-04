@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
@@ -150,7 +151,7 @@ function MyBeaconsPanel() {
     <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       {/* Explainer */}
       <View style={[styles.explainer, { backgroundColor: colors.surface, borderColor: COLORS.accent }]}>
-        <Text style={styles.explainerEmoji}>🏠</Text>
+        <Image source={require('@/assets/tribelife-logo.png')} style={styles.explainerImage} />
         <Text style={[styles.explainerTitle, { color: colors.text }]}>What is a Beacon?</Text>
         <Text style={[styles.explainerBody, { color: colors.textMuted }]}>
           A beacon is a short description of something you're looking for or offering. Every 24 hours, we match your beacon with others in your timezone using AI.
@@ -317,7 +318,7 @@ function MatchesPanel() {
   if (matches.length === 0) {
     return (
       <View style={styles.emptyMatches}>
-        <Text style={{ fontSize: 48 }}>🏠</Text>
+        <Image source={require('@/assets/tribelife-logo.png')} style={{ width: 48, height: 48, borderRadius: 10 }} />
         <Text style={[styles.emptyTitle, { color: colors.text }]}>No matches yet</Text>
         <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
           We run matching daily at 6 AM UTC. Light a beacon and check back tomorrow!
@@ -429,7 +430,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  explainerEmoji: { fontSize: 32 },
+  explainerImage: { width: 32, height: 32, borderRadius: 8 },
   explainerTitle: { fontSize: 18, fontFamily: FONTS.bold, textAlign: 'center' },
   explainerBody: { fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
   limitBadge: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginTop: 4 },

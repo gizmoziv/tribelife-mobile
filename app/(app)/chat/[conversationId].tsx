@@ -11,7 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat } from '@/services/api';
@@ -35,6 +35,7 @@ export default function DMThreadScreen() {
   }>();
   const conversationId = parseInt(rawId);
   const navigation = useNavigation();
+  const router = useRouter();
   const { colors } = useTheme();
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -44,8 +45,35 @@ export default function DMThreadScreen() {
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Hide the parent tab header when in DM thread, restore on unmount
   useEffect(() => {
-    if (handle) navigation.setOptions({ title: `@${handle}` });
+    const parent = navigation.getParent();
+    parent?.setOptions({ headerShown: false });
+    return () => {
+      parent?.setOptions({ headerShown: true });
+    };
+  }, [navigation]);
+
+  // Always show a back button — navigates to chat index regardless of entry point
+  useEffect(() => {
+    const goBack = () => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(app)/chat');
+      }
+    };
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={goBack} hitSlop={8} style={{ paddingLeft: 12, paddingRight: 8, justifyContent: 'center' }}>
+            <Text style={{ color: COLORS.primary, fontSize: 28, fontFamily: FONTS.regular, lineHeight: 32 }}>‹</Text>
+          </TouchableOpacity>
+      ),
+    });
+  }, [navigation, colors.text]);
+
+  useEffect(() => {
+    if (handle) navigation.setOptions({ title: `@${handle} & You` });
   }, [handle]);
 
   useEffect(() => {
@@ -53,6 +81,13 @@ export default function DMThreadScreen() {
     chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
+      // Fallback: derive other user's handle from messages if not passed as param
+      if (!handle && msgs.length > 0) {
+        const otherMsg = msgs.find((m) => m.senderId !== user?.id);
+        if (otherMsg?.senderHandle) {
+          navigation.setOptions({ title: `@${otherMsg.senderHandle} & You` });
+        }
+      }
     }).catch(() => setIsLoading(false));
 
     // Join Socket.io room

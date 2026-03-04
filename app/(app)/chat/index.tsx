@@ -221,7 +221,7 @@ function DMListPanel() {
       renderItem={({ item }) => (
         <TouchableOpacity
           style={[styles.dmRow, { borderBottomColor: colors.border }]}
-          onPress={() => router.push(`/(app)/chat/${item.conversationId}`)}
+          onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
         >
           <View style={[styles.avatar, { backgroundColor: COLORS.primary }]}>
             <Text style={styles.avatarText}>

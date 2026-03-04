@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "TribeLife",
+    "name": "TribeLife App",
     "slug": "tribelife",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0F172A"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.tribelife.app",
@@ -21,8 +23,14 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.747431558513-l69psshcds1b5r2icjbv62tun0iqtrim"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.747431558513-l69psshcds1b5r2icjbv62tun0iqtrim"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -44,13 +52,15 @@
           "color": "#6366F1",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-build-properties"
     ],
     "scheme": "tribelife",
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
-      }
+        "projectId": "cb085a03-8ad6-428e-ab61-b0bf57ecf0fc"
+      },
+      "router": {}
     }
   }
 }

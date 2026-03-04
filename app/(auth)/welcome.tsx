@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -66,9 +67,7 @@ export default function WelcomeScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Hero Section */}
       <View style={styles.hero}>
-        <View style={[styles.logoContainer, { backgroundColor: colors.surface }]}>
-          <Text style={styles.logoEmoji}>🏠</Text>
-        </View>
+        <Image source={require('@/assets/tribelife-logo.png')} style={styles.logoImage} />
 
         <Text style={[styles.title, { color: colors.text }]}>TribeLife</Text>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>
@@ -127,16 +126,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: 40,
   },
-  logoContainer: {
+  logoImage: {
     width: 100,
     height: 100,
     borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 20,
-  },
-  logoEmoji: {
-    fontSize: 52,
   },
   title: {
     fontSize: 42,
@@ -152,6 +146,7 @@ const styles = StyleSheet.create({
   },
   features: {
     paddingVertical: 32,
+    paddingLeft: 16,
     gap: 16,
   },
   featureRow: {

@@ -50,7 +50,11 @@ export default function NotificationsScreen() {
         break;
       case 'new_dm':
         if (data.conversationId) {
-          router.push(`/(app)/chat/${data.conversationId}`);
+          router.back();
+          router.push({
+            pathname: '/(app)/chat/[conversationId]',
+            params: { conversationId: data.conversationId.toString() },
+          });
         }
         break;
       case 'beacon_match':
