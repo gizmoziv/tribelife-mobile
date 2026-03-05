@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
+import * as Localization from 'expo-localization';
 import {
   useFonts,
   Inter_400Regular,
@@ -46,7 +47,8 @@ function RootLayoutInner() {
       try {
         const token = await getToken();
         if (token) {
-          const { user } = await auth.me();
+          const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
+          const { user } = await auth.me(deviceTimezone);
           const needsOnboarding = !user.handle;
           await setAuth(token, user, needsOnboarding);
 

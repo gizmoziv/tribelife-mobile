@@ -32,7 +32,7 @@ export default function OnboardingScreen() {
   const [checkTimeout, setCheckTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Detect timezone from device
-  const detectedTimezone = Localization.useLocales()[0]?.timezone ?? 'UTC';
+  const detectedTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
 
   const handleChange = useCallback((text: string) => {
     const cleaned = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
@@ -69,7 +69,7 @@ export default function OnboardingScreen() {
     setIsSubmitting(true);
     try {
       await auth.onboarding(handle, detectedTimezone);
-      updateUser({ handle });
+      updateUser({ handle, timezone: detectedTimezone });
       router.replace('/(app)/beacon');
     } catch (err) {
       Alert.alert(

@@ -76,7 +76,8 @@ export const auth = {
   checkHandle: (handle: string) =>
     request<{ available: boolean; reason?: string }>(`/api/auth/handle-check/${handle}`),
 
-  me: () => request<{ user: User }>('/api/auth/me'),
+  me: (timezone?: string) =>
+    request<{ user: User }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
 
   updatePushToken: (expoPushToken: string) =>
     request('/api/auth/push-token', {
