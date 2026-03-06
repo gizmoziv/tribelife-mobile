@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
+import { Platform } from 'react-native';
+import Purchases from 'react-native-purchases';
 import {
   useFonts,
   Inter_400Regular,
@@ -19,6 +21,15 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
 
 SplashScreen.preventAutoHideAsync();
+
+// Configure RevenueCat
+const rcKey = Platform.OS === 'ios'
+  ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
+  : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+
+if (rcKey) {
+  Purchases.configure({ apiKey: rcKey });
+}
 
 // Configure notification handler
 Notifications.setNotificationHandler({

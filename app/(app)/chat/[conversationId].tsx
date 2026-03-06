@@ -144,7 +144,7 @@ export default function DMThreadScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={100}
       >
         <FlatList
           ref={flatListRef}
