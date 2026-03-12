@@ -8,8 +8,11 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Alert,
+  Platform,
+  Linking,
 } from 'react-native';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
@@ -21,12 +24,18 @@ export default function WelcomeScreen() {
   const { colors } = useTheme();
   const { setAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [isAppleLoading, setIsAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
     GoogleSignin.configure({
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
     });
+
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
+    }
   }, []);
 
   const handleGoogleSignIn = async () => {
@@ -63,6 +72,46 @@ export default function WelcomeScreen() {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    setIsAppleLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error('No identity token received from Apple');
+      }
+
+      const { token, user, needsOnboarding } = await auth.appleSignIn(
+        credential.identityToken,
+        credential.fullName,
+        credential.email,
+      );
+      await setAuth(token, user, needsOnboarding);
+
+      if (needsOnboarding) {
+        router.replace('/(auth)/onboarding');
+      } else {
+        router.replace('/(app)/beacon');
+      }
+    } catch (err: any) {
+      if (err.code === 'ERR_REQUEST_CANCELED') {
+        return;
+      }
+      Alert.alert(
+        'Sign-in Failed',
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsAppleLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Hero Section */}
@@ -91,6 +140,24 @@ export default function WelcomeScreen() {
 
       {/* CTA */}
       <View style={styles.cta}>
+        {appleAvailable && (
+          <TouchableOpacity
+            style={[styles.appleButton, isAppleLoading && styles.buttonDisabled]}
+            onPress={handleAppleSignIn}
+            disabled={isAppleLoading}
+            activeOpacity={0.85}
+          >
+            {isAppleLoading ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <>
+                <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
+                <Text style={styles.appleButtonText}>Continue with Apple</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={[styles.googleButton, isLoading && styles.buttonDisabled]}
           onPress={handleGoogleSignIn}
@@ -108,7 +175,14 @@ export default function WelcomeScreen() {
         </TouchableOpacity>
 
         <Text style={[styles.terms, { color: colors.textMuted }]}>
-          By continuing, you agree to our Terms of Service{'\n'}and Privacy Policy
+          By continuing, you agree to our{' '}
+          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/terms')}>
+            Terms of Service
+          </Text>
+          {' '}and{' '}
+          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
+            Privacy Policy
+          </Text>
         </Text>
       </View>
     </SafeAreaView>
@@ -167,6 +241,27 @@ const styles = StyleSheet.create({
     gap: 16,
     alignItems: 'center',
   },
+  appleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    width: '100%',
+    gap: 10,
+  },
+  appleIcon: {
+    fontSize: 20,
+    color: '#000',
+    fontWeight: '500',
+  },
+  appleButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontFamily: FONTS.semiBold,
+  },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -202,5 +297,9 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  termsLink: {
+    color: COLORS.primary,
+    textDecorationLine: 'underline' as const,
   },
 });

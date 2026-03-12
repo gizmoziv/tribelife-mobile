@@ -67,6 +67,12 @@ export const auth = {
       { method: 'POST', body: JSON.stringify({ idToken }) }
     ),
 
+  appleSignIn: (identityToken: string, fullName?: { givenName?: string | null; familyName?: string | null } | null, email?: string | null) =>
+    request<{ token: string; user: User; needsOnboarding: boolean; isNewUser: boolean }>(
+      '/api/auth/apple',
+      { method: 'POST', body: JSON.stringify({ identityToken, fullName, email }) }
+    ),
+
   onboarding: (handle: string, timezone: string) =>
     request('/api/auth/onboarding', {
       method: 'POST',
@@ -84,6 +90,9 @@ export const auth = {
       method: 'PUT',
       body: JSON.stringify({ expoPushToken }),
     }),
+
+  deleteAccount: () =>
+    request<{ ok: boolean }>('/api/auth/account', { method: 'DELETE' }),
 };
 
 // ── Chat ───────────────────────────────────────────────────────────────────
@@ -135,6 +144,15 @@ export const notificationsApi = {
   readAll: () => request('/api/notifications/read-all', { method: 'PUT' }),
 
   read: (id: number) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
+};
+
+// ── Support ───────────────────────────────────────────────────────────────
+export const supportApi = {
+  send: (subject: string, message: string) =>
+    request<{ success: boolean }>('/api/support', {
+      method: 'POST',
+      body: JSON.stringify({ subject, message }),
+    }),
 };
 
 // ── Users ──────────────────────────────────────────────────────────────────

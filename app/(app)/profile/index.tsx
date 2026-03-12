@@ -10,6 +10,7 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Purchases from 'react-native-purchases';
@@ -42,6 +43,43 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you sure?',
+              'All your conversations, beacons, and profile data will be permanently removed.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await auth.deleteAccount();
+                      disconnectSocket();
+                      await logout();
+                      router.replace('/(auth)/welcome');
+                    } catch {
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleUpgrade = async () => {
     setIsUpgrading(true);
     try {
@@ -69,7 +107,7 @@ export default function ProfileScreen() {
       }
     } catch (err: any) {
       if (!err.userCancelled) {
-        Alert.alert('Purchase Failed', err.message ?? 'Please try again.');
+        Alert.alert('Purchase Failed', 'Unable to complete the purchase. Please try again later.');
       }
     } finally {
       setIsUpgrading(false);
@@ -139,6 +177,9 @@ export default function ProfileScreen() {
                 • Priority matching in your area{'\n'}
                 • Support the TribeLife community
               </Text>
+              <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
+                TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period. You can manage or cancel your subscription in your device's Settings &gt; Apple ID &gt; Subscriptions.
+              </Text>
               <TouchableOpacity
                 style={[styles.upgradeButton, { opacity: isUpgrading ? 0.7 : 1 }]}
                 onPress={handleUpgrade}
@@ -157,6 +198,15 @@ export default function ProfileScreen() {
                   Restore purchase
                 </Text>
               </TouchableOpacity>
+              <View style={styles.legalLinks}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/terms')}>
+                  <Text style={[styles.legalLink, { color: COLORS.primary }]}>Terms of Use</Text>
+                </TouchableOpacity>
+                <Text style={{ color: colors.textMuted }}> · </Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
+                  <Text style={[styles.legalLink, { color: COLORS.primary }]}>Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </SettingsSection>
         )}
@@ -181,6 +231,17 @@ export default function ProfileScreen() {
           />
         </SettingsSection>
 
+        {/* Support */}
+        <SettingsSection title="Help">
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: colors.border }]}
+            onPress={() => router.push('/support')}
+          >
+            <Text style={[styles.rowLabel, { color: colors.text }]}>Contact Support</Text>
+            <Text style={[styles.settingValue, { color: colors.textMuted }]}>&rsaquo;</Text>
+          </TouchableOpacity>
+        </SettingsSection>
+
         {/* Danger Zone */}
         <SettingsSection title="Session">
           <TouchableOpacity
@@ -188,6 +249,15 @@ export default function ProfileScreen() {
             onPress={handleLogout}
           >
             <Text style={[styles.logoutText, { color: COLORS.error }]}>Log Out</Text>
+          </TouchableOpacity>
+        </SettingsSection>
+
+        <SettingsSection title="Danger Zone">
+          <TouchableOpacity
+            style={[styles.deleteButton]}
+            onPress={handleDeleteAccount}
+          >
+            <Text style={styles.deleteButtonText}>Delete Account</Text>
           </TouchableOpacity>
         </SettingsSection>
       </ScrollView>
@@ -270,6 +340,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   upgradeButtonText: { color: '#0F172A', fontSize: 15, fontFamily: FONTS.bold },
+  subscriptionInfo: { fontSize: 11, fontFamily: FONTS.regular, lineHeight: 16 },
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  legalLink: { fontSize: 12, fontFamily: FONTS.medium },
   restoreText: { fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
   logoutButton: {
     borderWidth: 1.5,
@@ -279,4 +352,12 @@ const styles = StyleSheet.create({
     margin: 16,
   },
   logoutText: { fontSize: 15, fontFamily: FONTS.semiBold },
+  deleteButton: {
+    backgroundColor: COLORS.error,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center' as const,
+    margin: 16,
+  },
+  deleteButtonText: { color: '#FFF', fontSize: 15, fontFamily: FONTS.semiBold },
 });

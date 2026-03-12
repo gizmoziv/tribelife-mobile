@@ -17,6 +17,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.tribelife.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -53,6 +54,7 @@
           "defaultChannel": "default"
         }
       ],
+      "expo-apple-authentication",
       "expo-build-properties"
     ],
     "scheme": "tribelife",
