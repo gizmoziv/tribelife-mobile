@@ -10,11 +10,12 @@ import {
   Platform,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat } from '@/services/api';
+import { chat, moderationApi } from '@/services/api';
 import {
   connectSocket,
   sendRoomMessage,
@@ -250,6 +251,52 @@ function DMListPanel() {
 }
 
 // ── Shared Components ─────────────────────────────────────────────────────
+function showReportBlockMenu(senderId: number, senderHandle: string, messageId: number) {
+  Alert.alert(
+    `@${senderHandle}`,
+    'What would you like to do?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Report Message',
+        onPress: () => {
+          Alert.alert('Report', 'Why are you reporting this message?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Spam',
+              onPress: () => moderationApi.report(senderId, 'message', 'Spam', messageId),
+            },
+            {
+              text: 'Harassment',
+              onPress: () => moderationApi.report(senderId, 'message', 'Harassment', messageId),
+            },
+            {
+              text: 'Objectionable Content',
+              onPress: () => moderationApi.report(senderId, 'message', 'Objectionable content', messageId)
+                .then(() => Alert.alert('Reported', 'Thank you. We will review this within 24 hours.')),
+            },
+          ]);
+        },
+      },
+      {
+        text: 'Block User',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Block User', `Block @${senderHandle}? You won't see their messages anymore.`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () => moderationApi.blockUser(senderId)
+                .then(() => Alert.alert('Blocked', `@${senderHandle} has been blocked.`)),
+            },
+          ]);
+        },
+      },
+    ]
+  );
+}
+
 function MessageBubble({
   message,
   isMe,
@@ -261,43 +308,55 @@ function MessageBubble({
 }) {
   const { colors } = useTheme();
 
+  const handleLongPress = () => {
+    if (!isMe && message.senderId) {
+      showReportBlockMenu(message.senderId, message.senderHandle ?? 'user', message.id);
+    }
+  };
+
   return (
-    <View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe]}>
-      {!isMe && (
-        <TouchableOpacity onPress={onProfilePress}>
-          <View style={[styles.avatarSmall, { backgroundColor: COLORS.primary }]}>
-            <Text style={styles.avatarTextSmall}>
-              {message.senderHandle?.[0]?.toUpperCase() ?? '?'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      )}
-      <View>
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onLongPress={handleLongPress}
+      delayLongPress={500}
+    >
+      <View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe]}>
         {!isMe && (
           <TouchableOpacity onPress={onProfilePress}>
-            <Text style={[styles.senderHandle, { color: COLORS.primary }]}>
-              @{message.senderHandle}
-            </Text>
+            <View style={[styles.avatarSmall, { backgroundColor: COLORS.primary }]}>
+              <Text style={styles.avatarTextSmall}>
+                {message.senderHandle?.[0]?.toUpperCase() ?? '?'}
+              </Text>
+            </View>
           </TouchableOpacity>
         )}
-        <View style={[
-          styles.bubble,
-          isMe
-            ? { backgroundColor: COLORS.primary }
-            : { backgroundColor: colors.surface },
-        ]}>
-          <Text style={[
-            styles.bubbleText,
-            { color: isMe ? '#FFF' : colors.text },
+        <View>
+          {!isMe && (
+            <TouchableOpacity onPress={onProfilePress}>
+              <Text style={[styles.senderHandle, { color: COLORS.primary }]}>
+                @{message.senderHandle}
+              </Text>
+            </TouchableOpacity>
+          )}
+          <View style={[
+            styles.bubble,
+            isMe
+              ? { backgroundColor: COLORS.primary }
+              : { backgroundColor: colors.surface },
           ]}>
-            {message.content}
+            <Text style={[
+              styles.bubbleText,
+              { color: isMe ? '#FFF' : colors.text },
+            ]}>
+              {message.content}
+            </Text>
+          </View>
+          <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
+            {formatTime(message.createdAt)}
           </Text>
         </View>
-        <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
-          {formatTime(message.createdAt)}
-        </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

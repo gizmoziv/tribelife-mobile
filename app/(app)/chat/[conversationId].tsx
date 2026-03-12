@@ -10,11 +10,12 @@ import {
   ActivityIndicator,
   TextInput,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat } from '@/services/api';
+import { chat, moderationApi } from '@/services/api';
 import {
   joinConversation,
   leaveConversation,
@@ -75,6 +76,58 @@ export default function DMThreadScreen() {
   useEffect(() => {
     if (handle) navigation.setOptions({ title: `@${handle} & You` });
   }, [handle]);
+
+  // Add report/block header button
+  useEffect(() => {
+    const otherMsg = messages.find((m) => m.senderId !== user?.id);
+    const otherUserId = otherMsg?.senderId;
+    const otherHandle = handle ?? otherMsg?.senderHandle ?? 'user';
+
+    if (!otherUserId) return;
+
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => {
+            Alert.alert(`@${otherHandle}`, 'What would you like to do?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Report User',
+                onPress: () => {
+                  moderationApi.report(otherUserId, 'profile', 'Reported from DM conversation')
+                    .then(() => Alert.alert('Reported', 'Thank you. We will review this within 24 hours.'));
+                },
+              },
+              {
+                text: 'Block User',
+                style: 'destructive',
+                onPress: () => {
+                  Alert.alert('Block User', `Block @${otherHandle}? You won't see their messages anymore.`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Block',
+                      style: 'destructive',
+                      onPress: () => {
+                        moderationApi.blockUser(otherUserId)
+                          .then(() => {
+                            Alert.alert('Blocked', `@${otherHandle} has been blocked.`);
+                            router.back();
+                          });
+                      },
+                    },
+                  ]);
+                },
+              },
+            ]);
+          }}
+          hitSlop={8}
+          style={{ paddingRight: 12 }}
+        >
+          <Text style={{ color: COLORS.primary, fontSize: 22 }}>···</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [messages, handle, user?.id]);
 
   useEffect(() => {
     // Load history

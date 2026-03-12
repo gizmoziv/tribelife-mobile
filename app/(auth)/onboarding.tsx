@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Localization from 'expo-localization';
@@ -29,6 +30,7 @@ export default function OnboardingScreen() {
   const [handle, setHandle] = useState('');
   const [handleStatus, setHandleStatus] = useState<HandleStatus>('idle');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [checkTimeout, setCheckTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Detect timezone from device
@@ -64,11 +66,11 @@ export default function OnboardingScreen() {
   }, [checkTimeout]);
 
   const handleSubmit = async () => {
-    if (handleStatus !== 'available' || !handle) return;
+    if (handleStatus !== 'available' || !handle || !acceptedTerms) return;
 
     setIsSubmitting(true);
     try {
-      await auth.onboarding(handle, detectedTimezone);
+      await auth.onboarding(handle, detectedTimezone, true);
       updateUser({ handle, timezone: detectedTimezone });
       router.replace('/(app)/beacon');
     } catch (err) {
@@ -146,15 +148,36 @@ export default function OnboardingScreen() {
             <Text style={[styles.hint, { color: colors.textMuted }]}>
               Your timezone determines which local chat room you'll be placed in. You can change this later.
             </Text>
+
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setAcceptedTerms(!acceptedTerms)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: acceptedTerms ? COLORS.primary : 'transparent' }]}>
+                {acceptedTerms && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={[styles.termsText, { color: colors.textMuted }]}>
+                I agree to the{' '}
+                <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/terms')}>
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
+                  Privacy Policy
+                </Text>
+                , including zero tolerance for objectionable content or abusive behavior.
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity
             style={[
               styles.button,
-              { opacity: handleStatus === 'available' && !isSubmitting ? 1 : 0.5 },
+              { opacity: handleStatus === 'available' && acceptedTerms && !isSubmitting ? 1 : 0.5 },
             ]}
             onPress={handleSubmit}
-            disabled={handleStatus !== 'available' || isSubmitting}
+            disabled={handleStatus !== 'available' || !acceptedTerms || isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#FFF" />
@@ -236,6 +259,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONTS.regular,
     lineHeight: 20,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 8,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginTop: 1,
+  },
+  checkmark: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700' as const,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: COLORS.primary,
+    textDecorationLine: 'underline' as const,
   },
   button: {
     backgroundColor: COLORS.primary,

@@ -73,10 +73,10 @@ export const auth = {
       { method: 'POST', body: JSON.stringify({ identityToken, fullName, email }) }
     ),
 
-  onboarding: (handle: string, timezone: string) =>
+  onboarding: (handle: string, timezone: string, acceptedTerms: boolean) =>
     request('/api/auth/onboarding', {
       method: 'POST',
-      body: JSON.stringify({ handle, timezone }),
+      body: JSON.stringify({ handle, timezone, acceptedTerms }),
     }),
 
   checkHandle: (handle: string) =>
@@ -152,6 +152,24 @@ export const supportApi = {
     request<{ success: boolean }>('/api/support', {
       method: 'POST',
       body: JSON.stringify({ subject, message }),
+    }),
+};
+
+// ── Moderation ────────────────────────────────────────────────────────────
+export const moderationApi = {
+  blockUser: (userId: number) =>
+    request<{ ok: boolean }>(`/api/moderation/block/${userId}`, { method: 'POST' }),
+
+  unblockUser: (userId: number) =>
+    request<{ ok: boolean }>(`/api/moderation/block/${userId}`, { method: 'DELETE' }),
+
+  getBlocked: () =>
+    request<{ blockedUsers: { id: number; blockedUserId: number }[] }>('/api/moderation/blocked'),
+
+  report: (reportedUserId: number, contentType: 'message' | 'beacon' | 'profile', reason: string, contentId?: number) =>
+    request<{ ok: boolean }>('/api/moderation/report', {
+      method: 'POST',
+      body: JSON.stringify({ reportedUserId, contentType, reason, contentId }),
     }),
 };
 
