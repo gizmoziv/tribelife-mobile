@@ -25,6 +25,7 @@ import {
   stopTyping,
   onTypingStart,
   onTypingStop,
+  onMessageRejected,
 } from '@/services/socket';
 import { FONTS, COLORS } from '@/constants';
 import type { Message } from '@/types';
@@ -158,11 +159,19 @@ export default function DMThreadScreen() {
 
     const offTypingStop = onTypingStop(() => setIsTyping(false));
 
+    const offRejected = onMessageRejected(({ reason }) => {
+      Alert.alert(
+        'Message Not Sent',
+        reason ?? 'Your message was rejected. It may violate community guidelines.',
+      );
+    });
+
     return () => {
       leaveConversation(conversationId);
       offDm();
       offTypingStart();
       offTypingStop();
+      offRejected();
     };
   }, [conversationId]);
 

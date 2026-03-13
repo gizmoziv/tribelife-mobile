@@ -94,3 +94,8 @@ export function onNotification(cb: (notif: unknown) => void): () => void {
   socket?.on('notification:new', cb);
   return () => socket?.off('notification:new', cb);
 }
+
+export function onMessageRejected(cb: (data: { reason?: string }) => void): () => void {
+  socket?.on('message:rejected', cb);
+  return () => socket?.off('message:rejected', cb);
+}

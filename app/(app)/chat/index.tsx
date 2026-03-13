@@ -25,6 +25,7 @@ import {
   stopTyping,
   onTypingStart,
   onTypingStop,
+  onMessageRejected,
 } from '@/services/socket';
 import { FONTS, COLORS } from '@/constants';
 import type { Message, Conversation } from '@/types';
@@ -114,7 +115,14 @@ function LocalChatPanel() {
         setTypingUsers((prev) => prev.filter((h) => h !== handle));
       });
 
-      return () => { offRoom(); offTypingStart(); offTypingStop(); };
+      const offRejected = onMessageRejected(({ reason }) => {
+        Alert.alert(
+          'Message Not Sent',
+          reason ?? 'Your message was rejected. It may violate community guidelines.',
+        );
+      });
+
+      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); };
     });
   }, [roomId]);
 
@@ -135,6 +143,10 @@ function LocalChatPanel() {
     }, 1500);
   };
 
+  const handleBlock = useCallback((blockedUserId: number) => {
+    setMessages((prev) => prev.filter((m) => m.senderId !== blockedUserId));
+  }, []);
+
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
     return (
@@ -142,9 +154,10 @@ function LocalChatPanel() {
         message={item}
         isMe={isMe}
         onProfilePress={() => router.push(`/user/${item.senderHandle}`)}
+        onBlock={handleBlock}
       />
     );
-  }, [user?.id, router]);
+  }, [user?.id, router, handleBlock]);
 
   if (isLoading) {
     return <LoadingState />;
@@ -251,7 +264,12 @@ function DMListPanel() {
 }
 
 // ── Shared Components ─────────────────────────────────────────────────────
-function showReportBlockMenu(senderId: number, senderHandle: string, messageId: number) {
+function showReportBlockMenu(
+  senderId: number,
+  senderHandle: string,
+  messageId: number,
+  onBlock?: (blockedUserId: number) => void,
+) {
   Alert.alert(
     `@${senderHandle}`,
     'What would you like to do?',
@@ -288,7 +306,10 @@ function showReportBlockMenu(senderId: number, senderHandle: string, messageId: 
               text: 'Block',
               style: 'destructive',
               onPress: () => moderationApi.blockUser(senderId)
-                .then(() => Alert.alert('Blocked', `@${senderHandle} has been blocked.`)),
+                .then(() => {
+                  Alert.alert('Blocked', `@${senderHandle} has been blocked.`);
+                  onBlock?.(senderId);
+                }),
             },
           ]);
         },
@@ -301,16 +322,18 @@ function MessageBubble({
   message,
   isMe,
   onProfilePress,
+  onBlock,
 }: {
   message: Message;
   isMe: boolean;
   onProfilePress: () => void;
+  onBlock?: (blockedUserId: number) => void;
 }) {
   const { colors } = useTheme();
 
   const handleLongPress = () => {
     if (!isMe && message.senderId) {
-      showReportBlockMenu(message.senderId, message.senderHandle ?? 'user', message.id);
+      showReportBlockMenu(message.senderId, message.senderHandle ?? 'user', message.id, onBlock);
     }
   };
 

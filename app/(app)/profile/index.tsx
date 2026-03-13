@@ -229,6 +229,13 @@ export default function ProfileScreen() {
               </Text>
             }
           />
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: colors.border }]}
+            onPress={() => router.push('/(app)/profile/blocked-users')}
+          >
+            <Text style={[styles.rowLabel, { color: colors.text }]}>Blocked Users</Text>
+            <Text style={[styles.settingValue, { color: colors.textMuted }]}>&rsaquo;</Text>
+          </TouchableOpacity>
         </SettingsSection>
 
         {/* Support */}
