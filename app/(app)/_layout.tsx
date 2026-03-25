@@ -6,7 +6,16 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi } from '@/services/api';
 import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
-import { COLORS, FONTS } from '@/constants';
+import { COLORS, FONTS, SHADOWS, RADIUS, SPACING } from '@/constants';
+import Svg, { Path } from 'react-native-svg';
+
+function BellIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9zM13.73 21a2 2 0 01-3.46 0" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 export default function AppLayout() {
   const router = useRouter();
@@ -20,7 +29,6 @@ export default function AppLayout() {
     }
   }, [isAuthenticated, isLoading]);
 
-  // Fetch notifications on mount
   useEffect(() => {
     notificationsApi.list().then(({ notifications, unreadCount }) => {
       setNotifications(notifications, unreadCount);
@@ -31,32 +39,41 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: isDark ? COLORS.surface : COLORS.lightSurface,
-          borderTopColor: isDark ? COLORS.border : COLORS.lightBorder,
-          borderTopWidth: 1,
-          height: 80,
-          paddingBottom: 16,
-          paddingTop: 8,
+          position: 'absolute',
+          bottom: 12,
+          left: SPACING.page,
+          right: SPACING.page,
+          backgroundColor: isDark ? 'rgba(15,20,35,0.92)' : 'rgba(255,255,255,0.92)',
+          borderTopWidth: 0,
+          borderRadius: RADIUS.xl,
+          height: 70,
+          paddingBottom: 10,
+          paddingTop: 10,
+          ...SHADOWS.lg,
         },
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: isDark ? COLORS.textMuted : COLORS.lightTextMuted,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: {
           fontFamily: FONTS.medium,
-          fontSize: 11,
+          fontSize: 10,
+          marginTop: 2,
         },
         headerStyle: {
-          backgroundColor: isDark ? COLORS.surface : COLORS.lightSurface,
+          backgroundColor: colors.background,
+          shadowColor: 'transparent',
+          elevation: 0,
         },
-        headerTintColor: isDark ? COLORS.text : COLORS.lightText,
+        headerTintColor: colors.text,
         headerTitleStyle: {
           fontFamily: FONTS.semiBold,
+          fontSize: 18,
         },
         headerRight: () => (
           <TouchableOpacity
             style={styles.bellButton}
             onPress={() => router.push('/notifications')}
           >
-            <Text style={styles.bellIcon}>🔔</Text>
+            <BellIcon color={colors.textMuted} />
             {unreadCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -98,23 +115,25 @@ export default function AppLayout() {
 
 const styles = StyleSheet.create({
   bellButton: {
-    marginRight: 16,
+    marginRight: SPACING.page,
     position: 'relative',
-  },
-  bellIcon: {
-    fontSize: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -6,
+    top: 0,
+    right: -2,
     backgroundColor: COLORS.error,
-    borderRadius: 10,
+    borderRadius: RADIUS.pill,
     minWidth: 18,
     height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
   },
   badgeText: {
     color: '#FFF',

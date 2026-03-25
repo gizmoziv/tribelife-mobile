@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
-  TextInput,
   ActivityIndicator,
   Linking,
 } from 'react-native';
@@ -19,13 +18,26 @@ import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
-import { FONTS, COLORS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { PillButton } from '@/components/ui/PillButton';
+import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import { GlowBadge } from '@/components/ui/GlowBadge';
+import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
+import Svg, { Path } from 'react-native-svg';
+
+function ChevronIcon({ color }: { color: string }) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 18l6-6-6-6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, logout, updateUser } = useAuthStore();
   const router = useRouter();
-
   const [isUpgrading, setIsUpgrading] = useState(false);
 
   const handleLogout = () => {
@@ -83,7 +95,6 @@ export default function ProfileScreen() {
   const handleUpgrade = async () => {
     setIsUpgrading(true);
     try {
-      // RevenueCat purchase flow
       const offerings = await Purchases.getOfferings();
       const monthly = offerings.current?.monthly;
 
@@ -93,14 +104,12 @@ export default function ProfileScreen() {
       }
 
       const { customerInfo } = await Purchases.purchasePackage(monthly);
-
-      const isPremium =
-        customerInfo.entitlements.active['premium'] !== undefined;
+      const isPremium = customerInfo.entitlements.active['premium'] !== undefined;
 
       if (isPremium) {
         updateUser({ isPremium: true });
         Alert.alert(
-          '🎉 Welcome to Premium!',
+          'Welcome to Premium!',
           `You can now run up to ${PREMIUM_BEACON_LIMIT} beacons at a time. Thank you for supporting TribeLife!`,
           [{ text: 'Awesome!' }]
         );
@@ -133,140 +142,155 @@ export default function ProfileScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* User Header */}
-        <View style={[styles.userCard, { backgroundColor: colors.surface }]}>
-          <View style={[styles.avatar, { backgroundColor: COLORS.primary }]}>
-            <Text style={styles.avatarText}>
-              {user?.name?.[0]?.toUpperCase() ?? '?'}
-            </Text>
-          </View>
-          <View>
-            <Text style={[styles.userName, { color: colors.text }]}>{user?.name}</Text>
-            <Text style={[styles.userHandle, { color: colors.textMuted }]}>@{user?.handle}</Text>
-            {user?.isPremium && (
-              <View style={styles.premiumBadge}>
-                <Text style={styles.premiumBadgeText}>✨ Premium</Text>
+        <AnimatedEntry>
+          <GlassCard>
+            <View style={styles.userCardInner}>
+              <AvatarCircle name={user?.name ?? '?'} size={64} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.userName, { color: colors.text }]}>{user?.name}</Text>
+                <Text style={[styles.userHandle, { color: COLORS.primary }]}>@{user?.handle}</Text>
+                {user?.isPremium && (
+                  <GlowBadge text="Premium" color={COLORS.accent} glow />
+                )}
               </View>
-            )}
-          </View>
-        </View>
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
 
         {/* Appearance */}
-        <SettingsSection title="Appearance">
-          <SettingsRow
-            label="Dark Mode"
-            right={
-              <Switch
-                value={isDark}
-                onValueChange={toggleTheme}
-                trackColor={{ false: colors.border, true: COLORS.primary }}
-                thumbColor="#FFF"
-              />
-            }
-          />
-        </SettingsSection>
+        <AnimatedEntry delay={60}>
+          <SettingsSection title="Appearance">
+            <SettingsRow
+              label="Dark Mode"
+              right={
+                <Switch
+                  value={isDark}
+                  onValueChange={toggleTheme}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                />
+              }
+            />
+          </SettingsSection>
+        </AnimatedEntry>
 
         {/* Premium */}
         {!user?.isPremium && (
-          <SettingsSection title="Premium">
-            <View style={[styles.premiumCard, { borderColor: COLORS.accent }]}>
-              <Text style={[styles.premiumTitle, { color: colors.text }]}>
-                Upgrade to Premium
-              </Text>
-              <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
-                • Run up to {PREMIUM_BEACON_LIMIT} beacons simultaneously{'\n'}
-                • Priority matching in your area{'\n'}
-                • Support the TribeLife community
-              </Text>
-              <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
-                TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period. You can manage or cancel your subscription in your device's Settings &gt; Apple ID &gt; Subscriptions.
-              </Text>
-              <TouchableOpacity
-                style={[styles.upgradeButton, { opacity: isUpgrading ? 0.7 : 1 }]}
-                onPress={handleUpgrade}
-                disabled={isUpgrading}
-              >
-                {isUpgrading ? (
-                  <ActivityIndicator color="#0F172A" />
-                ) : (
-                  <Text style={styles.upgradeButtonText}>
-                    Upgrade · {PREMIUM_PRICE}
+          <AnimatedEntry delay={120}>
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PREMIUM</Text>
+              <GlassCard glowColor={COLORS.borderGlow}>
+                <View style={styles.premiumInner}>
+                  <Text style={[styles.premiumTitle, { color: colors.text }]}>
+                    Upgrade to Premium
                   </Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleRestorePurchase}>
-                <Text style={[styles.restoreText, { color: colors.textMuted }]}>
-                  Restore purchase
-                </Text>
-              </TouchableOpacity>
-              <View style={styles.legalLinks}>
-                <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/terms')}>
-                  <Text style={[styles.legalLink, { color: COLORS.primary }]}>Terms of Use</Text>
-                </TouchableOpacity>
-                <Text style={{ color: colors.textMuted }}> · </Text>
-                <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
-                  <Text style={[styles.legalLink, { color: COLORS.primary }]}>Privacy Policy</Text>
-                </TouchableOpacity>
-              </View>
+                  <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
+                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Support the TribeLife community`}
+                  </Text>
+                  <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
+                    TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period.
+                  </Text>
+                  <PillButton
+                    title={`Upgrade \u00B7 ${PREMIUM_PRICE}`}
+                    onPress={handleUpgrade}
+                    variant="accent"
+                    size="lg"
+                    loading={isUpgrading}
+                    disabled={isUpgrading}
+                    style={{ width: '100%' }}
+                  />
+                  <TouchableOpacity onPress={handleRestorePurchase}>
+                    <Text style={[styles.restoreText, { color: colors.textMuted }]}>
+                      Restore purchase
+                    </Text>
+                  </TouchableOpacity>
+                  <View style={styles.legalLinks}>
+                    <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/terms')}>
+                      <Text style={[styles.legalLink, { color: COLORS.primary }]}>Terms of Use</Text>
+                    </TouchableOpacity>
+                    <Text style={{ color: colors.textMuted }}> {'\u00B7'} </Text>
+                    <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
+                      <Text style={[styles.legalLink, { color: COLORS.primary }]}>Privacy Policy</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </GlassCard>
             </View>
-          </SettingsSection>
+          </AnimatedEntry>
         )}
 
         {/* Account */}
-        <SettingsSection title="Account">
-          <SettingsRow
-            label="Email"
-            right={
-              <Text style={[styles.settingValue, { color: colors.textMuted }]}>
-                {user?.email}
-              </Text>
-            }
-          />
-          <SettingsRow
-            label="Timezone"
-            right={
-              <Text style={[styles.settingValue, { color: colors.textMuted }]}>
-                {user?.timezone ?? 'Not set'}
-              </Text>
-            }
-          />
-          <TouchableOpacity
-            style={[styles.row, { borderBottomColor: colors.border }]}
-            onPress={() => router.push('/(app)/profile/blocked-users')}
-          >
-            <Text style={[styles.rowLabel, { color: colors.text }]}>Blocked Users</Text>
-            <Text style={[styles.settingValue, { color: colors.textMuted }]}>&rsaquo;</Text>
-          </TouchableOpacity>
-        </SettingsSection>
+        <AnimatedEntry delay={180}>
+          <SettingsSection title="Account">
+            <SettingsRow
+              label="Email"
+              right={
+                <Text style={[styles.settingValue, { color: colors.textMuted }]}>
+                  {user?.email}
+                </Text>
+              }
+            />
+            <SettingsRow
+              label="Timezone"
+              right={
+                <Text style={[styles.settingValue, { color: colors.textMuted }]}>
+                  {user?.timezone ?? 'Not set'}
+                </Text>
+              }
+            />
+            <TouchableOpacity
+              style={[styles.row, { borderBottomColor: 'transparent' }]}
+              onPress={() => router.push('/(app)/profile/blocked-users')}
+            >
+              <Text style={[styles.rowLabel, { color: colors.text }]}>Blocked Users</Text>
+              <ChevronIcon color={colors.textMuted} />
+            </TouchableOpacity>
+          </SettingsSection>
+        </AnimatedEntry>
 
-        {/* Support */}
-        <SettingsSection title="Help">
-          <TouchableOpacity
-            style={[styles.row, { borderBottomColor: colors.border }]}
-            onPress={() => router.push('/support')}
-          >
-            <Text style={[styles.rowLabel, { color: colors.text }]}>Contact Support</Text>
-            <Text style={[styles.settingValue, { color: colors.textMuted }]}>&rsaquo;</Text>
-          </TouchableOpacity>
-        </SettingsSection>
+        {/* Help */}
+        <AnimatedEntry delay={240}>
+          <SettingsSection title="Help">
+            <TouchableOpacity
+              style={[styles.row, { borderBottomColor: 'transparent' }]}
+              onPress={() => router.push('/support')}
+            >
+              <Text style={[styles.rowLabel, { color: colors.text }]}>Contact Support</Text>
+              <ChevronIcon color={colors.textMuted} />
+            </TouchableOpacity>
+          </SettingsSection>
+        </AnimatedEntry>
 
-        {/* Danger Zone */}
-        <SettingsSection title="Session">
-          <TouchableOpacity
-            style={[styles.logoutButton, { borderColor: COLORS.error }]}
-            onPress={handleLogout}
-          >
-            <Text style={[styles.logoutText, { color: COLORS.error }]}>Log Out</Text>
-          </TouchableOpacity>
-        </SettingsSection>
+        {/* Session */}
+        <AnimatedEntry delay={300}>
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SESSION</Text>
+            <PillButton
+              title="Log Out"
+              onPress={handleLogout}
+              variant="outline"
+              size="md"
+              style={{ width: '100%' }}
+              textStyle={{ color: COLORS.error }}
+            />
+          </View>
+        </AnimatedEntry>
 
-        <SettingsSection title="Danger Zone">
-          <TouchableOpacity
-            style={[styles.deleteButton]}
-            onPress={handleDeleteAccount}
-          >
-            <Text style={styles.deleteButtonText}>Delete Account</Text>
-          </TouchableOpacity>
-        </SettingsSection>
+        <AnimatedEntry delay={360}>
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DANGER ZONE</Text>
+            <PillButton
+              title="Delete Account"
+              onPress={handleDeleteAccount}
+              variant="ghost"
+              size="md"
+              style={{ width: '100%', backgroundColor: COLORS.error }}
+              textStyle={{ color: '#FFF' }}
+            />
+          </View>
+        </AnimatedEntry>
+
+        <View style={{ height: 80 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -277,9 +301,9 @@ function SettingsSection({ title, children }: { title: string; children: React.R
   return (
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title.toUpperCase()}</Text>
-      <View style={[styles.sectionContent, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <GlassCard borderRadius={RADIUS.lg}>
         {children}
-      </View>
+      </GlassCard>
     </View>
   );
 }
@@ -296,75 +320,31 @@ function SettingsRow({ label, right }: { label: string; right: React.ReactNode }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { padding: 16, gap: 8 },
-  userCard: {
+  scroll: { padding: SPACING.page, gap: SPACING.sm },
+  userCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 8,
   },
-  avatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFF', fontSize: 24, fontFamily: FONTS.bold },
-  userName: { fontSize: 18, fontFamily: FONTS.semiBold },
-  userHandle: { fontSize: 14, fontFamily: FONTS.regular, marginTop: 2 },
-  premiumBadge: {
-    marginTop: 4,
-    backgroundColor: COLORS.accent + '33',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-  },
-  premiumBadgeText: { color: COLORS.accent, fontSize: 12, fontFamily: FONTS.semiBold },
-  section: { gap: 6, marginBottom: 16 },
+  userName: { fontSize: 20, fontFamily: FONTS.semiBold },
+  userHandle: { fontSize: 14, fontFamily: FONTS.medium, marginTop: 2 },
+  section: { gap: 6, marginBottom: SPACING.md },
   sectionTitle: { fontSize: 11, fontFamily: FONTS.semiBold, letterSpacing: 1, paddingLeft: 4 },
-  sectionContent: { borderRadius: 14, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: { fontSize: 15, fontFamily: FONTS.medium },
   settingValue: { fontSize: 14, fontFamily: FONTS.regular, maxWidth: 200, textAlign: 'right' },
-  premiumCard: {
-    borderWidth: 1.5,
-    borderRadius: 14,
-    padding: 16,
-    gap: 10,
-  },
-  premiumTitle: { fontSize: 17, fontFamily: FONTS.bold },
+  premiumInner: { gap: 10 },
+  premiumTitle: { fontSize: 18, fontFamily: FONTS.bold },
   premiumDesc: { fontSize: 14, fontFamily: FONTS.regular, lineHeight: 22 },
-  upgradeButton: {
-    backgroundColor: COLORS.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  upgradeButtonText: { color: '#0F172A', fontSize: 15, fontFamily: FONTS.bold },
   subscriptionInfo: { fontSize: 11, fontFamily: FONTS.regular, lineHeight: 16 },
+  restoreText: { fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
   legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
   legalLink: { fontSize: 12, fontFamily: FONTS.medium },
-  restoreText: { fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
-  logoutButton: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    margin: 16,
-  },
-  logoutText: { fontSize: 15, fontFamily: FONTS.semiBold },
-  deleteButton: {
-    backgroundColor: COLORS.error,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center' as const,
-    margin: 16,
-  },
-  deleteButtonText: { color: '#FFF', fontSize: 15, fontFamily: FONTS.semiBold },
 });
