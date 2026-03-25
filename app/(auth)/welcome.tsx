@@ -6,18 +6,48 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   Alert,
   Platform,
   Linking,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
-import { FONTS, COLORS } from '@/constants';
+import { FONTS, COLORS, SPACING, SHADOWS, RADIUS } from '@/constants';
+import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { PillButton } from '@/components/ui/PillButton';
+import Svg, { Path, Circle } from 'react-native-svg';
+
+function ChatIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke="#818CF8" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" stroke="#F59E0B" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function ConnectIcon() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Circle cx={9} cy={7} r={4} stroke="#34D399" strokeWidth={1.5} />
+      <Path d="M2 21v-2a4 4 0 014-4h6a4 4 0 014 4v2" stroke="#34D399" strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" stroke="#34D399" strokeWidth={1.5} strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -59,7 +89,6 @@ export default function WelcomeScreen() {
       }
     } catch (err: any) {
       if (err.code === 'SIGN_IN_CANCELLED') {
-        // User cancelled — do nothing
         return;
       }
       Alert.alert(
@@ -112,34 +141,45 @@ export default function WelcomeScreen() {
     }
   };
 
+  const features = [
+    { icon: <ChatIcon />, text: 'Chat with people in your area' },
+    { icon: <SparkleIcon />, text: 'Beacon — smart community matching' },
+    { icon: <ConnectIcon />, text: 'Connect one-on-one' },
+  ];
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <LinearGradient
+      colors={[...COLORS.gradientBackground]}
+      style={styles.container}
+    >
       {/* Hero Section */}
-      <View style={styles.hero}>
-        <Image source={require('@/assets/tribelife-logo.png')} style={styles.logoImage} />
+      <AnimatedEntry style={styles.hero} duration={500}>
+        <View style={styles.logoGlow}>
+          <Image source={require('@/assets/tribelife-logo.png')} style={styles.logoImage} />
+        </View>
 
         <Text style={[styles.title, { color: colors.text }]}>TribeLife</Text>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>
           Your community.{'\n'}Always within reach.
         </Text>
-      </View>
+      </AnimatedEntry>
 
       {/* Feature highlights */}
       <View style={styles.features}>
-        {[
-          { icon: '💬', text: 'Chat with people in your area' },
-          { icon: '✨', text: 'Beacon — smart community matching' },
-          { icon: '🤝', text: 'Connect one-on-one' },
-        ].map((f) => (
-          <View key={f.text} style={styles.featureRow}>
-            <Text style={styles.featureIcon}>{f.icon}</Text>
-            <Text style={[styles.featureText, { color: colors.textMuted }]}>{f.text}</Text>
-          </View>
+        {features.map((f, i) => (
+          <AnimatedEntry key={f.text} delay={200 + i * 80}>
+            <View style={styles.featureRow}>
+              <View style={[styles.featureIconContainer, { backgroundColor: colors.surfaceGlass }]}>
+                {f.icon}
+              </View>
+              <Text style={[styles.featureText, { color: colors.textMuted }]}>{f.text}</Text>
+            </View>
+          </AnimatedEntry>
         ))}
       </View>
 
       {/* CTA */}
-      <View style={styles.cta}>
+      <AnimatedEntry style={styles.cta} delay={500}>
         {appleAvailable && (
           <TouchableOpacity
             style={[styles.appleButton, isAppleLoading && styles.buttonDisabled]}
@@ -158,21 +198,20 @@ export default function WelcomeScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          style={[styles.googleButton, isLoading && styles.buttonDisabled]}
+        <PillButton
+          title="Continue with Google"
           onPress={handleGoogleSignIn}
+          variant="primary"
+          size="lg"
+          loading={isLoading}
           disabled={isLoading}
-          activeOpacity={0.85}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
+          icon={
+            <View style={styles.googleIconCircle}>
+              <Text style={styles.googleIconText}>G</Text>
+            </View>
+          }
+          style={{ width: '100%' }}
+        />
 
         <Text style={[styles.terms, { color: colors.textMuted }]}>
           By continuing, you agree to our{' '}
@@ -184,32 +223,35 @@ export default function WelcomeScreen() {
             Privacy Policy
           </Text>
         </Text>
-      </View>
-    </SafeAreaView>
+      </AnimatedEntry>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACING.page,
+    paddingTop: 60,
   },
   hero: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 40,
+  },
+  logoGlow: {
+    marginBottom: SPACING.lg,
+    ...SHADOWS.glow(COLORS.accent),
   },
   logoImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 28,
-    marginBottom: 20,
+    width: 130,
+    height: 130,
+    borderRadius: 32,
   },
   title: {
     fontSize: 42,
     fontFamily: FONTS.bold,
-    letterSpacing: -1,
+    letterSpacing: -1.5,
     marginBottom: 12,
   },
   tagline: {
@@ -219,18 +261,21 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   features: {
-    paddingVertical: 32,
-    paddingLeft: 16,
-    gap: 16,
+    paddingVertical: SPACING.xl,
+    paddingLeft: SPACING.md,
+    gap: SPACING.md,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  featureIcon: {
-    fontSize: 24,
+  featureIconContainer: {
     width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   featureText: {
     fontSize: 16,
@@ -238,7 +283,7 @@ const styles = StyleSheet.create({
   },
   cta: {
     paddingBottom: 40,
-    gap: 16,
+    gap: SPACING.md,
     alignItems: 'center',
   },
   appleButton: {
@@ -246,11 +291,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
+    borderRadius: RADIUS.pill,
+    paddingVertical: 18,
+    paddingHorizontal: 32,
     width: '100%',
     gap: 10,
+    ...SHADOWS.sm,
   },
   appleIcon: {
     fontSize: 20,
@@ -259,38 +305,25 @@ const styles = StyleSheet.create({
   },
   appleButtonText: {
     color: '#000',
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: FONTS.semiBold,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    width: '100%',
-    gap: 10,
   },
   buttonDisabled: {
     opacity: 0.7,
   },
-  googleIcon: {
-    fontSize: 18,
-    fontFamily: FONTS.bold,
+  googleIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: '#FFF',
-    color: COLORS.primary,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    textAlign: 'center',
-    lineHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  googleButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontFamily: FONTS.semiBold,
+  googleIconText: {
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+    color: COLORS.primary,
+    lineHeight: 18,
   },
   terms: {
     fontSize: 12,

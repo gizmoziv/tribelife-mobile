@@ -4,39 +4,74 @@ import { COLORS } from '@/constants';
 
 type Theme = 'light' | 'dark';
 
+interface ThemeColors {
+  background: string;
+  surface: string;
+  surfaceElevated: string;
+  surfaceGlass: string;
+  surfaceAlt: string;
+  text: string;
+  textMuted: string;
+  border: string;
+  borderGlow: string;
+  primary: string;
+  primaryGlow: string;
+  secondary: string;
+  accent: string;
+  accentGlow: string;
+  accentSoft: string;
+  error: string;
+  success: string;
+  warning: string;
+}
+
 interface ThemeContextValue {
   theme: Theme;
   isDark: boolean;
   toggleTheme: () => void;
-  colors: typeof darkColors;
+  colors: ThemeColors;
 }
 
 const darkColors = {
   background: COLORS.background,
   surface: COLORS.surface,
+  surfaceElevated: COLORS.surfaceElevated,
+  surfaceGlass: COLORS.surfaceGlass,
   surfaceAlt: COLORS.surfaceLight,
   text: COLORS.text,
   textMuted: COLORS.textMuted,
   border: COLORS.border,
+  borderGlow: COLORS.borderGlow,
   primary: COLORS.primary,
+  primaryGlow: COLORS.primaryGlow,
   secondary: COLORS.secondary,
   accent: COLORS.accent,
+  accentGlow: COLORS.accentGlow,
+  accentSoft: COLORS.accentSoft,
   error: COLORS.error,
   success: COLORS.success,
+  warning: COLORS.warning,
 };
 
 const lightColors = {
   background: COLORS.lightBackground,
   surface: COLORS.lightSurface,
-  surfaceAlt: COLORS.lightSurfaceAlt,
+  surfaceElevated: COLORS.lightSurfaceElevated,
+  surfaceGlass: COLORS.lightSurfaceGlass,
+  surfaceAlt: '#F1F5F9',
   text: COLORS.lightText,
   textMuted: COLORS.lightTextMuted,
   border: COLORS.lightBorder,
+  borderGlow: 'rgba(245,158,11,0.2)',
   primary: COLORS.primary,
+  primaryGlow: COLORS.primaryGlow,
   secondary: COLORS.secondary,
   accent: COLORS.accent,
+  accentGlow: COLORS.accentGlow,
+  accentSoft: COLORS.accentSoft,
   error: COLORS.error,
   success: COLORS.success,
+  warning: COLORS.warning,
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);

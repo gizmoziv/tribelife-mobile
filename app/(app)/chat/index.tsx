@@ -11,7 +11,11 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  Pressable,
+  Animated,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
@@ -27,53 +31,49 @@ import {
   onTypingStop,
   onMessageRejected,
 } from '@/services/socket';
-import { FONTS, COLORS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { PillToggle } from '@/components/ui/PillToggle';
+import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
+import { GlowBadge } from '@/components/ui/GlowBadge';
 import type { Message, Conversation } from '@/types';
+import Svg, { Path } from 'react-native-svg';
+
+function SendIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="#FFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" stroke="#7A8BA8" strokeWidth={1.5} />
+    </Svg>
+  );
+}
 
 type Tab = 'local' | 'dms';
 
 export default function ChatScreen() {
-  const router = useRouter();
-  const { colors, isDark } = useTheme();
-  const { user } = useAuthStore();
+  const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('local');
+  const tabIndex = activeTab === 'local' ? 0 : 1;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Tab Bar */}
-      <View style={[styles.tabBar, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'local' && styles.tabActive]}
-          onPress={() => setActiveTab('local')}
-        >
-          <Text style={[
-            styles.tabText,
-            { color: activeTab === 'local' ? COLORS.primary : colors.textMuted }
-          ]}>
-            Local Chat
-          </Text>
-          {activeTab === 'local' && <View style={styles.tabIndicator} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'dms' && styles.tabActive]}
-          onPress={() => setActiveTab('dms')}
-        >
-          <Text style={[
-            styles.tabText,
-            { color: activeTab === 'dms' ? COLORS.primary : colors.textMuted }
-          ]}>
-            Direct Messages
-          </Text>
-          {activeTab === 'dms' && <View style={styles.tabIndicator} />}
-        </TouchableOpacity>
+      <View style={styles.toggleContainer}>
+        <PillToggle
+          options={['Local Chat', 'Direct Messages']}
+          activeIndex={tabIndex}
+          onSelect={(i) => setActiveTab(i === 0 ? 'local' : 'dms')}
+        />
       </View>
 
-      {activeTab === 'local' ? (
-        <LocalChatPanel />
-      ) : (
-        <DMListPanel />
-      )}
+      {activeTab === 'local' ? <LocalChatPanel /> : <DMListPanel />}
     </SafeAreaView>
   );
 }
@@ -93,13 +93,11 @@ function LocalChatPanel() {
   const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
 
   useEffect(() => {
-    // Load message history
     chat.getRoomMessages(roomId).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
     }).catch(() => setIsLoading(false));
 
-    // Connect and listen for new messages
     connectSocket().then(() => {
       const offRoom = onRoomMessage((msg) => {
         setMessages((prev) => [...prev, msg]);
@@ -129,6 +127,7 @@ function LocalChatPanel() {
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     sendRoomMessage(content);
     setInput('');
   }, [input]);
@@ -170,9 +169,7 @@ function LocalChatPanel() {
       keyboardVerticalOffset={90}
     >
       <View style={styles.roomHeader}>
-        <Text style={{ color: COLORS.textMuted, fontSize: 12, fontFamily: FONTS.medium }}>
-          🌍 {user?.timezone ?? 'UTC'} room
-        </Text>
+        <GlowBadge text={`${user?.timezone ?? 'UTC'} room`} color="#7A8BA8" size="sm" />
       </View>
 
       <FlatList
@@ -185,9 +182,7 @@ function LocalChatPanel() {
       />
 
       {typingUsers.length > 0 && (
-        <Text style={[styles.typingIndicator, { color: COLORS.textMuted }]}>
-          {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
-        </Text>
+        <TypingIndicator users={typingUsers} />
       )}
 
       <ChatInput
@@ -199,11 +194,53 @@ function LocalChatPanel() {
   );
 }
 
+// ── Typing Indicator ──────────────────────────────────────────────────────
+function TypingIndicator({ users }: { users: string[] }) {
+  const { colors } = useTheme();
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animate = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: -4, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ])
+      );
+    animate(dot1, 0).start();
+    animate(dot2, 150).start();
+    animate(dot3, 300).start();
+  }, []);
+
+  return (
+    <View style={styles.typingContainer}>
+      <View style={[styles.typingPill, { backgroundColor: colors.surfaceGlass }]}>
+        <Text style={[styles.typingText, { color: colors.textMuted }]}>
+          {users.join(', ')}
+        </Text>
+        <View style={styles.typingDots}>
+          {[dot1, dot2, dot3].map((dot, i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.typingDot,
+                { backgroundColor: colors.textMuted, transform: [{ translateY: dot }] },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ── DM List Panel ─────────────────────────────────────────────────────────
 function DMListPanel() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { user } = useAuthStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -219,11 +256,19 @@ function DMListPanel() {
   if (conversations.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Text style={{ fontSize: 40 }}>💬</Text>
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>No messages yet</Text>
-        <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-          Tap on someone's name in Local Chat to start a conversation
-        </Text>
+        <AnimatedEntry>
+          <GlassCard>
+            <View style={styles.emptyInner}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke={COLORS.primary} strokeWidth={1.5} />
+              </Svg>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No messages yet</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
+                Tap on someone's name in Local Chat to start a conversation
+              </Text>
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
       </View>
     );
   }
@@ -232,33 +277,34 @@ function DMListPanel() {
     <FlatList
       data={conversations}
       keyExtractor={(item) => item.conversationId.toString()}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={[styles.dmRow, { borderBottomColor: colors.border }]}
-          onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
-        >
-          <View style={[styles.avatar, { backgroundColor: COLORS.primary }]}>
-            <Text style={styles.avatarText}>
-              {item.participantName?.[0]?.toUpperCase() ?? '?'}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={styles.dmRowTop}>
-              <Text style={[styles.dmName, { color: colors.text }]}>
-                @{item.participantHandle}
-              </Text>
-              {item.lastMessage && (
-                <Text style={[styles.dmTime, { color: colors.textMuted }]}>
-                  {formatTime(item.lastMessage.createdAt)}
+      contentContainerStyle={{ paddingVertical: SPACING.sm }}
+      renderItem={({ item, index }) => (
+        <AnimatedEntry delay={index * 40}>
+          <TouchableOpacity
+            style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
+            onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
+            activeOpacity={0.7}
+          >
+            <AvatarCircle name={item.participantName ?? '?'} size={44} />
+            <View style={{ flex: 1 }}>
+              <View style={styles.dmRowTop}>
+                <Text style={[styles.dmName, { color: colors.text }]}>
+                  @{item.participantHandle}
                 </Text>
-              )}
+                {item.lastMessage && (
+                  <Text style={[styles.dmTime, { color: colors.textMuted }]}>
+                    {formatTime(item.lastMessage.createdAt)}
+                  </Text>
+                )}
+              </View>
+              <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
+                {item.lastMessage?.content ?? 'Start a conversation'}
+              </Text>
             </View>
-            <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
-              {item.lastMessage?.content ?? 'Start a conversation'}
-            </Text>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </AnimatedEntry>
       )}
+      ListFooterComponent={<View style={{ height: 80 }} />}
     />
   );
 }
@@ -330,27 +376,25 @@ function MessageBubble({
   onBlock?: (blockedUserId: number) => void;
 }) {
   const { colors } = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
 
   const handleLongPress = () => {
     if (!isMe && message.senderId) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 0.97, duration: 100, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
+      ]).start();
       showReportBlockMenu(message.senderId, message.senderHandle ?? 'user', message.id, onBlock);
     }
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onLongPress={handleLongPress}
-      delayLongPress={500}
-    >
-      <View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe]}>
+    <Pressable onLongPress={handleLongPress} delayLongPress={500}>
+      <Animated.View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe, { transform: [{ scale }] }]}>
         {!isMe && (
           <TouchableOpacity onPress={onProfilePress}>
-            <View style={[styles.avatarSmall, { backgroundColor: COLORS.primary }]}>
-              <Text style={styles.avatarTextSmall}>
-                {message.senderHandle?.[0]?.toUpperCase() ?? '?'}
-              </Text>
-            </View>
+            <AvatarCircle name={message.senderHandle ?? '?'} size={32} showRing={false} />
           </TouchableOpacity>
         )}
         <View>
@@ -361,25 +405,30 @@ function MessageBubble({
               </Text>
             </TouchableOpacity>
           )}
-          <View style={[
-            styles.bubble,
-            isMe
-              ? { backgroundColor: COLORS.primary }
-              : { backgroundColor: colors.surface },
-          ]}>
-            <Text style={[
-              styles.bubbleText,
-              { color: isMe ? '#FFF' : colors.text },
-            ]}>
-              {message.content}
-            </Text>
-          </View>
+          {isMe ? (
+            <LinearGradient
+              colors={[...COLORS.gradientPrimary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.bubble}
+            >
+              <Text style={[styles.bubbleText, { color: '#FFF' }]}>
+                {message.content}
+              </Text>
+            </LinearGradient>
+          ) : (
+            <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
+              <Text style={[styles.bubbleText, { color: colors.text }]}>
+                {message.content}
+              </Text>
+            </View>
+          )}
           <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
             {formatTime(message.createdAt)}
           </Text>
         </View>
-      </View>
-    </TouchableOpacity>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -395,24 +444,31 @@ function ChatInput({
   const { colors } = useTheme();
 
   return (
-    <View style={[styles.inputBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-      <TextInput
-        style={[styles.chatInput, { backgroundColor: colors.surfaceAlt, color: colors.text, fontFamily: FONTS.regular }]}
-        placeholder="Message..."
-        placeholderTextColor={colors.textMuted}
-        value={value}
-        onChangeText={onChangeText}
-        multiline
-        maxLength={2000}
-        onSubmitEditing={onSend}
-      />
-      <TouchableOpacity
-        style={[styles.sendButton, { opacity: value.trim() ? 1 : 0.4 }]}
+    <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+      <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+        <TextInput
+          style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+          placeholder="Message..."
+          placeholderTextColor={colors.textMuted}
+          value={value}
+          onChangeText={onChangeText}
+          multiline
+          maxLength={2000}
+          onSubmitEditing={onSend}
+        />
+      </View>
+      <Pressable
         onPress={onSend}
         disabled={!value.trim()}
+        style={({ pressed }) => [{ opacity: value.trim() ? (pressed ? 0.8 : 1) : 0.4 }]}
       >
-        <Text style={styles.sendIcon}>↑</Text>
-      </TouchableOpacity>
+        <LinearGradient
+          colors={[...COLORS.gradientPrimary]}
+          style={styles.sendButton}
+        >
+          <SendIcon />
+        </LinearGradient>
+      </Pressable>
     </View>
   );
 }
@@ -433,30 +489,14 @@ function formatTime(iso: string): string {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  tabActive: {},
-  tabText: { fontSize: 14, fontFamily: FONTS.semiBold },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: '20%',
-    right: '20%',
-    height: 2,
-    backgroundColor: COLORS.primary,
-    borderRadius: 1,
+  toggleContainer: {
+    paddingHorizontal: SPACING.page,
+    paddingVertical: SPACING.sm,
   },
   roomHeader: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.page,
     paddingVertical: 6,
+    alignItems: 'center',
   },
   messageList: { paddingHorizontal: 12, paddingVertical: 8 },
   messageBubbleContainer: {
@@ -469,14 +509,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     flexDirection: 'row-reverse',
   },
-  avatarSmall: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarTextSmall: { color: '#FFF', fontSize: 14, fontFamily: FONTS.bold },
   senderHandle: {
     fontSize: 12,
     fontFamily: FONTS.semiBold,
@@ -484,60 +516,85 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   bubble: {
-    borderRadius: 16,
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 10,
     maxWidth: 280,
+    ...SHADOWS.sm,
   },
   bubbleText: { fontSize: 15, fontFamily: FONTS.regular, lineHeight: 22 },
-  bubbleTime: { fontSize: 11, fontFamily: FONTS.regular, marginTop: 2, marginLeft: 4 },
-  typingIndicator: {
-    paddingHorizontal: 16,
+  bubbleTime: { fontSize: 10, fontFamily: FONTS.regular, marginTop: 2, marginLeft: 4 },
+  typingContainer: {
+    paddingHorizontal: SPACING.page,
     paddingBottom: 4,
+  },
+  typingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  typingText: {
     fontSize: 12,
-    fontFamily: FONTS.regular,
-    fontStyle: 'italic',
+    fontFamily: FONTS.medium,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  typingDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderTopWidth: 1,
+    paddingBottom: 88,
     gap: 8,
   },
-  chatInput: {
+  inputWrap: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  chatInput: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxHeight: 120,
     fontSize: 15,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    ...SHADOWS.md,
   },
-  sendIcon: { color: '#FFF', fontSize: 20, fontFamily: FONTS.bold },
   dmRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    marginHorizontal: SPACING.page,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: RADIUS.md,
+    ...SHADOWS.sm,
   },
-  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFF', fontSize: 18, fontFamily: FONTS.bold },
   dmRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dmName: { fontSize: 15, fontFamily: FONTS.semiBold },
   dmTime: { fontSize: 12, fontFamily: FONTS.regular },
   dmPreview: { fontSize: 14, fontFamily: FONTS.regular, marginTop: 2 },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 32 },
+  emptyState: { flex: 1, padding: SPACING.xl, justifyContent: 'center' },
+  emptyInner: { alignItems: 'center', gap: 12 },
   emptyTitle: { fontSize: 20, fontFamily: FONTS.semiBold },
   emptySubtitle: { fontSize: 15, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },

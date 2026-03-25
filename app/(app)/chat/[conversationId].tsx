@@ -11,7 +11,10 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Pressable,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
@@ -27,8 +30,17 @@ import {
   onTypingStop,
   onMessageRejected,
 } from '@/services/socket';
-import { FONTS, COLORS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { Message } from '@/types';
+import Svg, { Path } from 'react-native-svg';
+
+function SendIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="#FFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 export default function DMThreadScreen() {
   const { conversationId: rawId, handle } = useLocalSearchParams<{
@@ -47,7 +59,6 @@ export default function DMThreadScreen() {
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hide the parent tab header when in DM thread, restore on unmount
   useEffect(() => {
     const parent = navigation.getParent();
     parent?.setOptions({ headerShown: false });
@@ -56,7 +67,6 @@ export default function DMThreadScreen() {
     };
   }, [navigation]);
 
-  // Always show a back button — navigates to chat index regardless of entry point
   useEffect(() => {
     const goBack = () => {
       if (router.canGoBack()) {
@@ -66,19 +76,27 @@ export default function DMThreadScreen() {
       }
     };
     navigation.setOptions({
+      headerStyle: {
+        backgroundColor: colors.background,
+        shadowColor: 'transparent',
+        elevation: 0,
+      },
+      headerTintColor: colors.text,
+      headerTitleStyle: { fontFamily: FONTS.semiBold, fontSize: 16 },
       headerLeft: () => (
-        <TouchableOpacity onPress={goBack} hitSlop={8} style={{ paddingLeft: 12, paddingRight: 8, justifyContent: 'center' }}>
-            <Text style={{ color: COLORS.primary, fontSize: 28, fontFamily: FONTS.regular, lineHeight: 32 }}>‹</Text>
-          </TouchableOpacity>
+        <TouchableOpacity onPress={goBack} hitSlop={8} style={styles.backButton}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path d="M15 18l-6-6 6-6" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </TouchableOpacity>
       ),
     });
-  }, [navigation, colors.text]);
+  }, [navigation, colors]);
 
   useEffect(() => {
     if (handle) navigation.setOptions({ title: `@${handle} & You` });
   }, [handle]);
 
-  // Add report/block header button
   useEffect(() => {
     const otherMsg = messages.find((m) => m.senderId !== user?.id);
     const otherUserId = otherMsg?.senderId;
@@ -124,18 +142,18 @@ export default function DMThreadScreen() {
           hitSlop={8}
           style={{ paddingRight: 12 }}
         >
-          <Text style={{ color: COLORS.primary, fontSize: 22 }}>···</Text>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 13a1 1 0 100-2 1 1 0 000 2zM19 13a1 1 0 100-2 1 1 0 000 2zM5 13a1 1 0 100-2 1 1 0 000 2z" fill={colors.textMuted} />
+          </Svg>
         </TouchableOpacity>
       ),
     });
   }, [messages, handle, user?.id]);
 
   useEffect(() => {
-    // Load history
     chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
-      // Fallback: derive other user's handle from messages if not passed as param
       if (!handle && msgs.length > 0) {
         const otherMsg = msgs.find((m) => m.senderId !== user?.id);
         if (otherMsg?.senderHandle) {
@@ -144,7 +162,6 @@ export default function DMThreadScreen() {
       }
     }).catch(() => setIsLoading(false));
 
-    // Join Socket.io room
     joinConversation(conversationId);
 
     const offDm = onDirectMessage((msg) => {
@@ -178,6 +195,7 @@ export default function DMThreadScreen() {
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     sendDirectMessage(conversationId, content);
     setInput('');
     stopTyping({ conversationId });
@@ -220,28 +238,42 @@ export default function DMThreadScreen() {
         />
 
         {isTyping && (
-          <Text style={[styles.typingIndicator, { color: colors.textMuted }]}>
-            typing...
-          </Text>
+          <View style={styles.typingContainer}>
+            <View style={[styles.typingPill, { backgroundColor: colors.surfaceGlass }]}>
+              <Text style={[styles.typingText, { color: colors.textMuted }]}>typing</Text>
+              <View style={styles.typingDots}>
+                {[0, 1, 2].map((i) => (
+                  <View key={i} style={[styles.typingDot, { backgroundColor: colors.textMuted }]} />
+                ))}
+              </View>
+            </View>
+          </View>
         )}
 
-        <View style={[styles.inputBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-          <TextInput
-            style={[styles.chatInput, { backgroundColor: colors.surfaceAlt, color: colors.text, fontFamily: FONTS.regular }]}
-            placeholder="Message..."
-            placeholderTextColor={colors.textMuted}
-            value={input}
-            onChangeText={handleInputChange}
-            multiline
-            maxLength={2000}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, { opacity: input.trim() ? 1 : 0.4 }]}
+        <View style={styles.inputBar}>
+          <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+            <TextInput
+              style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+              placeholder="Message..."
+              placeholderTextColor={colors.textMuted}
+              value={input}
+              onChangeText={handleInputChange}
+              multiline
+              maxLength={2000}
+            />
+          </View>
+          <Pressable
             onPress={handleSend}
             disabled={!input.trim()}
+            style={({ pressed }) => [{ opacity: input.trim() ? (pressed ? 0.8 : 1) : 0.4 }]}
           >
-            <Text style={styles.sendIcon}>↑</Text>
-          </TouchableOpacity>
+            <LinearGradient
+              colors={[...COLORS.gradientPrimary]}
+              style={styles.sendButton}
+            >
+              <SendIcon />
+            </LinearGradient>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -252,14 +284,24 @@ function DMBubble({ message, isMe }: { message: Message; isMe: boolean }) {
   const { colors } = useTheme();
   return (
     <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
-      <View style={[
-        styles.bubble,
-        isMe ? { backgroundColor: COLORS.primary } : { backgroundColor: colors.surface },
-      ]}>
-        <Text style={[styles.bubbleText, { color: isMe ? '#FFF' : colors.text }]}>
-          {message.content}
-        </Text>
-      </View>
+      {isMe ? (
+        <LinearGradient
+          colors={[...COLORS.gradientPrimary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.bubble, SHADOWS.sm]}
+        >
+          <Text style={[styles.bubbleText, { color: '#FFF' }]}>
+            {message.content}
+          </Text>
+        </LinearGradient>
+      ) : (
+        <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }, SHADOWS.sm]}>
+          <Text style={[styles.bubbleText, { color: colors.text }]}>
+            {message.content}
+          </Text>
+        </View>
+      )}
       <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
         {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
       </Text>
@@ -270,6 +312,14 @@ function DMBubble({ message, isMe }: { message: Message; isMe: boolean }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
+  },
   messageList: { paddingHorizontal: 12, paddingVertical: 12 },
   bubbleRow: {
     marginBottom: 10,
@@ -278,42 +328,53 @@ const styles = StyleSheet.create({
   },
   bubbleRowMe: { alignSelf: 'flex-end' },
   bubble: {
-    borderRadius: 18,
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   bubbleText: { fontSize: 15, fontFamily: FONTS.regular, lineHeight: 22 },
-  bubbleTime: { fontSize: 11, fontFamily: FONTS.regular, marginTop: 3, marginLeft: 4 },
-  typingIndicator: {
-    paddingHorizontal: 16,
+  bubbleTime: { fontSize: 10, fontFamily: FONTS.regular, marginTop: 3, marginLeft: 4 },
+  typingContainer: {
+    paddingHorizontal: SPACING.page,
     paddingBottom: 4,
-    fontSize: 12,
-    fontFamily: FONTS.regular,
-    fontStyle: 'italic',
   },
+  typingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  typingText: { fontSize: 12, fontFamily: FONTS.medium },
+  typingDots: { flexDirection: 'row', gap: 3 },
+  typingDot: { width: 5, height: 5, borderRadius: 2.5 },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderTopWidth: 1,
     gap: 8,
   },
-  chatInput: {
+  inputWrap: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  chatInput: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     maxHeight: 120,
     fontSize: 15,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    ...SHADOWS.md,
   },
-  sendIcon: { color: '#FFF', fontSize: 20, fontFamily: FONTS.bold },
 });

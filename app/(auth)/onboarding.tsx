@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
@@ -13,12 +12,27 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Localization from 'expo-localization';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
-import { FONTS, COLORS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { PillButton } from '@/components/ui/PillButton';
+import { GlowBadge } from '@/components/ui/GlowBadge';
+import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
+
+function GlobeIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <SvgCircle cx={12} cy={12} r={10} stroke="#7A8BA8" strokeWidth={1.5} />
+      <Path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" stroke="#7A8BA8" strokeWidth={1.5} />
+    </Svg>
+  );
+}
 
 type HandleStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
@@ -33,7 +47,6 @@ export default function OnboardingScreen() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [checkTimeout, setCheckTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect timezone from device
   const detectedTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
 
   const handleChange = useCallback((text: string) => {
@@ -95,31 +108,56 @@ export default function OnboardingScreen() {
   const statusText = {
     idle: '',
     checking: 'Checking...',
-    available: '✓ Available',
-    taken: '✗ Already taken',
+    available: 'Available',
+    taken: 'Already taken',
     invalid: handle.length < 3 && handle.length > 0
       ? 'At least 3 characters required'
       : 'Letters, numbers, and underscores only',
   }[handleStatus];
 
+  const inputBorderColor = handleStatus === 'available'
+    ? COLORS.success
+    : handleStatus === 'taken' || handleStatus === 'invalid'
+      ? COLORS.error
+      : colors.border;
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <LinearGradient
+      colors={[...COLORS.gradientBackground]}
+      style={styles.container}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.header}>
-            <Text style={styles.emoji}>👋</Text>
+          <AnimatedEntry style={styles.header}>
+            <View style={[styles.waveContainer, { backgroundColor: colors.surfaceGlass }]}>
+              <Text style={styles.waveEmoji}>
+                <Text style={{ fontFamily: undefined }}>{'👋'}</Text>
+              </Text>
+            </View>
             <Text style={[styles.title, { color: colors.text }]}>One last thing</Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
               Choose your community handle. This is how others will find and mention you.
             </Text>
-          </View>
+          </AnimatedEntry>
 
-          <View style={styles.form}>
-            <View style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-              <Text style={[styles.atSign, { color: colors.textMuted }]}>@</Text>
+          <AnimatedEntry delay={150} style={styles.form}>
+            {/* Handle input */}
+            <View style={[
+              styles.inputContainer,
+              {
+                borderColor: inputBorderColor,
+                backgroundColor: colors.surfaceGlass,
+              },
+              handleStatus === 'available' && {
+                ...SHADOWS.sm,
+                shadowColor: COLORS.success,
+                shadowOpacity: 0.2,
+              },
+            ]}>
+              <GlowBadge text="@" color={COLORS.accent} size="sm" />
               <TextInput
                 style={[styles.input, { color: colors.text, fontFamily: FONTS.medium }]}
                 placeholder="your_handle"
@@ -132,30 +170,46 @@ export default function OnboardingScreen() {
                 autoFocus
               />
               {handleStatus === 'checking' && (
-                <ActivityIndicator size="small" color={colors.textMuted} style={{ marginRight: 12 }} />
+                <ActivityIndicator size="small" color={colors.textMuted} />
+              )}
+              {handleStatus === 'available' && (
+                <GlowBadge text="Available" color={COLORS.success} glow size="sm" />
               )}
             </View>
 
-            {statusText ? (
+            {statusText && handleStatus !== 'available' ? (
               <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
             ) : null}
 
-            <View style={[styles.timezoneCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.timezoneLabel, { color: colors.textMuted }]}>Your timezone (auto-detected)</Text>
-              <Text style={[styles.timezoneValue, { color: colors.text }]}>{detectedTimezone}</Text>
-            </View>
+            {/* Timezone card */}
+            <GlassCard>
+              <View style={styles.timezoneRow}>
+                <GlobeIcon />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.timezoneLabel, { color: colors.textMuted }]}>Your timezone (auto-detected)</Text>
+                  <Text style={[styles.timezoneValue, { color: colors.text }]}>{detectedTimezone}</Text>
+                </View>
+              </View>
+            </GlassCard>
 
             <Text style={[styles.hint, { color: colors.textMuted }]}>
               Your timezone determines which local chat room you'll be placed in. You can change this later.
             </Text>
 
+            {/* Terms */}
             <TouchableOpacity
               style={styles.termsRow}
               onPress={() => setAcceptedTerms(!acceptedTerms)}
               activeOpacity={0.7}
             >
-              <View style={[styles.checkbox, { borderColor: colors.border, backgroundColor: acceptedTerms ? COLORS.primary : 'transparent' }]}>
-                {acceptedTerms && <Text style={styles.checkmark}>✓</Text>}
+              <View style={[
+                styles.checkbox,
+                {
+                  borderColor: acceptedTerms ? COLORS.primary : colors.border,
+                  backgroundColor: acceptedTerms ? COLORS.primary : 'transparent',
+                },
+              ]}>
+                {acceptedTerms && <Text style={styles.checkmark}>{'✓'}</Text>}
               </View>
               <Text style={[styles.termsText, { color: colors.textMuted }]}>
                 I agree to the{' '}
@@ -169,25 +223,22 @@ export default function OnboardingScreen() {
                 , including zero tolerance for objectionable content or abusive behavior.
               </Text>
             </TouchableOpacity>
-          </View>
+          </AnimatedEntry>
 
-          <TouchableOpacity
-            style={[
-              styles.button,
-              { opacity: handleStatus === 'available' && acceptedTerms && !isSubmitting ? 1 : 0.5 },
-            ]}
-            onPress={handleSubmit}
-            disabled={handleStatus !== 'available' || !acceptedTerms || isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.buttonText}>Enter TribeLife →</Text>
-            )}
-          </TouchableOpacity>
+          <AnimatedEntry delay={300}>
+            <PillButton
+              title="Enter TribeLife"
+              onPress={handleSubmit}
+              variant="primary"
+              size="lg"
+              loading={isSubmitting}
+              disabled={handleStatus !== 'available' || !acceptedTerms || isSubmitting}
+              style={{ width: '100%' }}
+            />
+          </AnimatedEntry>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </LinearGradient>
   );
 }
 
@@ -195,7 +246,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: SPACING.page,
     paddingTop: 60,
     paddingBottom: 40,
   },
@@ -203,10 +254,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
-  emoji: { fontSize: 52, marginBottom: 16 },
+  waveContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+  },
+  waveEmoji: { fontSize: 36 },
   title: {
     fontSize: 32,
-    fontFamily: FONTS.bold,
+    fontFamily: FONTS.semiBold,
     marginBottom: 12,
     letterSpacing: -0.5,
   },
@@ -216,19 +275,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  form: { gap: 12, marginBottom: 32 },
+  form: { gap: 14, marginBottom: SPACING.xl },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderRadius: 12,
+    borderRadius: RADIUS.pill,
     paddingHorizontal: 14,
+    paddingVertical: 4,
     height: 56,
-  },
-  atSign: {
-    fontSize: 20,
-    fontFamily: FONTS.medium,
-    marginRight: 4,
+    gap: 8,
   },
   input: {
     flex: 1,
@@ -238,18 +294,17 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 13,
     fontFamily: FONTS.medium,
-    paddingLeft: 4,
+    paddingLeft: 16,
   },
-  timezoneCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 8,
+  timezoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   timezoneLabel: {
     fontSize: 12,
     fontFamily: FONTS.medium,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   timezoneValue: {
     fontSize: 15,
@@ -264,12 +319,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginTop: 8,
+    marginTop: 4,
   },
   checkbox: {
     width: 22,
     height: 22,
-    borderRadius: 6,
+    borderRadius: RADIUS.sm,
     borderWidth: 1.5,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
@@ -289,16 +344,5 @@ const styles = StyleSheet.create({
   termsLink: {
     color: COLORS.primary,
     textDecorationLine: 'underline' as const,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#FFF',
-    fontSize: 17,
-    fontFamily: FONTS.semiBold,
   },
 });
