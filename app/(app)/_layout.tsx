@@ -24,6 +24,23 @@ function BellIcon({ color }: { color: string }) {
   );
 }
 
+function GlobeIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z"
+        stroke={color}
+        strokeWidth={1.5}
+      />
+      <Path
+        d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"
+        stroke={color}
+        strokeWidth={1.5}
+      />
+    </Svg>
+  );
+}
+
 export default function AppLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -82,19 +99,27 @@ export default function AppLayout() {
           fontSize: 18,
         },
         headerRight: () => (
-          <TouchableOpacity
-            style={styles.bellButton}
-            onPress={() => router.push('/notifications')}
-          >
-            <BellIcon color={colors.textMuted} />
-            {unreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => router.push('/(app)/globe')}
+            >
+              <GlobeIcon color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bellButton}
+              onPress={() => router.push('/notifications')}
+            >
+              <BellIcon color={colors.textMuted} />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         ),
       }}
     >
@@ -128,13 +153,32 @@ export default function AppLayout() {
           headerTitle: 'My Profile',
         }}
       />
+      <Tabs.Screen
+        name="globe"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  bellButton: {
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginRight: SPACING.page,
+  },
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  bellButton: {
     position: 'relative',
     width: 36,
     height: 36,
