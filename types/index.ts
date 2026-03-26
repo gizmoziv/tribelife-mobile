@@ -82,3 +82,27 @@ export interface PublicProfile {
   isPremium: boolean;
   createdAt: string;
 }
+
+// ── Globe ───────────────────────────────────────────────────────────────────
+export interface GlobeRoom {
+  slug: string;
+  displayName: string;
+  description: string;
+  participantCount: number;
+  lastMessage: { content: string; createdAt: string; senderHandle: string } | null;
+  isSuggested: boolean;
+  isGlobal: boolean;
+  sortOrder: number;
+  welcomeMessage: string;
+}
+
+export interface GlobeMessage {
+  id: number;
+  content: string;
+  senderId: number;
+  senderName: string;
+  senderHandle: string;
+  senderAvatar: string | null;
+  createdAt: string;
+  slug: string;
+}
