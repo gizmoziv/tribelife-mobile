@@ -18,6 +18,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.tribelife.app",
       "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:tribelife.app"],
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -39,7 +40,21 @@
         "resizeMode": "contain",
         "backgroundColor": "#0F172A"
       },
-      "package": "com.tribelife.app"
+      "package": "com.tribelife.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "tribelife.app",
+              "pathPrefix": "/globe"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "plugins": [
       "expo-router",
