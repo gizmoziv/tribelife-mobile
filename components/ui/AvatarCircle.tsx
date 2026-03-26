@@ -4,6 +4,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { COLORS, FONTS } from '@/constants';
 
+const AVATAR_COLORS = [
+  '#818CF8', '#34D399', '#F59E0B', '#FB7185',
+  '#A78BFA', '#2DD4BF', '#FBBF24', '#F472B6',
+  '#60A5FA', '#4ADE80', '#F97316', '#E879F9',
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 interface AvatarCircleProps {
   name: string;
   size?: number;
@@ -37,7 +51,7 @@ export function AvatarCircle({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: colors.surfaceElevated,
+        backgroundColor: getAvatarColor(name),
         alignItems: 'center',
         justifyContent: 'center',
       }}

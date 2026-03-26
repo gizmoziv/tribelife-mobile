@@ -285,7 +285,7 @@ function DMListPanel() {
             onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
             activeOpacity={0.7}
           >
-            <AvatarCircle name={item.participantName ?? '?'} size={44} />
+            <AvatarCircle name={item.participantName ?? '?'} size={44} imageUrl={item.participantAvatar ?? undefined} />
             <View style={{ flex: 1 }}>
               <View style={styles.dmRowTop}>
                 <Text style={[styles.dmName, { color: colors.text }]}>
@@ -394,7 +394,7 @@ function MessageBubble({
       <Animated.View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe, { transform: [{ scale }] }]}>
         {!isMe && (
           <TouchableOpacity onPress={onProfilePress}>
-            <AvatarCircle name={message.senderHandle ?? '?'} size={32} showRing={false} />
+            <AvatarCircle name={message.senderHandle ?? '?'} size={32} showRing={false} imageUrl={message.senderAvatar ?? undefined} />
           </TouchableOpacity>
         )}
         <View>
