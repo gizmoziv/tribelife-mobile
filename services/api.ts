@@ -187,6 +187,15 @@ export const usersApi = {
     request<{ users: PublicProfile[] }>(`/api/users/search/handle?q=${encodeURIComponent(q)}`),
 };
 
+// ── Reactions ─────────────────────────────────────────────────────────────
+export const reactionsApi = {
+  toggle: (messageId: number, emoji: string) =>
+    request<{ action: 'added' | 'removed' }>('/api/reactions/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ messageId, emoji }),
+    }),
+};
+
 // ── Globe ──────────────────────────────────────────────────────────────────
 export const globeApi = {
   rooms: () =>

@@ -8,6 +8,19 @@ export interface User {
   timezone: string | null;
 }
 
+export interface ReactionGroup {
+  emoji: string;
+  count: number;
+  userIds: number[];
+  hasReacted: boolean;
+}
+
+export interface ReplyTo {
+  id: number;
+  content: string;
+  senderHandle: string;
+}
+
 export interface Message {
   id: number;
   content: string;
@@ -19,6 +32,9 @@ export interface Message {
   conversationId?: number;
   createdAt: string;
   mentions?: number[];
+  reactions?: ReactionGroup[];
+  replyTo?: ReplyTo | null;
+  replyToId?: number | null;
 }
 
 export interface Conversation {
@@ -105,4 +121,7 @@ export interface GlobeMessage {
   senderAvatar: string | null;
   createdAt: string;
   slug: string;
+  reactions?: ReactionGroup[];
+  replyTo?: ReplyTo | null;
+  replyToId?: number | null;
 }

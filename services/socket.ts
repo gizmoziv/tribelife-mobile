@@ -100,6 +100,20 @@ export function onMessageRejected(cb: (data: { reason?: string }) => void): () =
   return () => socket?.off('message:rejected', cb);
 }
 
+// ── Reactions ────────────────────────────────────────────────────────────────
+export function onReactionUpdate(cb: (data: {
+  messageId: number;
+  emoji: string;
+  userId: number;
+  userHandle: string;
+  action: 'add' | 'remove';
+  roomId?: string;
+  conversationId?: number;
+}) => void): () => void {
+  socket?.on('reaction:update', cb);
+  return () => { socket?.off('reaction:update', cb); };
+}
+
 // ── Globe rooms ─────────────────────────────────────────────────────────────
 export function joinGlobeRoom(slug: string): void {
   socket?.emit('globe:join', { slug });
