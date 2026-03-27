@@ -145,13 +145,12 @@ export default function GlobeRoomChat() {
     setActiveRoom(roomSlug);
     setLoadingMessages(true);
 
-    // Load initial messages
+    // Load initial messages (keep chronological order — newest last for inverted FlatList)
     globeApi
       .messages(roomSlug)
       .then(({ messages: msgs, hasMore }) => {
-        setMessages(msgs.reverse());
+        setMessages(msgs);
         if (!hasMore) {
-          // Update hasMoreMessages in store
           prependMessages([], hasMore);
         }
       })
@@ -161,64 +160,62 @@ export default function GlobeRoomChat() {
     // Join room via socket
     connectSocket().then(() => {
       joinGlobeRoom(roomSlug);
-
-      const offMessage = onGlobeMessage((data: GlobeMessage) => {
-        addMessage(data);
-      });
-
-      const offParticipants = onGlobeParticipants(({ slug, count }) => {
-        if (slug === roomSlug) {
-          updateParticipantCount(slug, count);
-        }
-      });
-
-      const offTyping = onGlobeTyping(({ slug, handle, isTyping: typing }) => {
-        if (slug === roomSlug && handle !== user?.handle) {
-          setTyping(handle, typing);
-
-          // Auto-clear typing after timeout
-          const existing = typingClearTimers.current.get(handle);
-          if (existing) clearTimeout(existing);
-          if (typing) {
-            typingClearTimers.current.set(
-              handle,
-              setTimeout(() => {
-                setTyping(handle, false);
-                typingClearTimers.current.delete(handle);
-              }, TYPING_TIMEOUT_MS),
-            );
-          }
-        }
-      });
-
-      const offAgeGated = onGlobeAgeGated(({ hoursRemaining }) => {
-        setIsAgeGated(true);
-        setAgeGateHours(Math.ceil(hoursRemaining));
-      });
-
-      const offRateLimited = onGlobeRateLimited(({ retryAfterMs }) => {
-        setIsRateLimited(true);
-        setTimeout(() => setIsRateLimited(false), retryAfterMs);
-      });
-
-      // Reconnection handler
-      const socket = getSocket();
-      const handleReconnect = () => {
-        joinGlobeRoom(roomSlug);
-      };
-      socket?.on('connect', handleReconnect);
-
-      return () => {
-        offMessage();
-        offParticipants();
-        offTyping();
-        offAgeGated();
-        offRateLimited();
-        socket?.off('connect', handleReconnect);
-      };
     });
 
+    // Register listeners (outside .then to ensure cleanup works)
+    const offMessage = onGlobeMessage((data: GlobeMessage) => {
+      addMessage(data);
+    });
+
+    const offParticipants = onGlobeParticipants(({ slug, count }) => {
+      if (slug === roomSlug) {
+        updateParticipantCount(slug, count);
+      }
+    });
+
+    const offTyping = onGlobeTyping(({ slug, handle, isTyping: typing }) => {
+      if (slug === roomSlug && handle !== user?.handle) {
+        setTyping(handle, typing);
+
+        // Auto-clear typing after timeout
+        const existing = typingClearTimers.current.get(handle);
+        if (existing) clearTimeout(existing);
+        if (typing) {
+          typingClearTimers.current.set(
+            handle,
+            setTimeout(() => {
+              setTyping(handle, false);
+              typingClearTimers.current.delete(handle);
+            }, TYPING_TIMEOUT_MS),
+          );
+        }
+      }
+    });
+
+    const offAgeGated = onGlobeAgeGated(({ hoursRemaining }) => {
+      setIsAgeGated(true);
+      setAgeGateHours(Math.ceil(hoursRemaining));
+    });
+
+    const offRateLimited = onGlobeRateLimited(({ retryAfterMs }) => {
+      setIsRateLimited(true);
+      setTimeout(() => setIsRateLimited(false), retryAfterMs);
+    });
+
+    // Reconnection handler
+    const socket = getSocket();
+    const handleReconnect = () => {
+      joinGlobeRoom(roomSlug);
+    };
+    socket?.on('connect', handleReconnect);
+
     return () => {
+      offMessage();
+      offParticipants();
+      offTyping();
+      offAgeGated();
+      offRateLimited();
+      socket?.off('connect', handleReconnect);
       leaveGlobeRoom(roomSlug);
       clearRoom();
       // Clear all typing timers
@@ -239,7 +236,7 @@ export default function GlobeRoomChat() {
   );
 
   const scrollToBottom = useCallback(() => {
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    flatListRef.current?.scrollToEnd({ animated: true });
     resetNewMessageCount();
   }, [resetNewMessageCount]);
 
@@ -265,6 +262,10 @@ export default function GlobeRoomChat() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     sendGlobeMessage(roomSlug, content);
     setInput('');
+    // Auto-scroll to bottom after sending
+    setIsAtBottom(true);
+    resetNewMessageCount();
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     // Stop typing
     sendGlobeTyping(roomSlug, false);
     if (typingTimeoutRef.current) {
@@ -409,14 +410,16 @@ export default function GlobeRoomChat() {
           </View>
         )}
 
-        {/* Message list (inverted) */}
+        {/* Message list */}
         <FlatList
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
-          inverted
           contentContainerStyle={styles.messageList}
+          onContentSizeChange={() => {
+            if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false });
+          }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}

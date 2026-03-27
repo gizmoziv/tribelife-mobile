@@ -83,15 +83,23 @@ export default function ProfileScreen() {
       updateUser({ avatarUrl: processed.uri });
 
       // Three-step upload flow
+      console.log('[profile] Step 1: requesting upload URL...');
       const { uploadUrl, key } = await requestAvatarUploadUrl();
+      console.log('[profile] Step 1 complete, key:', key);
+
+      console.log('[profile] Step 2: uploading to Spaces...');
       await uploadToSpaces(uploadUrl, processed.uri);
+      console.log('[profile] Step 2 complete');
+
+      console.log('[profile] Step 3: confirming upload...');
       const { avatarUrl } = await confirmAvatarUpload(key);
+      console.log('[profile] Step 3 complete, url:', avatarUrl);
 
       // Update with final CDN URL
       updateUser({ avatarUrl });
-    } catch (err) {
-      console.error('[profile] Avatar upload failed:', err);
-      Alert.alert('Upload failed', 'Could not upload your photo. Please try again.');
+    } catch (err: any) {
+      console.error('[profile] Avatar upload failed:', err?.message || err);
+      Alert.alert('Upload failed', err?.message || 'Could not upload your photo. Please try again.');
     } finally {
       setUploadingAvatar(false);
     }

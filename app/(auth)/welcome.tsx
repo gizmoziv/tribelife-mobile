@@ -158,7 +158,7 @@ export default function WelcomeScreen() {
           <Image source={require('@/assets/tribelife-logo.png')} style={styles.logoImage} />
         </View>
 
-        <Text style={[styles.title, { color: colors.text }]}>TribeLife</Text>
+        <Text style={[styles.title, { color: '#FFFFFF' }]}>TribeLife</Text>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>
           Your community.{'\n'}Always within reach.
         </Text>

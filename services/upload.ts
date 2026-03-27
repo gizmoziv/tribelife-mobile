@@ -31,18 +31,21 @@ export async function requestAvatarUploadUrl(): Promise<{
 
 /** Step 2: Upload the processed image directly to DO Spaces via pre-signed URL */
 export async function uploadToSpaces(uploadUrl: string, fileUri: string): Promise<void> {
-  const blob = await (await fetch(fileUri)).blob();
+  // Read file as blob via fetch (works reliably in RN for local file URIs)
+  const response = await fetch(fileUri);
+  const blob = await response.blob();
 
-  const res = await fetch(uploadUrl, {
+  const uploadRes = await fetch(uploadUrl, {
     method: 'PUT',
+    body: blob,
     headers: {
       'Content-Type': 'image/jpeg',
     },
-    body: blob,
   });
 
-  if (!res.ok) {
-    throw new Error(`Upload failed: ${res.status}`);
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text().catch(() => '');
+    throw new Error(`Upload failed: ${uploadRes.status} ${text}`);
   }
 }
 

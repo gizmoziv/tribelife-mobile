@@ -136,6 +136,9 @@ export const beacons = {
 
   markMatchViewed: (matchId: number) =>
     request(`/api/beacons/matches/${matchId}/viewed`, { method: 'PUT' }),
+
+  dismissMatch: (matchId: number) =>
+    request<{ ok: boolean }>(`/api/beacons/matches/${matchId}/dismiss`, { method: 'PUT' }),
 };
 
 // ── Notifications ──────────────────────────────────────────────────────────
