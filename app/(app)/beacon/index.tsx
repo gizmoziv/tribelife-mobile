@@ -43,6 +43,17 @@ export default function BeaconScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('beacons');
   const tabIndex = activeTab === 'beacons' ? 0 : 1;
 
+  // Lift match state here so it survives tab switches (MatchesPanel unmounting)
+  const [matches, setMatches] = useState<BeaconMatch[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(true);
+
+  useEffect(() => {
+    beaconsApi.getMatches().then(({ matches: m }) => {
+      setMatches(m);
+      setMatchesLoading(false);
+    }).catch(() => setMatchesLoading(false));
+  }, []);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.toggleContainer}>
@@ -54,7 +65,15 @@ export default function BeaconScreen() {
         />
       </View>
 
-      {activeTab === 'beacons' ? <MyBeaconsPanel /> : <MatchesPanel />}
+      {activeTab === 'beacons' ? (
+        <MyBeaconsPanel />
+      ) : (
+        <MatchesPanel
+          matches={matches}
+          setMatches={setMatches}
+          isLoading={matchesLoading}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -317,19 +336,27 @@ function BeaconCard({ beacon, onDeactivate }: { beacon: Beacon; onDeactivate: ()
 }
 
 // ── Matches Panel ─────────────────────────────────────────────────────────
-function MatchesPanel() {
+function MatchesPanel({
+  matches,
+  setMatches,
+  isLoading,
+}: {
+  matches: BeaconMatch[];
+  setMatches: React.Dispatch<React.SetStateAction<BeaconMatch[]>>;
+  isLoading: boolean;
+}) {
   const { colors } = useTheme();
   const router = useRouter();
-  const { user } = useAuthStore();
-  const [matches, setMatches] = useState<BeaconMatch[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    beaconsApi.getMatches().then(({ matches: m }) => {
-      setMatches(m);
-      setIsLoading(false);
-    }).catch(() => setIsLoading(false));
-  }, []);
+  const handleDismiss = async (matchId: number) => {
+    // Optimistically remove from local state
+    setMatches((prev) => prev.filter((m) => m.matchId !== matchId));
+    try {
+      await beaconsApi.dismissMatch(matchId);
+    } catch {
+      // Silently ignore — match is already removed from UI
+    }
+  };
 
   if (isLoading) return <View style={styles.loading}><ActivityIndicator color={COLORS.accent} /></View>;
 
@@ -372,6 +399,7 @@ function MatchesPanel() {
                 router.push(`/user/${item.matchedUser.userHandle}`);
               }
             }}
+            onDismiss={() => handleDismiss(item.matchId)}
           />
         </AnimatedEntry>
       )}
@@ -384,10 +412,12 @@ function MatchCard({
   match,
   onMessage,
   onViewProfile,
+  onDismiss,
 }: {
   match: BeaconMatch;
   onMessage: () => void;
   onViewProfile: () => void;
+  onDismiss: () => void;
 }) {
   const { colors } = useTheme();
   const score = Math.round(parseFloat(match.similarityScore) * 100);
@@ -413,6 +443,9 @@ function MatchCard({
             </Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={onDismiss} style={styles.dismissButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={[styles.dismissText, { color: colors.textMuted }]}>✕</Text>
+        </TouchableOpacity>
       </View>
 
       {match.matchReason && (
@@ -518,4 +551,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   matchReason: { fontSize: 13, fontFamily: FONTS.regular, lineHeight: 20 },
+  dismissButton: { padding: 4, alignSelf: 'flex-start' },
+  dismissText: { fontSize: 16, fontFamily: FONTS.regular },
 });

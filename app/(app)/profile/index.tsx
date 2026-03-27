@@ -13,18 +13,21 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Purchases from 'react-native-purchases';
+import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
+import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 
 function ChevronIcon({ color }: { color: string }) {
   return (
@@ -34,11 +37,73 @@ function ChevronIcon({ color }: { color: string }) {
   );
 }
 
+function CameraIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx={12} cy={13} r={4} stroke="#fff" strokeWidth={2} />
+    </Svg>
+  );
+}
+
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, logout, updateUser } = useAuthStore();
   const router = useRouter();
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  async function handleAvatarUpload() {
+    try {
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photo library to upload an avatar.');
+        return;
+      }
+
+      const pickResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (pickResult.canceled) return;
+
+      setUploadingAvatar(true);
+
+      // Process image: resize to 500x500 JPEG at 0.8 quality
+      const processed = await manipulateAsync(
+        pickResult.assets[0].uri,
+        [{ resize: { width: 500, height: 500 } }],
+        { compress: 0.8, format: SaveFormat.JPEG }
+      );
+
+      // Optimistic local update
+      updateUser({ avatarUrl: processed.uri });
+
+      // Three-step upload flow
+      console.log('[profile] Step 1: requesting upload URL...');
+      const { uploadUrl, key } = await requestAvatarUploadUrl();
+      console.log('[profile] Step 1 complete, key:', key);
+
+      console.log('[profile] Step 2: uploading to Spaces...');
+      await uploadToSpaces(uploadUrl, processed.uri);
+      console.log('[profile] Step 2 complete');
+
+      console.log('[profile] Step 3: confirming upload...');
+      const { avatarUrl } = await confirmAvatarUpload(key);
+      console.log('[profile] Step 3 complete, url:', avatarUrl);
+
+      // Update with final CDN URL
+      updateUser({ avatarUrl });
+    } catch (err: any) {
+      console.error('[profile] Avatar upload failed:', err?.message || err);
+      Alert.alert('Upload failed', err?.message || 'Could not upload your photo. Please try again.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -145,7 +210,23 @@ export default function ProfileScreen() {
         <AnimatedEntry>
           <GlassCard>
             <View style={styles.userCardInner}>
-              <AvatarCircle name={user?.name ?? '?'} size={64} />
+              <TouchableOpacity onPress={handleAvatarUpload} disabled={uploadingAvatar}>
+                <View>
+                  <AvatarCircle name={user?.name ?? '?'} size={64} imageUrl={user?.avatarUrl ?? undefined} />
+                  <View style={{
+                    position: 'absolute', bottom: 0, right: 0,
+                    backgroundColor: COLORS.primary, borderRadius: 12,
+                    width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
+                    borderWidth: 2, borderColor: colors.background,
+                  }}>
+                    {uploadingAvatar ? (
+                      <ActivityIndicator size={12} color="#fff" />
+                    ) : (
+                      <CameraIcon />
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.userName, { color: colors.text }]}>{user?.name}</Text>
                 <Text style={[styles.userHandle, { color: COLORS.primary }]}>@{user?.handle}</Text>

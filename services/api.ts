@@ -8,6 +8,8 @@ import type {
   BeaconMatch,
   Notification,
   PublicProfile,
+  GlobeRoom,
+  GlobeMessage,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -134,6 +136,9 @@ export const beacons = {
 
   markMatchViewed: (matchId: number) =>
     request(`/api/beacons/matches/${matchId}/viewed`, { method: 'PUT' }),
+
+  dismissMatch: (matchId: number) =>
+    request<{ ok: boolean }>(`/api/beacons/matches/${matchId}/dismiss`, { method: 'PUT' }),
 };
 
 // ── Notifications ──────────────────────────────────────────────────────────
@@ -180,4 +185,15 @@ export const usersApi = {
 
   searchByHandle: (q: string) =>
     request<{ users: PublicProfile[] }>(`/api/users/search/handle?q=${encodeURIComponent(q)}`),
+};
+
+// ── Globe ──────────────────────────────────────────────────────────────────
+export const globeApi = {
+  rooms: () =>
+    request<{ rooms: GlobeRoom[] }>('/api/globe/rooms'),
+
+  messages: (slug: string, before?: string, limit = 50) =>
+    request<{ messages: GlobeMessage[]; hasMore: boolean }>(
+      `/api/globe/rooms/${slug}/messages?limit=${limit}${before ? `&before=${before}` : ''}`
+    ),
 };

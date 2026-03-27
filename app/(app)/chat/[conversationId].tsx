@@ -13,6 +13,7 @@ import {
   Alert,
   Pressable,
 } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -51,6 +52,7 @@ export default function DMThreadScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
+  const tabBarHeight = useBottomTabBarHeight();
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -250,7 +252,7 @@ export default function DMThreadScreen() {
           </View>
         )}
 
-        <View style={styles.inputBar}>
+        <View style={[styles.inputBar, { paddingBottom: tabBarHeight + 8 }]}>
           <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
             <TextInput
               style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
@@ -354,7 +356,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
     gap: 8,
   },
   inputWrap: {

@@ -99,3 +99,46 @@ export function onMessageRejected(cb: (data: { reason?: string }) => void): () =
   socket?.on('message:rejected', cb);
   return () => socket?.off('message:rejected', cb);
 }
+
+// ── Globe rooms ─────────────────────────────────────────────────────────────
+export function joinGlobeRoom(slug: string): void {
+  socket?.emit('globe:join', { slug });
+}
+
+export function leaveGlobeRoom(slug: string): void {
+  socket?.emit('globe:leave', { slug });
+}
+
+export function sendGlobeMessage(slug: string, content: string): void {
+  socket?.emit('globe:message', { slug, content });
+}
+
+export function sendGlobeTyping(slug: string, isTyping: boolean): void {
+  socket?.emit('globe:typing', { slug, isTyping });
+}
+
+// ── Globe event listeners (return cleanup function) ─────────────────────────
+export function onGlobeMessage(callback: (data: any) => void): () => void {
+  socket?.on('globe:message', callback);
+  return () => { socket?.off('globe:message', callback); };
+}
+
+export function onGlobeParticipants(callback: (data: { slug: string; count: number }) => void): () => void {
+  socket?.on('globe:participants', callback);
+  return () => { socket?.off('globe:participants', callback); };
+}
+
+export function onGlobeTyping(callback: (data: { slug: string; handle: string; isTyping: boolean }) => void): () => void {
+  socket?.on('globe:typing', callback);
+  return () => { socket?.off('globe:typing', callback); };
+}
+
+export function onGlobeAgeGated(callback: (data: { hoursRemaining: number }) => void): () => void {
+  socket?.on('globe:age_gated', callback);
+  return () => { socket?.off('globe:age_gated', callback); };
+}
+
+export function onGlobeRateLimited(callback: (data: { retryAfterMs: number }) => void): () => void {
+  socket?.on('globe:rate_limited', callback);
+  return () => { socket?.off('globe:rate_limited', callback); };
+}
