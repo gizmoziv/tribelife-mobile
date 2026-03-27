@@ -43,8 +43,8 @@ export function getSocket(): Socket | null {
 }
 
 // ── Room (location-based) chat ─────────────────────────────────────────────
-export function sendRoomMessage(content: string): void {
-  socket?.emit('room:message', { content });
+export function sendRoomMessage(content: string, replyToId?: number): void {
+  socket?.emit('room:message', { content, replyToId });
 }
 
 // ── Direct messages ────────────────────────────────────────────────────────
@@ -56,8 +56,8 @@ export function leaveConversation(conversationId: number): void {
   socket?.emit('dm:leave', { conversationId });
 }
 
-export function sendDirectMessage(conversationId: number, content: string): void {
-  socket?.emit('dm:message', { conversationId, content });
+export function sendDirectMessage(conversationId: number, content: string, replyToId?: number): void {
+  socket?.emit('dm:message', { conversationId, content, replyToId });
 }
 
 // ── Typing ─────────────────────────────────────────────────────────────────
@@ -123,8 +123,8 @@ export function leaveGlobeRoom(slug: string): void {
   socket?.emit('globe:leave', { slug });
 }
 
-export function sendGlobeMessage(slug: string, content: string): void {
-  socket?.emit('globe:message', { slug, content });
+export function sendGlobeMessage(slug: string, content: string, replyToId?: number): void {
+  socket?.emit('globe:message', { slug, content, replyToId });
 }
 
 export function sendGlobeTyping(slug: string, isTyping: boolean): void {
