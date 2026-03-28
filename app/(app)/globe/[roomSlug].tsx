@@ -116,6 +116,7 @@ export default function GlobeRoomChat() {
     resetNewMessageCount,
     setLoadingMessages,
     clearRoom,
+    markRoomRead,
   } = useGlobeStore();
 
   const [input, setInput] = useState('');
@@ -154,6 +155,10 @@ export default function GlobeRoomChat() {
 
     setActiveRoom(roomSlug);
     setLoadingMessages(true);
+
+    // Mark room as read on entry
+    globeApi.markRead(roomSlug).catch(() => {});
+    markRoomRead(roomSlug);
 
     // Load initial messages (keep chronological order -- newest last for inverted FlatList)
     globeApi

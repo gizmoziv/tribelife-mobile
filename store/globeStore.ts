@@ -11,6 +11,8 @@ interface GlobeState {
   isLoadingRooms: boolean;
   isLoadingMessages: boolean;
   hasMoreMessages: boolean;
+  unreadCounts: Record<string, number>;
+  totalUnread: number;
 
   setRooms: (rooms: GlobeRoom[]) => void;
   setActiveRoom: (slug: string | null) => void;
@@ -24,6 +26,9 @@ interface GlobeState {
   setLoadingRooms: (loading: boolean) => void;
   setLoadingMessages: (loading: boolean) => void;
   clearRoom: () => void;
+  setUnreadCounts: (counts: Record<string, number>) => void;
+  markRoomRead: (slug: string) => void;
+  incrementUnread: (slug: string) => void;
 }
 
 export const useGlobeStore = create<GlobeState>((set) => ({
@@ -36,6 +41,8 @@ export const useGlobeStore = create<GlobeState>((set) => ({
   isLoadingRooms: false,
   isLoadingMessages: false,
   hasMoreMessages: true,
+  unreadCounts: {},
+  totalUnread: 0,
 
   setRooms: (rooms) => set({ rooms }),
 
@@ -90,4 +97,25 @@ export const useGlobeStore = create<GlobeState>((set) => ({
       activeRoomSlug: null,
       hasMoreMessages: true,
     }),
+
+  setUnreadCounts: (counts) => set({
+    unreadCounts: counts,
+    totalUnread: Object.values(counts).reduce((sum, c) => sum + c, 0),
+  }),
+
+  markRoomRead: (slug) => set((state) => {
+    const next = { ...state.unreadCounts, [slug]: 0 };
+    return {
+      unreadCounts: next,
+      totalUnread: Object.values(next).reduce((sum, c) => sum + c, 0),
+    };
+  }),
+
+  incrementUnread: (slug) => set((state) => {
+    const next = { ...state.unreadCounts, [slug]: (state.unreadCounts[slug] ?? 0) + 1 };
+    return {
+      unreadCounts: next,
+      totalUnread: Object.values(next).reduce((sum, c) => sum + c, 0),
+    };
+  }),
 }));
