@@ -41,12 +41,24 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const { colors } = useTheme();
   const [showFullPicker, setShowFullPicker] = useState(false);
+  const [pendingFullPicker, setPendingFullPicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
       Keyboard.dismiss();
     }
   }, [visible]);
+
+  // Open emoji picker after context menu finishes dismissing
+  useEffect(() => {
+    if (pendingFullPicker && !visible) {
+      const timer = setTimeout(() => {
+        setShowFullPicker(true);
+        setPendingFullPicker(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingFullPicker, visible]);
 
   const handleQuickReact = (emoji: string) => {
     onReact(emoji);
@@ -56,7 +68,6 @@ export function ContextMenu({
   const handleFullPickerSelect = (emojiObject: { emoji: string }) => {
     onReact(emojiObject.emoji);
     setShowFullPicker(false);
-    onClose();
   };
 
   const handleReply = () => {
@@ -99,7 +110,7 @@ export function ContextMenu({
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
-                onPress={() => setShowFullPicker(true)}
+                onPress={() => { setPendingFullPicker(true); onClose(); }}
                 style={[styles.emojiButton, { backgroundColor: colors.surface }]}
                 activeOpacity={0.7}
               >

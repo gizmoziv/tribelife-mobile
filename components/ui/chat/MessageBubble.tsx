@@ -160,10 +160,9 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   bubble: {
-    borderRadius: 22,
+    borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    maxWidth: 280,
     ...SHADOWS.sm,
   },
   bubbleText: {
@@ -181,24 +180,27 @@ const styles = StyleSheet.create({
   replyPreview: {
     flexDirection: 'row',
     borderRadius: 8,
-    padding: 6,
+    padding: 8,
     marginBottom: 6,
+    minWidth: 150,
   },
   replyBar: {
     width: 3,
     borderRadius: 1.5,
-    marginRight: 6,
+    marginRight: 8,
+    alignSelf: 'stretch',
   },
   replyContent: {
     flex: 1,
+    overflow: 'hidden',
   },
   replyHandle: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: FONTS.semiBold,
   },
   replyText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: FONTS.regular,
-    marginTop: 1,
+    marginTop: 2,
   },
 });

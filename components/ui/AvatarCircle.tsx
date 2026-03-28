@@ -5,9 +5,42 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { COLORS, FONTS } from '@/constants';
 
 const AVATAR_COLORS = [
-  '#818CF8', '#34D399', '#F59E0B', '#FB7185',
-  '#A78BFA', '#2DD4BF', '#FBBF24', '#F472B6',
-  '#60A5FA', '#4ADE80', '#F97316', '#E879F9',
+  '#E53E3E', // red
+  '#38A169', // green
+  '#3182CE', // blue
+  '#D69E2E', // gold
+  '#805AD5', // purple
+  '#DD6B20', // orange
+  '#319795', // teal
+  '#D53F8C', // pink
+  '#2B6CB0', // navy
+  '#C05621', // brown
+  '#00B5D8', // cyan
+  '#9F7AEA', // violet
+  '#276749', // forest
+  '#E53E9F', // magenta
+  '#B7791F', // amber
+  '#2C7A7B', // dark teal
+  '#6B46C1', // deep purple
+  '#C53030', // crimson
+  '#2F855A', // emerald
+  '#4C51BF', // indigo
+  '#ED8936', // tangerine
+  '#667EEA', // periwinkle
+  '#48BB78', // lime green
+  '#ED64A6', // hot pink
+  '#4FD1C5', // aqua
+  '#F56565', // coral
+  '#68D391', // mint
+  '#FC8181', // salmon
+  '#76E4F7', // sky blue
+  '#F6AD55', // peach
+  '#B794F4', // lavender
+  '#63B3ED', // steel blue
+  '#FBD38D', // sand
+  '#F687B3', // rose
+  '#81E6D9', // seafoam
+  '#FEB2B2', // blush
 ];
 
 function getAvatarColor(name: string): string {
