@@ -21,7 +21,7 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
-import { globeApi } from '@/services/api';
+import { globeApi, reactionsApi } from '@/services/api';
 import {
   connectSocket,
   getSocket,
@@ -34,8 +34,13 @@ import {
   onGlobeTyping,
   onGlobeAgeGated,
   onGlobeRateLimited,
+  onReactionUpdate,
 } from '@/services/socket';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import { MessageBubble } from '@/components/ui/chat/MessageBubble';
+import { ContextMenu } from '@/components/ui/chat/ContextMenu';
+import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { GlobeMessage } from '@/types';
 import Svg, { Path } from 'react-native-svg';
@@ -111,12 +116,16 @@ export default function GlobeRoomChat() {
     resetNewMessageCount,
     setLoadingMessages,
     clearRoom,
+    markRoomRead,
   } = useGlobeStore();
 
   const [input, setInput] = useState('');
   const [isAgeGated, setIsAgeGated] = useState(false);
   const [ageGateHours, setAgeGateHours] = useState(0);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<GlobeMessage | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -125,6 +134,8 @@ export default function GlobeRoomChat() {
     () => rooms.find((r) => r.slug === roomSlug),
     [rooms, roomSlug],
   );
+
+  const globeRoomId = `globe:${roomSlug}`;
 
   // ── Check client-side age gate on mount ─────────────────────────────────
   useEffect(() => {
@@ -145,7 +156,11 @@ export default function GlobeRoomChat() {
     setActiveRoom(roomSlug);
     setLoadingMessages(true);
 
-    // Load initial messages (keep chronological order — newest last for inverted FlatList)
+    // Mark room as read on entry
+    globeApi.markRead(roomSlug).catch(() => {});
+    markRoomRead(roomSlug);
+
+    // Load initial messages (keep chronological order -- newest last for inverted FlatList)
     globeApi
       .messages(roomSlug)
       .then(({ messages: msgs, hasMore }) => {
@@ -224,6 +239,94 @@ export default function GlobeRoomChat() {
     };
   }, [roomSlug]);
 
+  // ── Real-time reaction updates ──────────────────────────────────────────
+  useEffect(() => {
+    const offReaction = onReactionUpdate((data) => {
+      if (data.roomId && data.roomId !== globeRoomId) return;
+      // Only process reactions that have a matching roomId for this Globe room
+      if (!data.roomId) return;
+
+      // Update messages in the globe store
+      const updatedMessages = messages.map((msg) => {
+        if (msg.id !== data.messageId) return msg;
+        const reactions = [...(msg.reactions ?? [])];
+        const idx = reactions.findIndex((r) => r.emoji === data.emoji);
+
+        if (data.action === 'add') {
+          if (idx >= 0) {
+            reactions[idx] = {
+              ...reactions[idx],
+              count: reactions[idx].count + 1,
+              userIds: [...reactions[idx].userIds, data.userId],
+              hasReacted: data.userId === user?.id ? true : reactions[idx].hasReacted,
+            };
+          } else {
+            reactions.push({
+              emoji: data.emoji,
+              count: 1,
+              userIds: [data.userId],
+              hasReacted: data.userId === user?.id,
+            });
+          }
+        } else {
+          if (idx >= 0) {
+            const updated = {
+              ...reactions[idx],
+              count: reactions[idx].count - 1,
+              userIds: reactions[idx].userIds.filter((id) => id !== data.userId),
+              hasReacted: data.userId === user?.id ? false : reactions[idx].hasReacted,
+            };
+            if (updated.count <= 0) {
+              reactions.splice(idx, 1);
+            } else {
+              reactions[idx] = updated;
+            }
+          }
+        }
+
+        return { ...msg, reactions };
+      });
+      setMessages(updatedMessages);
+    });
+
+    return () => { offReaction(); };
+  }, [globeRoomId, user?.id, messages, setMessages]);
+
+  // ── Context menu handlers ───────────────────────────────────────────────
+  const handleLongPress = useCallback((message: GlobeMessage) => {
+    setSelectedMessage(message);
+    setMenuVisible(true);
+  }, []);
+
+  const handleReact = useCallback(async (emoji: string) => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    try {
+      await reactionsApi.toggle(selectedMessage.id, emoji);
+    } catch { /* silent -- socket broadcast will update UI */ }
+  }, [selectedMessage]);
+
+  const handleReply = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    setReplyTo({
+      id: selectedMessage.id,
+      senderHandle: selectedMessage.senderHandle ?? 'user',
+      content: selectedMessage.content,
+    });
+  }, [selectedMessage]);
+
+  const handleReport = useCallback(() => {
+    setMenuVisible(false);
+    Alert.alert('Report', 'This message has been flagged for review.');
+  }, []);
+
+  const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
+    try {
+      await reactionsApi.toggle(messageId, emoji);
+    } catch { /* silent */ }
+  }, []);
+
   // ── Scroll handling ─────────────────────────────────────────────────────
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -260,8 +363,10 @@ export default function GlobeRoomChat() {
     const content = input.trim();
     if (!content || !roomSlug || isAgeGated || isRateLimited) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    sendGlobeMessage(roomSlug, content);
+    const replyToId = replyTo?.id ?? undefined;
+    sendGlobeMessage(roomSlug, content, replyToId);
     setInput('');
+    setReplyTo(null);
     // Auto-scroll to bottom after sending
     setIsAtBottom(true);
     resetNewMessageCount();
@@ -272,7 +377,7 @@ export default function GlobeRoomChat() {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-  }, [input, roomSlug, isAgeGated, isRateLimited]);
+  }, [input, roomSlug, isAgeGated, isRateLimited, replyTo]);
 
   // ── Typing indicator ────────────────────────────────────────────────────
   const handleInputChange = useCallback(
@@ -294,47 +399,19 @@ export default function GlobeRoomChat() {
     ({ item }: { item: GlobeMessage }) => {
       const isMe = item.senderId === user?.id;
       return (
-        <View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe]}>
-          {!isMe && (
-            <AvatarCircle
-              name={item.senderHandle ?? '?'}
-              size={32}
-              showRing={false}
-              imageUrl={item.senderAvatar ?? undefined}
-            />
-          )}
-          <View>
-            {!isMe && (
-              <Text style={[styles.senderHandle, { color: COLORS.primary }]}>
-                @{item.senderHandle}
-              </Text>
-            )}
-            {isMe ? (
-              <LinearGradient
-                colors={[...COLORS.gradientPrimary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.bubble}
-              >
-                <Text style={[styles.bubbleText, { color: '#FFF' }]}>
-                  {item.content}
-                </Text>
-              </LinearGradient>
-            ) : (
-              <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
-                <Text style={[styles.bubbleText, { color: colors.text }]}>
-                  {item.content}
-                </Text>
-              </View>
-            )}
-            <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
-              {formatTime(item.createdAt)}
-            </Text>
-          </View>
-        </View>
+        <SwipeableMessage onSwipeComplete={() => {
+          setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
+        }}>
+          <MessageBubble
+            message={item}
+            isMe={isMe}
+            onLongPress={handleLongPress}
+            onReactionToggle={handleReactionToggle}
+          />
+        </SwipeableMessage>
       );
     },
-    [user?.id, colors],
+    [user?.id, handleLongPress, handleReactionToggle],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────
@@ -456,6 +533,9 @@ export default function GlobeRoomChat() {
           </View>
         )}
 
+        {/* Reply composer */}
+        <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+
         {/* Chat input */}
         <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
           <View
@@ -499,6 +579,16 @@ export default function GlobeRoomChat() {
             </LinearGradient>
           </Pressable>
         </View>
+
+        {/* Context menu */}
+        <ContextMenu
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          onReact={handleReact}
+          onReply={handleReply}
+          onReport={handleReport}
+          messageContent={selectedMessage?.content ?? ''}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -568,40 +658,6 @@ const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-  },
-  messageBubbleContainer: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    gap: 8,
-    maxWidth: '85%',
-  },
-  messageBubbleMe: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
-  },
-  senderHandle: {
-    fontSize: 12,
-    fontFamily: FONTS.semiBold,
-    marginBottom: 2,
-    marginLeft: 2,
-  },
-  bubble: {
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: 280,
-    ...SHADOWS.sm,
-  },
-  bubbleText: {
-    fontSize: 15,
-    fontFamily: FONTS.regular,
-    lineHeight: 22,
-  },
-  bubbleTime: {
-    fontSize: 10,
-    fontFamily: FONTS.regular,
-    marginTop: 2,
-    marginLeft: 4,
   },
   // Scroll-to-bottom pill
   scrollPillWrapper: {

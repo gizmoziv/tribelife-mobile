@@ -19,7 +19,7 @@ import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi } from '@/services/api';
 import {
   joinConversation,
   leaveConversation,
@@ -30,8 +30,13 @@ import {
   onTypingStart,
   onTypingStop,
   onMessageRejected,
+  onReactionUpdate,
 } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { MessageBubble } from '@/components/ui/chat/MessageBubble';
+import { ContextMenu } from '@/components/ui/chat/ContextMenu';
+import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import type { Message } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
@@ -58,6 +63,9 @@ export default function DMThreadScreen() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -194,14 +202,109 @@ export default function DMThreadScreen() {
     };
   }, [conversationId]);
 
+  // ── Real-time reaction updates ──────────────────────────────────────────
+  useEffect(() => {
+    const offReaction = onReactionUpdate((data) => {
+      if (data.conversationId && data.conversationId !== conversationId) return;
+      // Only process reactions that have a conversationId (DM context)
+      if (!data.conversationId) return;
+
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== data.messageId) return msg;
+          const reactions = [...(msg.reactions ?? [])];
+          const idx = reactions.findIndex((r) => r.emoji === data.emoji);
+
+          if (data.action === 'add') {
+            if (idx >= 0) {
+              reactions[idx] = {
+                ...reactions[idx],
+                count: reactions[idx].count + 1,
+                userIds: [...reactions[idx].userIds, data.userId],
+                hasReacted: data.userId === user?.id ? true : reactions[idx].hasReacted,
+              };
+            } else {
+              reactions.push({
+                emoji: data.emoji,
+                count: 1,
+                userIds: [data.userId],
+                hasReacted: data.userId === user?.id,
+              });
+            }
+          } else {
+            if (idx >= 0) {
+              const updated = {
+                ...reactions[idx],
+                count: reactions[idx].count - 1,
+                userIds: reactions[idx].userIds.filter((id) => id !== data.userId),
+                hasReacted: data.userId === user?.id ? false : reactions[idx].hasReacted,
+              };
+              if (updated.count <= 0) {
+                reactions.splice(idx, 1);
+              } else {
+                reactions[idx] = updated;
+              }
+            }
+          }
+
+          return { ...msg, reactions };
+        }),
+      );
+    });
+
+    return () => { offReaction(); };
+  }, [conversationId, user?.id]);
+
+  // ── Context menu handlers ───────────────────────────────────────────────
+  const handleLongPress = useCallback((message: Message) => {
+    setSelectedMessage(message);
+    setMenuVisible(true);
+  }, []);
+
+  const handleReact = useCallback(async (emoji: string) => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    try {
+      await reactionsApi.toggle(selectedMessage.id, emoji);
+    } catch { /* silent -- socket broadcast will update UI */ }
+  }, [selectedMessage]);
+
+  const handleReply = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    setReplyTo({
+      id: selectedMessage.id,
+      senderHandle: selectedMessage.senderHandle ?? 'user',
+      content: selectedMessage.content,
+    });
+  }, [selectedMessage]);
+
+  const handleReport = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    if (selectedMessage.senderId) {
+      const senderHandle = selectedMessage.senderHandle ?? 'user';
+      moderationApi.report(selectedMessage.senderId, 'message', 'Reported from DM', selectedMessage.id)
+        .then(() => Alert.alert('Reported', 'Thank you. We will review this within 24 hours.'));
+    }
+  }, [selectedMessage]);
+
+  const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
+    try {
+      await reactionsApi.toggle(messageId, emoji);
+    } catch { /* silent */ }
+  }, []);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    sendDirectMessage(conversationId, content);
+    const replyToId = replyTo?.id ?? undefined;
+    sendDirectMessage(conversationId, content, replyToId);
     setInput('');
+    setReplyTo(null);
     stopTyping({ conversationId });
-  }, [input, conversationId]);
+  }, [input, conversationId, replyTo]);
 
   const handleInputChange = (text: string) => {
     setInput(text);
@@ -212,6 +315,23 @@ export default function DMThreadScreen() {
       stopTyping({ conversationId });
     }, 1500);
   };
+
+  const renderMessage = useCallback(({ item }: { item: Message }) => {
+    const isMe = item.senderId === user?.id;
+    return (
+      <SwipeableMessage onSwipeComplete={() => {
+        setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
+      }}>
+        <MessageBubble
+          message={item}
+          isMe={isMe}
+          onLongPress={handleLongPress}
+          onReactionToggle={handleReactionToggle}
+          showAvatar={false}
+        />
+      </SwipeableMessage>
+    );
+  }, [user?.id, handleLongPress, handleReactionToggle]);
 
   if (isLoading) {
     return (
@@ -232,9 +352,7 @@ export default function DMThreadScreen() {
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <DMBubble message={item} isMe={item.senderId === user?.id} />
-          )}
+          renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
@@ -251,6 +369,8 @@ export default function DMThreadScreen() {
             </View>
           </View>
         )}
+
+        <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         <View style={[styles.inputBar, { paddingBottom: tabBarHeight + 8 }]}>
           <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
@@ -277,37 +397,17 @@ export default function DMThreadScreen() {
             </LinearGradient>
           </Pressable>
         </View>
+
+        <ContextMenu
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          onReact={handleReact}
+          onReply={handleReply}
+          onReport={handleReport}
+          messageContent={selectedMessage?.content ?? ''}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-}
-
-function DMBubble({ message, isMe }: { message: Message; isMe: boolean }) {
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
-      {isMe ? (
-        <LinearGradient
-          colors={[...COLORS.gradientPrimary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[styles.bubble, SHADOWS.sm]}
-        >
-          <Text style={[styles.bubbleText, { color: '#FFF' }]}>
-            {message.content}
-          </Text>
-        </LinearGradient>
-      ) : (
-        <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }, SHADOWS.sm]}>
-          <Text style={[styles.bubbleText, { color: colors.text }]}>
-            {message.content}
-          </Text>
-        </View>
-      )}
-      <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
-        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </Text>
-    </View>
   );
 }
 
@@ -323,19 +423,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   messageList: { paddingHorizontal: 12, paddingVertical: 12 },
-  bubbleRow: {
-    marginBottom: 10,
-    maxWidth: '75%',
-    alignSelf: 'flex-start',
-  },
-  bubbleRowMe: { alignSelf: 'flex-end' },
-  bubble: {
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  bubbleText: { fontSize: 15, fontFamily: FONTS.regular, lineHeight: 22 },
-  bubbleTime: { fontSize: 10, fontFamily: FONTS.regular, marginTop: 3, marginLeft: 4 },
   typingContainer: {
     paddingHorizontal: SPACING.page,
     paddingBottom: 4,

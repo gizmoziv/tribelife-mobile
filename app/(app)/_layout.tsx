@@ -4,8 +4,10 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
+import { useGlobeStore } from '@/store/globeStore';
 import { useTheme } from '@/contexts/ThemeContext';
-import { notificationsApi } from '@/services/api';
+import { notificationsApi, globeApi } from '@/services/api';
+import { getSocket, connectSocket } from '@/services/socket';
 import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
 import { COLORS, FONTS, SHADOWS, RADIUS, SPACING } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
@@ -45,6 +47,7 @@ export default function AppLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { unreadCount, setNotifications } = useNotificationStore();
+  const { totalUnread, setUnreadCounts } = useGlobeStore();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -61,6 +64,39 @@ export default function AppLayout() {
         setNotifications(notifications, unreadCount);
       })
       .catch(() => {});
+  }, []);
+
+  // Fetch Globe unread counts and listen for real-time globe messages
+  useEffect(() => {
+    globeApi.unread()
+      .then(({ unread }) => setUnreadCounts(unread))
+      .catch(() => {});
+
+    let handler: ((msg: { roomSlug?: string; roomId?: string }) => void) | null = null;
+    connectSocket().then(() => {
+      const socket = getSocket();
+      if (socket) {
+        handler = (msg: any) => {
+          // Don't count own messages as unread
+          const currentUserId = useAuthStore.getState().user?.id;
+          if (msg.senderId === currentUserId) return;
+
+          const slug = msg.roomSlug ?? msg.roomId?.replace('globe:', '');
+          const activeSlug = useGlobeStore.getState().activeRoomSlug;
+          if (slug && slug !== activeSlug) {
+            useGlobeStore.getState().incrementUnread(slug);
+          }
+        };
+        socket.on('globe:message', handler);
+      }
+    });
+
+    return () => {
+      if (handler) {
+        const socket = getSocket();
+        socket?.off('globe:message', handler);
+      }
+    };
   }, []);
 
   return (
@@ -105,6 +141,13 @@ export default function AppLayout() {
               onPress={() => router.push('/(app)/globe')}
             >
               <GlobeIcon color={colors.textMuted} />
+              {totalUnread > 0 && (
+                <View style={styles.globeBadge}>
+                  <Text style={styles.badgeText}>
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.bellButton}
@@ -187,6 +230,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badge: {
+    position: 'absolute',
+    top: 0,
+    right: -2,
+    backgroundColor: COLORS.error,
+    borderRadius: RADIUS.pill,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  globeBadge: {
     position: 'absolute',
     top: 0,
     right: -2,

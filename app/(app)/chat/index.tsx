@@ -13,13 +13,14 @@ import {
   Alert,
   Pressable,
   Animated,
+  PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi } from '@/services/api';
 import {
   connectSocket,
   sendRoomMessage,
@@ -30,6 +31,7 @@ import {
   onTypingStart,
   onTypingStop,
   onMessageRejected,
+  onReactionUpdate,
 } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { PillToggle } from '@/components/ui/PillToggle';
@@ -37,7 +39,11 @@ import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
-import type { Message, Conversation } from '@/types';
+import { MessageBubble } from '@/components/ui/chat/MessageBubble';
+import { ContextMenu } from '@/components/ui/chat/ContextMenu';
+import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
+import type { Message, Conversation, ReactionGroup } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function SendIcon() {
@@ -87,6 +93,9 @@ function LocalChatPanel() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -124,13 +133,106 @@ function LocalChatPanel() {
     });
   }, [roomId]);
 
+  // ── Real-time reaction updates ──────────────────────────────────────────
+  useEffect(() => {
+    const offReaction = onReactionUpdate((data) => {
+      if (data.roomId && data.roomId !== roomId) return;
+      // Only process reactions that have a roomId (timezone room context)
+      if (!data.roomId) return;
+
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== data.messageId) return msg;
+          const reactions = [...(msg.reactions ?? [])];
+          const idx = reactions.findIndex((r) => r.emoji === data.emoji);
+
+          if (data.action === 'add') {
+            if (idx >= 0) {
+              reactions[idx] = {
+                ...reactions[idx],
+                count: reactions[idx].count + 1,
+                userIds: [...reactions[idx].userIds, data.userId],
+                hasReacted: data.userId === user?.id ? true : reactions[idx].hasReacted,
+              };
+            } else {
+              reactions.push({
+                emoji: data.emoji,
+                count: 1,
+                userIds: [data.userId],
+                hasReacted: data.userId === user?.id,
+              });
+            }
+          } else {
+            if (idx >= 0) {
+              const updated = {
+                ...reactions[idx],
+                count: reactions[idx].count - 1,
+                userIds: reactions[idx].userIds.filter((id) => id !== data.userId),
+                hasReacted: data.userId === user?.id ? false : reactions[idx].hasReacted,
+              };
+              if (updated.count <= 0) {
+                reactions.splice(idx, 1);
+              } else {
+                reactions[idx] = updated;
+              }
+            }
+          }
+
+          return { ...msg, reactions };
+        }),
+      );
+    });
+
+    return () => { offReaction(); };
+  }, [roomId, user?.id]);
+
+  // ── Context menu handlers ───────────────────────────────────────────────
+  const handleLongPress = useCallback((message: Message) => {
+    setSelectedMessage(message);
+    setMenuVisible(true);
+  }, []);
+
+  const handleReact = useCallback(async (emoji: string) => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    try {
+      await reactionsApi.toggle(selectedMessage.id, emoji);
+    } catch { /* silent -- socket broadcast will update UI */ }
+  }, [selectedMessage]);
+
+  const handleReply = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    setReplyTo({
+      id: selectedMessage.id,
+      senderHandle: selectedMessage.senderHandle ?? 'user',
+      content: selectedMessage.content,
+    });
+  }, [selectedMessage]);
+
+  const handleReport = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    if (selectedMessage.senderId) {
+      showReportBlockMenu(selectedMessage.senderId, selectedMessage.senderHandle ?? 'user', selectedMessage.id);
+    }
+  }, [selectedMessage]);
+
+  const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
+    try {
+      await reactionsApi.toggle(messageId, emoji);
+    } catch { /* silent */ }
+  }, []);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    sendRoomMessage(content);
+    const replyToId = replyTo?.id ?? undefined;
+    sendRoomMessage(content, replyToId);
     setInput('');
-  }, [input]);
+    setReplyTo(null);
+  }, [input, replyTo]);
 
   const handleInputChange = (text: string) => {
     setInput(text);
@@ -149,14 +251,18 @@ function LocalChatPanel() {
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
     return (
-      <MessageBubble
-        message={item}
-        isMe={isMe}
-        onProfilePress={() => router.push(`/user/${item.senderHandle}`)}
-        onBlock={handleBlock}
-      />
+      <SwipeableMessage onSwipeComplete={() => {
+        setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
+      }}>
+        <MessageBubble
+          message={item}
+          isMe={isMe}
+          onLongPress={handleLongPress}
+          onReactionToggle={handleReactionToggle}
+        />
+      </SwipeableMessage>
     );
-  }, [user?.id, router, handleBlock]);
+  }, [user?.id, handleLongPress, handleReactionToggle]);
 
   if (isLoading) {
     return <LoadingState />;
@@ -185,10 +291,21 @@ function LocalChatPanel() {
         <TypingIndicator users={typingUsers} />
       )}
 
+      <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+
       <ChatInput
         value={input}
         onChangeText={handleInputChange}
         onSend={handleSend}
+      />
+
+      <ContextMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onReact={handleReact}
+        onReply={handleReply}
+        onReport={handleReport}
+        messageContent={selectedMessage?.content ?? ''}
       />
     </KeyboardAvoidingView>
   );
@@ -237,6 +354,81 @@ function TypingIndicator({ users }: { users: string[] }) {
   );
 }
 
+// ── Swipeable Conversation Row ───────────────────────────────────────────
+function SwipeableConversationRow({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+}) {
+  const { colors } = useTheme();
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+
+  const close = () => {
+    isOpen.current = false;
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) => {
+        const isHorizontal = Math.abs(gs.dx) > Math.abs(gs.dy) * 2 && Math.abs(gs.dx) > 10;
+        // Allow left swipe to open, or right swipe to close when open
+        return isHorizontal && (gs.dx < 0 || isOpen.current);
+      },
+      onPanResponderMove: (_, gs) => {
+        const base = isOpen.current ? -80 : 0;
+        const newVal = Math.min(0, Math.max(base + gs.dx, -80));
+        translateX.setValue(newVal);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const base = isOpen.current ? -80 : 0;
+        const final = base + gs.dx;
+        if (final < -40) {
+          isOpen.current = true;
+          Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
+        } else {
+          close();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <View style={{ overflow: 'hidden' }}>
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 80,
+          backgroundColor: COLORS.error,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: RADIUS.md,
+        }}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          onDelete();
+        }}
+      >
+        <Text style={{ color: '#FFF', fontFamily: FONTS.semiBold, fontSize: 14 }}>Delete</Text>
+      </TouchableOpacity>
+      <Animated.View
+        style={{ transform: [{ translateX }], backgroundColor: colors.background }}
+        {...panResponder.panHandlers}
+      >
+        <Pressable onPress={() => { if (isOpen.current) close(); }}>
+          {children}
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
 // ── DM List Panel ─────────────────────────────────────────────────────────
 function DMListPanel() {
   const { colors } = useTheme();
@@ -249,6 +441,29 @@ function DMListPanel() {
       setConversations(convos);
       setIsLoading(false);
     }).catch(() => setIsLoading(false));
+  }, []);
+
+  // Refetch conversations when a DM arrives (handles unhide case)
+  useEffect(() => {
+    const offDm = onDirectMessage(() => {
+      chat.getConversations().then(({ conversations: convos }) => {
+        setConversations(convos);
+      }).catch(() => {});
+    });
+    return () => { offDm(); };
+  }, []);
+
+  const handleHideConversation = useCallback(async (conversationId: number) => {
+    // Optimistic UI: remove from list immediately
+    setConversations((prev) => prev.filter((c) => c.conversationId !== conversationId));
+    try {
+      await chat.hideConversation(conversationId);
+    } catch {
+      // If API fails, refetch the list
+      chat.getConversations().then(({ conversations: convos }) => {
+        setConversations(convos);
+      }).catch(() => {});
+    }
   }, []);
 
   if (isLoading) return <LoadingState />;
@@ -280,28 +495,32 @@ function DMListPanel() {
       contentContainerStyle={{ paddingVertical: SPACING.sm }}
       renderItem={({ item, index }) => (
         <AnimatedEntry delay={index * 40}>
-          <TouchableOpacity
-            style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
-            onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
-            activeOpacity={0.7}
+          <SwipeableConversationRow
+            onDelete={() => handleHideConversation(item.conversationId)}
           >
-            <AvatarCircle name={item.participantName ?? '?'} size={44} imageUrl={item.participantAvatar ?? undefined} />
-            <View style={{ flex: 1 }}>
-              <View style={styles.dmRowTop}>
-                <Text style={[styles.dmName, { color: colors.text }]}>
-                  @{item.participantHandle}
-                </Text>
-                {item.lastMessage && (
-                  <Text style={[styles.dmTime, { color: colors.textMuted }]}>
-                    {formatTime(item.lastMessage.createdAt)}
+            <TouchableOpacity
+              style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
+              onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
+              activeOpacity={0.7}
+            >
+              <AvatarCircle name={item.participantName ?? '?'} size={44} imageUrl={item.participantAvatar ?? undefined} />
+              <View style={{ flex: 1 }}>
+                <View style={styles.dmRowTop}>
+                  <Text style={[styles.dmName, { color: colors.text }]}>
+                    @{item.participantHandle}
                   </Text>
-                )}
+                  {item.lastMessage && (
+                    <Text style={[styles.dmTime, { color: colors.textMuted }]}>
+                      {formatTime(item.lastMessage.createdAt)}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
+                  {item.lastMessage?.content ?? 'Start a conversation'}
+                </Text>
               </View>
-              <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
-                {item.lastMessage?.content ?? 'Start a conversation'}
-              </Text>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </SwipeableConversationRow>
         </AnimatedEntry>
       )}
       ListFooterComponent={<View style={{ height: 80 }} />}
@@ -361,74 +580,6 @@ function showReportBlockMenu(
         },
       },
     ]
-  );
-}
-
-function MessageBubble({
-  message,
-  isMe,
-  onProfilePress,
-  onBlock,
-}: {
-  message: Message;
-  isMe: boolean;
-  onProfilePress: () => void;
-  onBlock?: (blockedUserId: number) => void;
-}) {
-  const { colors } = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
-
-  const handleLongPress = () => {
-    if (!isMe && message.senderId) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      Animated.sequence([
-        Animated.timing(scale, { toValue: 0.97, duration: 100, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
-      ]).start();
-      showReportBlockMenu(message.senderId, message.senderHandle ?? 'user', message.id, onBlock);
-    }
-  };
-
-  return (
-    <Pressable onLongPress={handleLongPress} delayLongPress={500}>
-      <Animated.View style={[styles.messageBubbleContainer, isMe && styles.messageBubbleMe, { transform: [{ scale }] }]}>
-        {!isMe && (
-          <TouchableOpacity onPress={onProfilePress}>
-            <AvatarCircle name={message.senderHandle ?? '?'} size={32} showRing={false} imageUrl={message.senderAvatar ?? undefined} />
-          </TouchableOpacity>
-        )}
-        <View>
-          {!isMe && (
-            <TouchableOpacity onPress={onProfilePress}>
-              <Text style={[styles.senderHandle, { color: COLORS.primary }]}>
-                @{message.senderHandle}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {isMe ? (
-            <LinearGradient
-              colors={[...COLORS.gradientPrimary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.bubble}
-            >
-              <Text style={[styles.bubbleText, { color: '#FFF' }]}>
-                {message.content}
-              </Text>
-            </LinearGradient>
-          ) : (
-            <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
-              <Text style={[styles.bubbleText, { color: colors.text }]}>
-                {message.content}
-              </Text>
-            </View>
-          )}
-          <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
-            {formatTime(message.createdAt)}
-          </Text>
-        </View>
-      </Animated.View>
-    </Pressable>
   );
 }
 
@@ -499,31 +650,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageList: { paddingHorizontal: 12, paddingVertical: 8 },
-  messageBubbleContainer: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    gap: 8,
-    maxWidth: '85%',
-  },
-  messageBubbleMe: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
-  },
-  senderHandle: {
-    fontSize: 12,
-    fontFamily: FONTS.semiBold,
-    marginBottom: 2,
-    marginLeft: 2,
-  },
-  bubble: {
-    borderRadius: 22,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxWidth: 280,
-    ...SHADOWS.sm,
-  },
-  bubbleText: { fontSize: 15, fontFamily: FONTS.regular, lineHeight: 22 },
-  bubbleTime: { fontSize: 10, fontFamily: FONTS.regular, marginTop: 2, marginLeft: 4 },
   typingContainer: {
     paddingHorizontal: SPACING.page,
     paddingBottom: 4,
