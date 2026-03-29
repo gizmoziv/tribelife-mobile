@@ -16,6 +16,7 @@ import {
   PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -320,7 +321,7 @@ function LocalChatPanel() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
       <View style={styles.roomHeader}>
@@ -648,9 +649,10 @@ function ChatInput({
   onImagesSelected?: (uris: string[]) => void;
 }) {
   const { colors } = useTheme();
+  const tabBarSpace = useTabBarSpace();
 
   return (
-    <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+    <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: tabBarSpace }]}>
       {onImagesSelected && (
         <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
       )}
@@ -739,8 +741,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    paddingBottom: 88,
+    paddingTop: 8,
     gap: 8,
   },
   inputWrap: {

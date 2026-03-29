@@ -5,14 +5,18 @@ import type { Message } from '@/types';
 
 let socket: Socket | null = null;
 
-export async function connectSocket(): Promise<Socket> {
+export async function connectSocket(): Promise<Socket | null> {
   if (socket?.connected) return socket;
 
   const token = await getToken();
+  if (!token) {
+    console.log('[socket] No auth token — skipping connection');
+    return null;
+  }
 
   socket = io(API_URL, {
     auth: { token },
-    transports: ['websocket'],
+    transports: ['polling', 'websocket'],
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1500,

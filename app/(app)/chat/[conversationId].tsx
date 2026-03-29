@@ -13,7 +13,7 @@ import {
   Alert,
   Pressable,
 } from 'react-native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -61,7 +61,7 @@ export default function DMThreadScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarSpace = useTabBarSpace();
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -397,7 +397,7 @@ export default function DMThreadScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={100}
       >
         <FlatList
@@ -424,7 +424,7 @@ export default function DMThreadScreen() {
 
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
-        <View style={[styles.inputBar, { paddingBottom: tabBarHeight + 8 }]}>
+        <View style={[styles.inputBar, { paddingBottom: tabBarSpace }]}>
           <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
           {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
           <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -46,7 +46,9 @@ export default function OnboardingScreen() {
   const [handleStatus, setHandleStatus] = useState<HandleStatus>('idle');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [checkTimeout, setCheckTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestHandleRef = useRef('');
+  const handleInputRef = useRef<any>(null);
   const [showGlobeCta, setShowGlobeCta] = useState(false);
 
   const detectedTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
@@ -54,8 +56,9 @@ export default function OnboardingScreen() {
   const handleChange = useCallback((text: string) => {
     const cleaned = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
     setHandle(cleaned);
+    latestHandleRef.current = cleaned;
 
-    if (checkTimeout) clearTimeout(checkTimeout);
+    if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
 
     if (cleaned.length < 3) {
       setHandleStatus(cleaned.length > 0 ? 'invalid' : 'idle');
@@ -67,18 +70,26 @@ export default function OnboardingScreen() {
       return;
     }
 
-    setHandleStatus('checking');
-    const timeout = setTimeout(async () => {
+    // Don't set 'checking' immediately — avoid re-render on every keystroke
+    checkTimeoutRef.current = setTimeout(async () => {
+      const current = latestHandleRef.current;
+      if (current.length < 3) return;
+      setHandleStatus('checking');
       try {
-        const { available } = await auth.checkHandle(cleaned);
-        setHandleStatus(available ? 'available' : 'taken');
+        const { available } = await auth.checkHandle(current);
+        if (latestHandleRef.current === current) {
+          setHandleStatus(available ? 'available' : 'taken');
+          // Re-focus input after status change (Android loses focus on layout shift)
+          setTimeout(() => handleInputRef.current?.focus(), 50);
+        }
       } catch {
-        setHandleStatus('idle');
+        if (latestHandleRef.current === current) {
+          setHandleStatus('idle');
+          setTimeout(() => handleInputRef.current?.focus(), 50);
+        }
       }
     }, 600);
-
-    setCheckTimeout(timeout);
-  }, [checkTimeout]);
+  }, []);
 
   const handleSubmit = async () => {
     if (handleStatus !== 'available' || !handle || !acceptedTerms) return;
@@ -145,7 +156,7 @@ export default function OnboardingScreen() {
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {showGlobeCta ? (
@@ -205,6 +216,7 @@ export default function OnboardingScreen() {
                 ]}>
                   <GlowBadge text="@" color={COLORS.accent} size="sm" />
                   <TextInput
+                    ref={handleInputRef}
                     style={[styles.input, { color: colors.text, fontFamily: FONTS.medium }]}
                     placeholder="your_handle"
                     placeholderTextColor={colors.textMuted}

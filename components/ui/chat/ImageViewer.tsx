@@ -5,15 +5,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   Text,
-  SafeAreaView,
+  Platform,
   Dimensions,
   FlatList,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImageZoom } from '@likashefqet/react-native-image-zoom';
 import * as MediaLibrary from 'expo-media-library';
-import { Paths, File as ExpoFile } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { FONTS } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
@@ -70,6 +71,7 @@ function ShareIcon() {
 }
 
 export function ImageViewer({ visible, images, initialIndex, onClose }: ImageViewerProps) {
+  const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -77,13 +79,19 @@ export function ImageViewer({ visible, images, initialIndex, onClose }: ImageVie
     const url = images[currentIndex];
     setIsSaving(true);
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Please allow access to save images.');
-        return;
+      // On iOS, we need photo library permission. On Android 10+, saveToLibraryAsync
+      // uses MediaStore and doesn't need broad media permissions.
+      if (Platform.OS === 'ios') {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Needed', 'Please allow access to save images.');
+          return;
+        }
       }
-      const downloaded = await ExpoFile.downloadFileAsync(url, Paths.cache);
-      await MediaLibrary.saveToLibraryAsync(downloaded.uri);
+      const filename = url.split('/').pop() ?? `image_${Date.now()}.jpg`;
+      const localUri = FileSystem.cacheDirectory + filename;
+      const { uri } = await FileSystem.downloadAsync(url, localUri);
+      await MediaLibrary.saveToLibraryAsync(uri);
       Alert.alert('Saved', 'Image saved to your photo library.');
     } catch {
       Alert.alert('Error', 'Could not save image.');
@@ -95,8 +103,10 @@ export function ImageViewer({ visible, images, initialIndex, onClose }: ImageVie
   const handleShare = useCallback(async () => {
     const url = images[currentIndex];
     try {
-      const downloaded = await ExpoFile.downloadFileAsync(url, Paths.cache);
-      await Sharing.shareAsync(downloaded.uri);
+      const filename = url.split('/').pop() ?? `image_${Date.now()}.jpg`;
+      const localUri = FileSystem.cacheDirectory + filename;
+      const { uri } = await FileSystem.downloadAsync(url, localUri);
+      await Sharing.shareAsync(uri);
     } catch {
       Alert.alert('Error', 'Could not share image.');
     }
@@ -128,7 +138,7 @@ export function ImageViewer({ visible, images, initialIndex, onClose }: ImageVie
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.safeArea, { paddingTop: insets.top }]}>
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={12}>
@@ -175,7 +185,7 @@ export function ImageViewer({ visible, images, initialIndex, onClose }: ImageVie
           )}
 
           {/* Actions */}
-          <View style={styles.actions}>
+          <View style={[styles.actions, { paddingBottom: insets.bottom + 16 }]}>
             <TouchableOpacity onPress={handleSave} style={styles.actionButton} disabled={isSaving}>
               {isSaving ? (
                 <ActivityIndicator color="#FFF" size="small" />
@@ -189,7 +199,7 @@ export function ImageViewer({ visible, images, initialIndex, onClose }: ImageVie
               <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
       </View>
     </Modal>
   );

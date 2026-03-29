@@ -16,6 +16,7 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -46,7 +47,7 @@ import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import type { GlobeMessage } from '@/types';
+import type { Message, GlobeMessage } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -101,6 +102,7 @@ const AGE_GATE_HOURS = 24;
 export default function GlobeRoomChat() {
   const { roomSlug } = useLocalSearchParams<{ roomSlug: string }>();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const {
     rooms,
@@ -314,8 +316,8 @@ export default function GlobeRoomChat() {
   }, [globeRoomId, user?.id, messages, setMessages]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
-  const handleLongPress = useCallback((message: GlobeMessage) => {
-    setSelectedMessage(message);
+  const handleLongPress = useCallback((message: Message | GlobeMessage) => {
+    setSelectedMessage(message as GlobeMessage);
     setMenuVisible(true);
   }, []);
 
@@ -522,7 +524,7 @@ export default function GlobeRoomChat() {
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={90}
       >
         {/* Age gate banner */}
@@ -599,7 +601,7 @@ export default function GlobeRoomChat() {
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         {/* Chat input */}
-        <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+        <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: insets.bottom + 8 }]}>
           {!isAgeGated && (
             <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
           )}
@@ -765,8 +767,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    paddingBottom: 88,
+    paddingTop: 8,
     gap: 8,
   },
   inputWrap: {

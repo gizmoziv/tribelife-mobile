@@ -31,6 +31,7 @@ export function MessageBubble({
 
   const mediaUrls = message.mediaUrls;
   const hasMedia = mediaUrls && mediaUrls.length > 0;
+  const isEmpty = !message.content && !hasMedia;
   const BUBBLE_WIDTH = 260;
 
   const handleImagePress = useCallback((index: number) => {
@@ -119,6 +120,11 @@ export function MessageBubble({
                   {message.content}
                 </Text>
               ) : null}
+              {isEmpty && (
+                <Text style={[styles.removedText, { color: 'rgba(255,255,255,0.6)' }]}>
+                  Image removed by moderation
+                </Text>
+              )}
             </LinearGradient>
           ) : (
             <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
@@ -154,6 +160,11 @@ export function MessageBubble({
                   {message.content}
                 </Text>
               ) : null}
+              {isEmpty && (
+                <Text style={[styles.removedText, { color: colors.textMuted }]}>
+                  Image removed by moderation
+                </Text>
+              )}
             </View>
           )}
         </Pressable>
@@ -252,5 +263,10 @@ const styles = StyleSheet.create({
   },
   mediaWithText: {
     marginBottom: 6,
+  },
+  removedText: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    fontStyle: 'italic',
   },
 });
