@@ -35,6 +35,7 @@ export interface Message {
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
+  mediaUrls?: string[] | null;
 }
 
 export interface Conversation {
@@ -124,4 +125,5 @@ export interface GlobeMessage {
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
+  mediaUrls?: string[] | null;
 }
