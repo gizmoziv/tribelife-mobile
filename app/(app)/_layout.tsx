@@ -76,7 +76,11 @@ export default function AppLayout() {
     connectSocket().then(() => {
       const socket = getSocket();
       if (socket) {
-        handler = (msg) => {
+        handler = (msg: any) => {
+          // Don't count own messages as unread
+          const currentUserId = useAuthStore.getState().user?.id;
+          if (msg.senderId === currentUserId) return;
+
           const slug = msg.roomSlug ?? msg.roomId?.replace('globe:', '');
           const activeSlug = useGlobeStore.getState().activeRoomSlug;
           if (slug && slug !== activeSlug) {

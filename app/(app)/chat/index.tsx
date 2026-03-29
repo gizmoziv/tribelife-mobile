@@ -362,27 +362,35 @@ function SwipeableConversationRow({
   children: React.ReactNode;
   onDelete: () => void;
 }) {
+  const { colors } = useTheme();
   const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+
+  const close = () => {
+    isOpen.current = false;
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+  };
+
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        Math.abs(gestureState.dx) > 10 && gestureState.dx < 0,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx < 0) {
-          translateX.setValue(Math.max(gestureState.dx, -80));
-        }
+      onMoveShouldSetPanResponder: (_, gs) => {
+        const isHorizontal = Math.abs(gs.dx) > Math.abs(gs.dy) * 2 && Math.abs(gs.dx) > 10;
+        // Allow left swipe to open, or right swipe to close when open
+        return isHorizontal && (gs.dx < 0 || isOpen.current);
       },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx < -40) {
-          Animated.spring(translateX, {
-            toValue: -80,
-            useNativeDriver: true,
-          }).start();
+      onPanResponderMove: (_, gs) => {
+        const base = isOpen.current ? -80 : 0;
+        const newVal = Math.min(0, Math.max(base + gs.dx, -80));
+        translateX.setValue(newVal);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const base = isOpen.current ? -80 : 0;
+        const final = base + gs.dx;
+        if (final < -40) {
+          isOpen.current = true;
+          Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
         } else {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
+          close();
         }
       },
     })
@@ -410,10 +418,12 @@ function SwipeableConversationRow({
         <Text style={{ color: '#FFF', fontFamily: FONTS.semiBold, fontSize: 14 }}>Delete</Text>
       </TouchableOpacity>
       <Animated.View
-        style={{ transform: [{ translateX }] }}
+        style={{ transform: [{ translateX }], backgroundColor: colors.background }}
         {...panResponder.panHandlers}
       >
-        {children}
+        <Pressable onPress={() => { if (isOpen.current) close(); }}>
+          {children}
+        </Pressable>
       </Animated.View>
     </View>
   );
