@@ -32,7 +32,11 @@ import {
   onTypingStop,
   onMessageRejected,
   onReactionUpdate,
+  onMediaRemoved,
+  onMediaRejected,
 } from '@/services/socket';
+import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { PillToggle } from '@/components/ui/PillToggle';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
@@ -96,6 +100,7 @@ function LocalChatPanel() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,7 +134,20 @@ function LocalChatPanel() {
         );
       });
 
-      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); };
+      const offMediaRemoved = onMediaRemoved((data) => {
+        setMessages((prev) => prev.map((msg) => {
+          if (msg.id === data.messageId) {
+            return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
+          }
+          return msg;
+        }));
+      });
+
+      const offMediaRejected = onMediaRejected((data) => {
+        Alert.alert('Image Removed', data.message);
+      });
+
+      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); offMediaRemoved(); offMediaRejected(); };
     });
   }, [roomId]);
 
@@ -224,6 +242,37 @@ function LocalChatPanel() {
     } catch { /* silent */ }
   }, []);
 
+  const handleImagesSelected = useCallback(async (uris: string[]) => {
+    setIsUploading(true);
+    try {
+      const { uploads } = await requestMediaUploadUrls(uris.length);
+      const results = await Promise.allSettled(
+        uploads.map((upload, i) => uploadToSpaces(upload.uploadUrl, uris[i])),
+      );
+      const successfulUploads = uploads.filter((_, i) => results[i].status === 'fulfilled');
+      if (successfulUploads.length === 0) {
+        Alert.alert('Upload Failed', 'Could not upload images. Please try again.');
+        return;
+      }
+      const keys = successfulUploads.map((u) => u.key);
+      await confirmMediaUpload(keys);
+      const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
+      const text = input.trim();
+      const replyToId = replyTo?.id ?? undefined;
+      sendRoomMessage(text, replyToId, mediaUrls);
+      setInput('');
+      setReplyTo(null);
+      if (successfulUploads.length < uris.length) {
+        Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
+      }
+    } catch (err) {
+      console.error('[media] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload images. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [input, replyTo]);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
@@ -297,6 +346,8 @@ function LocalChatPanel() {
         value={input}
         onChangeText={handleInputChange}
         onSend={handleSend}
+        isUploading={isUploading}
+        onImagesSelected={handleImagesSelected}
       />
 
       <ContextMenu
@@ -587,15 +638,23 @@ function ChatInput({
   value,
   onChangeText,
   onSend,
+  isUploading,
+  onImagesSelected,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
+  isUploading?: boolean;
+  onImagesSelected?: (uris: string[]) => void;
 }) {
   const { colors } = useTheme();
 
   return (
     <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+      {onImagesSelected && (
+        <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+      )}
+      {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
       <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
         <TextInput
           style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
@@ -610,8 +669,8 @@ function ChatInput({
       </View>
       <Pressable
         onPress={onSend}
-        disabled={!value.trim()}
-        style={({ pressed }) => [{ opacity: value.trim() ? (pressed ? 0.8 : 1) : 0.4 }]}
+        disabled={!value.trim() || isUploading}
+        style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
       >
         <LinearGradient
           colors={[...COLORS.gradientPrimary]}

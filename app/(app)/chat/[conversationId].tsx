@@ -31,7 +31,11 @@ import {
   onTypingStop,
   onMessageRejected,
   onReactionUpdate,
+  onMediaRemoved,
+  onMediaRejected,
 } from '@/services/socket';
+import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
@@ -66,6 +70,7 @@ export default function DMThreadScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -193,12 +198,27 @@ export default function DMThreadScreen() {
       );
     });
 
+    const offMediaRemoved = onMediaRemoved((data) => {
+      setMessages((prev) => prev.map((msg) => {
+        if (msg.id === data.messageId) {
+          return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
+        }
+        return msg;
+      }));
+    });
+
+    const offMediaRejected = onMediaRejected((data) => {
+      Alert.alert('Image Removed', data.message);
+    });
+
     return () => {
       leaveConversation(conversationId);
       offDm();
       offTypingStart();
       offTypingStop();
       offRejected();
+      offMediaRemoved();
+      offMediaRejected();
     };
   }, [conversationId]);
 
@@ -295,6 +315,38 @@ export default function DMThreadScreen() {
     } catch { /* silent */ }
   }, []);
 
+  const handleImagesSelected = useCallback(async (uris: string[]) => {
+    setIsUploading(true);
+    try {
+      const { uploads } = await requestMediaUploadUrls(uris.length);
+      const results = await Promise.allSettled(
+        uploads.map((upload, i) => uploadToSpaces(upload.uploadUrl, uris[i])),
+      );
+      const successfulUploads = uploads.filter((_, i) => results[i].status === 'fulfilled');
+      if (successfulUploads.length === 0) {
+        Alert.alert('Upload Failed', 'Could not upload images. Please try again.');
+        return;
+      }
+      const keys = successfulUploads.map((u) => u.key);
+      await confirmMediaUpload(keys);
+      const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
+      const text = input.trim();
+      const replyToId = replyTo?.id ?? undefined;
+      sendDirectMessage(conversationId, text, replyToId, mediaUrls);
+      setInput('');
+      setReplyTo(null);
+      stopTyping({ conversationId });
+      if (successfulUploads.length < uris.length) {
+        Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
+      }
+    } catch (err) {
+      console.error('[media] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload images. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [input, conversationId, replyTo]);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
@@ -373,6 +425,8 @@ export default function DMThreadScreen() {
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         <View style={[styles.inputBar, { paddingBottom: tabBarHeight + 8 }]}>
+          <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+          {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
           <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
             <TextInput
               style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
@@ -386,8 +440,8 @@ export default function DMThreadScreen() {
           </View>
           <Pressable
             onPress={handleSend}
-            disabled={!input.trim()}
-            style={({ pressed }) => [{ opacity: input.trim() ? (pressed ? 0.8 : 1) : 0.4 }]}
+            disabled={!input.trim() || isUploading}
+            style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
           >
             <LinearGradient
               colors={[...COLORS.gradientPrimary]}

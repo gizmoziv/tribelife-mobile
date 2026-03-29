@@ -35,7 +35,11 @@ import {
   onGlobeAgeGated,
   onGlobeRateLimited,
   onReactionUpdate,
+  onMediaRemoved,
+  onMediaRejected,
 } from '@/services/socket';
+import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
@@ -120,6 +124,7 @@ export default function GlobeRoomChat() {
   } = useGlobeStore();
 
   const [input, setInput] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [isAgeGated, setIsAgeGated] = useState(false);
   const [ageGateHours, setAgeGateHours] = useState(0);
   const [isRateLimited, setIsRateLimited] = useState(false);
@@ -217,6 +222,20 @@ export default function GlobeRoomChat() {
       setTimeout(() => setIsRateLimited(false), retryAfterMs);
     });
 
+    const offMediaRemoved = onMediaRemoved((data) => {
+      const updatedMsgs = messages.map((msg) => {
+        if (msg.id === data.messageId) {
+          return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
+        }
+        return msg;
+      });
+      setMessages(updatedMsgs);
+    });
+
+    const offMediaRejected = onMediaRejected((data) => {
+      Alert.alert('Image Removed', data.message);
+    });
+
     // Reconnection handler
     const socket = getSocket();
     const handleReconnect = () => {
@@ -230,6 +249,8 @@ export default function GlobeRoomChat() {
       offTyping();
       offAgeGated();
       offRateLimited();
+      offMediaRemoved();
+      offMediaRejected();
       socket?.off('connect', handleReconnect);
       leaveGlobeRoom(roomSlug);
       clearRoom();
@@ -357,6 +378,47 @@ export default function GlobeRoomChat() {
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
   }, [hasMoreMessages, isLoadingMessages, messages, roomSlug, prependMessages, setLoadingMessages]);
+
+  // ── Upload + send images ─────────────────────────────────────────────────
+  const handleImagesSelected = useCallback(async (uris: string[]) => {
+    if (!roomSlug || isAgeGated) return;
+    setIsUploading(true);
+    try {
+      const { uploads } = await requestMediaUploadUrls(uris.length);
+      const results = await Promise.allSettled(
+        uploads.map((upload, i) => uploadToSpaces(upload.uploadUrl, uris[i])),
+      );
+      const successfulUploads = uploads.filter((_, i) => results[i].status === 'fulfilled');
+      if (successfulUploads.length === 0) {
+        Alert.alert('Upload Failed', 'Could not upload images. Please try again.');
+        return;
+      }
+      const keys = successfulUploads.map((u) => u.key);
+      await confirmMediaUpload(keys);
+      const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
+      const text = input.trim();
+      const replyToId = replyTo?.id ?? undefined;
+      sendGlobeMessage(roomSlug, text, replyToId, mediaUrls);
+      setInput('');
+      setReplyTo(null);
+      setIsAtBottom(true);
+      resetNewMessageCount();
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      sendGlobeTyping(roomSlug, false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      if (successfulUploads.length < uris.length) {
+        Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
+      }
+    } catch (err) {
+      console.error('[media] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload images. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [input, roomSlug, isAgeGated, replyTo]);
 
   // ── Send message ────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
@@ -538,6 +600,10 @@ export default function GlobeRoomChat() {
 
         {/* Chat input */}
         <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+          {!isAgeGated && (
+            <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+          )}
+          {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
           <View
             style={[
               styles.inputWrap,
@@ -566,9 +632,9 @@ export default function GlobeRoomChat() {
           </View>
           <Pressable
             onPress={handleSend}
-            disabled={!input.trim() || isAgeGated || isRateLimited}
+            disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
             style={({ pressed }) => [
-              { opacity: input.trim() && !isAgeGated && !isRateLimited ? (pressed ? 0.8 : 1) : 0.4 },
+              { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
             ]}
           >
             <LinearGradient
