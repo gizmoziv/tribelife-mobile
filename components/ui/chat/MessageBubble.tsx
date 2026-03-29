@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -6,6 +6,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { FONTS, COLORS, SHADOWS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
+import { ImageGrid } from '@/components/ui/chat/ImageGrid';
+import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import type { Message, GlobeMessage } from '@/types';
 
 interface MessageBubbleProps {
@@ -24,6 +26,17 @@ export function MessageBubble({
   showAvatar = true,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
+  const mediaUrls = message.mediaUrls;
+  const hasMedia = mediaUrls && mediaUrls.length > 0;
+  const BUBBLE_WIDTH = 260;
+
+  const handleImagePress = useCallback((index: number) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
 
   const handleLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -91,9 +104,21 @@ export function MessageBubble({
                   </View>
                 </View>
               )}
-              <Text style={[styles.bubbleText, { color: '#FFF' }]}>
-                {message.content}
-              </Text>
+              {hasMedia && (
+                <View style={message.content ? styles.mediaWithText : undefined}>
+                  <ImageGrid
+                    mediaUrls={mediaUrls}
+                    bubbleWidth={BUBBLE_WIDTH - 28}
+                    onImagePress={handleImagePress}
+                    borderRadius={14}
+                  />
+                </View>
+              )}
+              {message.content ? (
+                <Text style={[styles.bubbleText, { color: '#FFF' }]}>
+                  {message.content}
+                </Text>
+              ) : null}
             </LinearGradient>
           ) : (
             <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
@@ -114,9 +139,21 @@ export function MessageBubble({
                   </View>
                 </View>
               )}
-              <Text style={[styles.bubbleText, { color: colors.text }]}>
-                {message.content}
-              </Text>
+              {hasMedia && (
+                <View style={message.content ? styles.mediaWithText : undefined}>
+                  <ImageGrid
+                    mediaUrls={mediaUrls}
+                    bubbleWidth={BUBBLE_WIDTH - 28}
+                    onImagePress={handleImagePress}
+                    borderRadius={14}
+                  />
+                </View>
+              )}
+              {message.content ? (
+                <Text style={[styles.bubbleText, { color: colors.text }]}>
+                  {message.content}
+                </Text>
+              ) : null}
             </View>
           )}
         </Pressable>
@@ -129,6 +166,16 @@ export function MessageBubble({
         {/* Reaction pills */}
         <ReactionPills reactions={reactions} onToggle={handleReactionToggle} />
       </View>
+
+      {/* Full-screen image viewer */}
+      {hasMedia && (
+        <ImageViewer
+          visible={viewerVisible}
+          images={mediaUrls}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerVisible(false)}
+        />
+      )}
     </View>
   );
 }
@@ -202,5 +249,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONTS.regular,
     marginTop: 2,
+  },
+  mediaWithText: {
+    marginBottom: 6,
   },
 });
