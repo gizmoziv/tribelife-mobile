@@ -96,8 +96,10 @@ export default function OnboardingScreen() {
 
     setIsSubmitting(true);
     try {
-      await auth.onboarding(handle, detectedTimezone, true);
+      const referralCode = await AsyncStorage.getItem('referralCode');
+      await auth.onboarding(handle, detectedTimezone, true, referralCode ?? undefined);
       updateUser({ handle, timezone: detectedTimezone });
+      await AsyncStorage.removeItem('referralCode');
       const ctaDismissed = await AsyncStorage.getItem('globe_cta_dismissed');
       if (ctaDismissed === 'true') {
         router.replace('/(app)/beacon');

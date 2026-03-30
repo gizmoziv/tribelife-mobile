@@ -75,10 +75,10 @@ export const auth = {
       { method: 'POST', body: JSON.stringify({ identityToken, fullName, email }) }
     ),
 
-  onboarding: (handle: string, timezone: string, acceptedTerms: boolean) =>
+  onboarding: (handle: string, timezone: string, acceptedTerms: boolean, referralCode?: string) =>
     request('/api/auth/onboarding', {
       method: 'POST',
-      body: JSON.stringify({ handle, timezone, acceptedTerms }),
+      body: JSON.stringify({ handle, timezone, acceptedTerms, ...(referralCode ? { referralCode } : {}) }),
     }),
 
   checkHandle: (handle: string) =>
@@ -120,6 +120,13 @@ export const chat = {
 
   hideConversation: (conversationId: number) =>
     request<{ ok: true }>(`/api/chat/conversations/${conversationId}/hide`, { method: 'PUT' }),
+
+  translateMessage: (messageId: number, targetLanguage: string) =>
+    request<{ translation: string; cached: boolean }>(`/api/chat/translate/${messageId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetLanguage }),
+    }),
 };
 
 // ── Beacons ────────────────────────────────────────────────────────────────
@@ -197,6 +204,11 @@ export const reactionsApi = {
       method: 'POST',
       body: JSON.stringify({ messageId, emoji }),
     }),
+};
+
+// ── Referrals ─────────────────────────────────────────────────────────────
+export const referralsApi = {
+  getStats: () => request<{ totalReferrals: number; premiumMonthsEarned: number }>('/api/referrals/stats'),
 };
 
 // ── Globe ──────────────────────────────────────────────────────────────────

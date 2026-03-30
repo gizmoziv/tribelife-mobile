@@ -16,6 +16,9 @@ interface MessageBubbleProps {
   onLongPress: (message: Message | GlobeMessage) => void;
   onReactionToggle: (messageId: number, emoji: string) => void;
   showAvatar?: boolean;
+  translatedContent?: string | null;
+  showTranslation?: boolean;
+  onToggleTranslation?: (messageId: number) => void;
 }
 
 export function MessageBubble({
@@ -24,6 +27,9 @@ export function MessageBubble({
   onLongPress,
   onReactionToggle,
   showAvatar = true,
+  translatedContent,
+  showTranslation,
+  onToggleTranslation,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -33,6 +39,10 @@ export function MessageBubble({
   const hasMedia = mediaUrls && mediaUrls.length > 0;
   const isEmpty = !message.content && !hasMedia;
   const BUBBLE_WIDTH = 260;
+
+  const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
+  const isRTL = displayContent ? /[\u0590-\u05FF\u0600-\u06FF]/.test(displayContent) : false;
+  const textDirection = isRTL ? 'rtl' as const : 'ltr' as const;
 
   const handleImagePress = useCallback((index: number) => {
     setViewerIndex(index);
@@ -115,11 +125,21 @@ export function MessageBubble({
                   />
                 </View>
               )}
-              {message.content ? (
-                <Text style={[styles.bubbleText, { color: '#FFF' }]}>
-                  {message.content}
+              {displayContent ? (
+                <Text style={[styles.bubbleText, { color: '#FFF', writingDirection: textDirection }]}>
+                  {displayContent}
                 </Text>
               ) : null}
+              {translatedContent && (
+                <TouchableOpacity
+                  onPress={() => onToggleTranslation?.(message.id)}
+                  style={styles.translationToggle}
+                >
+                  <Text style={[styles.translationToggleText, { color: 'rgba(255,255,255,0.7)' }]}>
+                    {showTranslation ? 'Show original' : 'Show translation'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               {isEmpty && (
                 <Text style={[styles.removedText, { color: 'rgba(255,255,255,0.6)' }]}>
                   Image removed by moderation
@@ -155,11 +175,21 @@ export function MessageBubble({
                   />
                 </View>
               )}
-              {message.content ? (
-                <Text style={[styles.bubbleText, { color: colors.text }]}>
-                  {message.content}
+              {displayContent ? (
+                <Text style={[styles.bubbleText, { color: colors.text, writingDirection: textDirection }]}>
+                  {displayContent}
                 </Text>
               ) : null}
+              {translatedContent && (
+                <TouchableOpacity
+                  onPress={() => onToggleTranslation?.(message.id)}
+                  style={styles.translationToggle}
+                >
+                  <Text style={[styles.translationToggleText, { color: colors.primary }]}>
+                    {showTranslation ? 'Show original' : 'Show translation'}
+                  </Text>
+                </TouchableOpacity>
+              )}
               {isEmpty && (
                 <Text style={[styles.removedText, { color: colors.textMuted }]}>
                   Image removed by moderation
@@ -268,5 +298,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONTS.regular,
     fontStyle: 'italic',
+  },
+  translationToggle: {
+    marginTop: 4,
+  },
+  translationToggleText: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
   },
 });

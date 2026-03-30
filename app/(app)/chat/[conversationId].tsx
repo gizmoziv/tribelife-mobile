@@ -20,6 +20,8 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   joinConversation,
   leaveConversation,
@@ -71,8 +73,18 @@ export default function DMThreadScreen() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
+  const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  const hasScrolledRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
+      if (lang) setPreferredLanguage(lang);
+    });
+  }, []);
 
   useEffect(() => {
     const parent = navigation.getParent();
@@ -309,6 +321,46 @@ export default function DMThreadScreen() {
     }
   }, [selectedMessage]);
 
+  const handleTranslate = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    const msgId = selectedMessage.id;
+    // If already translated, toggle visibility
+    if (translations[msgId]) {
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showing: !prev[msgId].showing },
+      }));
+      return;
+    }
+    // Show language picker
+    setLangPickerVisible(true);
+  }, [selectedMessage, translations]);
+
+  const handleLanguageSelect = useCallback(async (language: string) => {
+    if (!selectedMessage) return;
+    setPreferredLanguage(language);
+    AsyncStorage.setItem('preferredTranslateLanguage', language);
+    const msgId = selectedMessage.id;
+    try {
+      const { translation } = await chat.translateMessage(msgId, language);
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { text: translation, showing: true },
+      }));
+    } catch {
+      Alert.alert('Translation Error', 'Could not translate this message.');
+    }
+  }, [selectedMessage]);
+
+  const handleToggleTranslation = useCallback((messageId: number) => {
+    setTranslations(prev => {
+      const entry = prev[messageId];
+      if (!entry) return prev;
+      return { ...prev, [messageId]: { ...entry, showing: !entry.showing } };
+    });
+  }, []);
+
   const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
     try {
       await reactionsApi.toggle(messageId, emoji);
@@ -380,10 +432,13 @@ export default function DMThreadScreen() {
           onLongPress={handleLongPress}
           onReactionToggle={handleReactionToggle}
           showAvatar={false}
+          translatedContent={translations[item.id]?.text ?? null}
+          showTranslation={translations[item.id]?.showing ?? false}
+          onToggleTranslation={handleToggleTranslation}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations]);
 
   if (isLoading) {
     return (
@@ -406,7 +461,12 @@ export default function DMThreadScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (!hasScrolledRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              hasScrolledRef.current = true;
+            }
+          }}
         />
 
         {isTyping && (
@@ -458,7 +518,14 @@ export default function DMThreadScreen() {
           onReact={handleReact}
           onReply={handleReply}
           onReport={handleReport}
+          onTranslate={handleTranslate}
           messageContent={selectedMessage?.content ?? ''}
+        />
+        <LanguagePicker
+          visible={langPickerVisible}
+          onClose={() => setLangPickerVisible(false)}
+          onSelect={handleLanguageSelect}
+          selectedLanguage={preferredLanguage}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
