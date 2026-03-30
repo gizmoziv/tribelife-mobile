@@ -13,13 +13,15 @@ import {
   Alert,
   Pressable,
 } from 'react-native';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   joinConversation,
   leaveConversation,
@@ -31,7 +33,11 @@ import {
   onTypingStop,
   onMessageRejected,
   onReactionUpdate,
+  onMediaRemoved,
+  onMediaRejected,
 } from '@/services/socket';
+import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
@@ -57,7 +63,7 @@ export default function DMThreadScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarSpace = useTabBarSpace();
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -66,8 +72,19 @@ export default function DMThreadScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
+  const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  const hasScrolledRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
+      if (lang) setPreferredLanguage(lang);
+    });
+  }, []);
 
   useEffect(() => {
     const parent = navigation.getParent();
@@ -193,12 +210,27 @@ export default function DMThreadScreen() {
       );
     });
 
+    const offMediaRemoved = onMediaRemoved((data) => {
+      setMessages((prev) => prev.map((msg) => {
+        if (msg.id === data.messageId) {
+          return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
+        }
+        return msg;
+      }));
+    });
+
+    const offMediaRejected = onMediaRejected((data) => {
+      Alert.alert('Image Removed', data.message);
+    });
+
     return () => {
       leaveConversation(conversationId);
       offDm();
       offTypingStart();
       offTypingStop();
       offRejected();
+      offMediaRemoved();
+      offMediaRejected();
     };
   }, [conversationId]);
 
@@ -289,11 +321,83 @@ export default function DMThreadScreen() {
     }
   }, [selectedMessage]);
 
+  const handleTranslate = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    const msgId = selectedMessage.id;
+    // If already translated, toggle visibility
+    if (translations[msgId]) {
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showing: !prev[msgId].showing },
+      }));
+      return;
+    }
+    // Show language picker
+    setLangPickerVisible(true);
+  }, [selectedMessage, translations]);
+
+  const handleLanguageSelect = useCallback(async (language: string) => {
+    if (!selectedMessage) return;
+    setPreferredLanguage(language);
+    AsyncStorage.setItem('preferredTranslateLanguage', language);
+    const msgId = selectedMessage.id;
+    try {
+      const { translation } = await chat.translateMessage(msgId, language);
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { text: translation, showing: true },
+      }));
+    } catch {
+      Alert.alert('Translation Error', 'Could not translate this message.');
+    }
+  }, [selectedMessage]);
+
+  const handleToggleTranslation = useCallback((messageId: number) => {
+    setTranslations(prev => {
+      const entry = prev[messageId];
+      if (!entry) return prev;
+      return { ...prev, [messageId]: { ...entry, showing: !entry.showing } };
+    });
+  }, []);
+
   const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
     try {
       await reactionsApi.toggle(messageId, emoji);
     } catch { /* silent */ }
   }, []);
+
+  const handleImagesSelected = useCallback(async (uris: string[]) => {
+    setIsUploading(true);
+    try {
+      const { uploads } = await requestMediaUploadUrls(uris.length);
+      const results = await Promise.allSettled(
+        uploads.map((upload, i) => uploadToSpaces(upload.uploadUrl, uris[i])),
+      );
+      const successfulUploads = uploads.filter((_, i) => results[i].status === 'fulfilled');
+      if (successfulUploads.length === 0) {
+        Alert.alert('Upload Failed', 'Could not upload images. Please try again.');
+        return;
+      }
+      const keys = successfulUploads.map((u) => u.key);
+      await confirmMediaUpload(keys);
+      const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
+      const text = input.trim();
+      const replyToId = replyTo?.id ?? undefined;
+      sendDirectMessage(conversationId, text, replyToId, mediaUrls);
+      setInput('');
+      setReplyTo(null);
+      stopTyping({ conversationId });
+      if (successfulUploads.length < uris.length) {
+        Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
+      }
+    } catch (err) {
+      console.error('[media] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload images. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [input, conversationId, replyTo]);
 
   const handleSend = useCallback(() => {
     const content = input.trim();
@@ -328,10 +432,13 @@ export default function DMThreadScreen() {
           onLongPress={handleLongPress}
           onReactionToggle={handleReactionToggle}
           showAvatar={false}
+          translatedContent={translations[item.id]?.text ?? null}
+          showTranslation={translations[item.id]?.showing ?? false}
+          onToggleTranslation={handleToggleTranslation}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations]);
 
   if (isLoading) {
     return (
@@ -345,7 +452,7 @@ export default function DMThreadScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={100}
       >
         <FlatList
@@ -354,7 +461,12 @@ export default function DMThreadScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (!hasScrolledRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              hasScrolledRef.current = true;
+            }
+          }}
         />
 
         {isTyping && (
@@ -372,7 +484,9 @@ export default function DMThreadScreen() {
 
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
-        <View style={[styles.inputBar, { paddingBottom: tabBarHeight + 8 }]}>
+        <View style={[styles.inputBar, { paddingBottom: tabBarSpace }]}>
+          <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+          {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
           <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
             <TextInput
               style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
@@ -386,8 +500,8 @@ export default function DMThreadScreen() {
           </View>
           <Pressable
             onPress={handleSend}
-            disabled={!input.trim()}
-            style={({ pressed }) => [{ opacity: input.trim() ? (pressed ? 0.8 : 1) : 0.4 }]}
+            disabled={!input.trim() || isUploading}
+            style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
           >
             <LinearGradient
               colors={[...COLORS.gradientPrimary]}
@@ -404,7 +518,14 @@ export default function DMThreadScreen() {
           onReact={handleReact}
           onReply={handleReply}
           onReport={handleReport}
+          onTranslate={handleTranslate}
           messageContent={selectedMessage?.content ?? ''}
+        />
+        <LanguagePicker
+          visible={langPickerVisible}
+          onClose={() => setLangPickerVisible(false)}
+          onSelect={handleLanguageSelect}
+          selectedLanguage={preferredLanguage}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

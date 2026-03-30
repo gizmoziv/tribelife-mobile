@@ -5,6 +5,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ExpoLinking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Purchases from 'react-native-purchases';
 import {
@@ -23,6 +25,16 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
 
 SplashScreen.preventAutoHideAsync();
+
+function extractAndStoreReferralCode(url: string) {
+  try {
+    const parsed = ExpoLinking.parse(url);
+    const ref = parsed.queryParams?.ref;
+    if (ref && typeof ref === 'string') {
+      AsyncStorage.setItem('referralCode', ref.toLowerCase());
+    }
+  } catch { /* ignore parse errors */ }
+}
 
 // Configure RevenueCat
 const rcKey = Platform.OS === 'ios'
@@ -85,6 +97,16 @@ function RootLayoutInner() {
     }
 
     restoreSession();
+  }, []);
+
+  useEffect(() => {
+    ExpoLinking.getInitialURL().then((url) => {
+      if (url) extractAndStoreReferralCode(url);
+    });
+    const sub = ExpoLinking.addEventListener('url', ({ url }) => {
+      extractAndStoreReferralCode(url);
+    });
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {

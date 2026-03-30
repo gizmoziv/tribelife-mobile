@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Keyboard,
-  Alert,
 } from 'react-native';
 import EmojiKeyboard from 'rn-emoji-keyboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { FONTS, RADIUS, SHADOWS } from '@/constants';
 
@@ -28,6 +28,7 @@ interface ContextMenuProps {
   onReact: (emoji: string) => void;
   onReply: () => void;
   onReport: () => void;
+  onTranslate: () => void;
   messageContent: string;
 }
 
@@ -37,9 +38,11 @@ export function ContextMenu({
   onReact,
   onReply,
   onReport,
+  onTranslate,
   messageContent,
 }: ContextMenuProps) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [showFullPicker, setShowFullPicker] = useState(false);
   const [pendingFullPicker, setPendingFullPicker] = useState(false);
 
@@ -76,7 +79,8 @@ export function ContextMenu({
   };
 
   const handleTranslate = () => {
-    Alert.alert('Coming Soon', 'Translation will be available in a future update.');
+    onTranslate();
+    onClose();
   };
 
   const handleReport = () => {
@@ -136,8 +140,8 @@ export function ContextMenu({
               onPress={handleTranslate}
               activeOpacity={0.7}
             >
-              <Text style={[styles.actionIcon, { opacity: 0.4 }]}>&#x1F310;</Text>
-              <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
+              <Text style={styles.actionIcon}>&#x1F310;</Text>
+              <Text style={[styles.actionLabel, { color: colors.text }]}>
                 Translate
               </Text>
             </TouchableOpacity>
@@ -152,7 +156,7 @@ export function ContextMenu({
             </TouchableOpacity>
 
             {/* Bottom safe area padding */}
-            <View style={{ height: 20 }} />
+            <View style={{ height: insets.bottom + 20 }} />
           </Pressable>
         </Pressable>
       </Modal>

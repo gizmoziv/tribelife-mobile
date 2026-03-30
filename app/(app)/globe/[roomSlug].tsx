@@ -16,12 +16,15 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
-import { globeApi, reactionsApi } from '@/services/api';
+import { chat, globeApi, reactionsApi } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   connectSocket,
   getSocket,
@@ -35,14 +38,18 @@ import {
   onGlobeAgeGated,
   onGlobeRateLimited,
   onReactionUpdate,
+  onMediaRemoved,
+  onMediaRejected,
 } from '@/services/socket';
+import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import type { GlobeMessage } from '@/types';
+import type { Message, GlobeMessage } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -97,6 +104,7 @@ const AGE_GATE_HOURS = 24;
 export default function GlobeRoomChat() {
   const { roomSlug } = useLocalSearchParams<{ roomSlug: string }>();
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const {
     rooms,
@@ -120,14 +128,24 @@ export default function GlobeRoomChat() {
   } = useGlobeStore();
 
   const [input, setInput] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [isAgeGated, setIsAgeGated] = useState(false);
   const [ageGateHours, setAgeGateHours] = useState(0);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<GlobeMessage | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
+  const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
+      if (lang) setPreferredLanguage(lang);
+    });
+  }, []);
   const typingClearTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const room = useMemo(
@@ -217,6 +235,20 @@ export default function GlobeRoomChat() {
       setTimeout(() => setIsRateLimited(false), retryAfterMs);
     });
 
+    const offMediaRemoved = onMediaRemoved((data) => {
+      const updatedMsgs = messages.map((msg) => {
+        if (msg.id === data.messageId) {
+          return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
+        }
+        return msg;
+      });
+      setMessages(updatedMsgs);
+    });
+
+    const offMediaRejected = onMediaRejected((data) => {
+      Alert.alert('Image Removed', data.message);
+    });
+
     // Reconnection handler
     const socket = getSocket();
     const handleReconnect = () => {
@@ -230,6 +262,8 @@ export default function GlobeRoomChat() {
       offTyping();
       offAgeGated();
       offRateLimited();
+      offMediaRemoved();
+      offMediaRejected();
       socket?.off('connect', handleReconnect);
       leaveGlobeRoom(roomSlug);
       clearRoom();
@@ -293,8 +327,8 @@ export default function GlobeRoomChat() {
   }, [globeRoomId, user?.id, messages, setMessages]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
-  const handleLongPress = useCallback((message: GlobeMessage) => {
-    setSelectedMessage(message);
+  const handleLongPress = useCallback((message: Message | GlobeMessage) => {
+    setSelectedMessage(message as GlobeMessage);
     setMenuVisible(true);
   }, []);
 
@@ -319,6 +353,46 @@ export default function GlobeRoomChat() {
   const handleReport = useCallback(() => {
     setMenuVisible(false);
     Alert.alert('Report', 'This message has been flagged for review.');
+  }, []);
+
+  const handleTranslate = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    const msgId = selectedMessage.id;
+    // If already translated, toggle visibility
+    if (translations[msgId]) {
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showing: !prev[msgId].showing },
+      }));
+      return;
+    }
+    // Show language picker
+    setLangPickerVisible(true);
+  }, [selectedMessage, translations]);
+
+  const handleLanguageSelect = useCallback(async (language: string) => {
+    if (!selectedMessage) return;
+    setPreferredLanguage(language);
+    AsyncStorage.setItem('preferredTranslateLanguage', language);
+    const msgId = selectedMessage.id;
+    try {
+      const { translation } = await chat.translateMessage(msgId, language);
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { text: translation, showing: true },
+      }));
+    } catch {
+      Alert.alert('Translation Error', 'Could not translate this message.');
+    }
+  }, [selectedMessage]);
+
+  const handleToggleTranslation = useCallback((messageId: number) => {
+    setTranslations(prev => {
+      const entry = prev[messageId];
+      if (!entry) return prev;
+      return { ...prev, [messageId]: { ...entry, showing: !entry.showing } };
+    });
   }, []);
 
   const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
@@ -357,6 +431,47 @@ export default function GlobeRoomChat() {
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
   }, [hasMoreMessages, isLoadingMessages, messages, roomSlug, prependMessages, setLoadingMessages]);
+
+  // ── Upload + send images ─────────────────────────────────────────────────
+  const handleImagesSelected = useCallback(async (uris: string[]) => {
+    if (!roomSlug || isAgeGated) return;
+    setIsUploading(true);
+    try {
+      const { uploads } = await requestMediaUploadUrls(uris.length);
+      const results = await Promise.allSettled(
+        uploads.map((upload, i) => uploadToSpaces(upload.uploadUrl, uris[i])),
+      );
+      const successfulUploads = uploads.filter((_, i) => results[i].status === 'fulfilled');
+      if (successfulUploads.length === 0) {
+        Alert.alert('Upload Failed', 'Could not upload images. Please try again.');
+        return;
+      }
+      const keys = successfulUploads.map((u) => u.key);
+      await confirmMediaUpload(keys);
+      const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
+      const text = input.trim();
+      const replyToId = replyTo?.id ?? undefined;
+      sendGlobeMessage(roomSlug, text, replyToId, mediaUrls);
+      setInput('');
+      setReplyTo(null);
+      setIsAtBottom(true);
+      resetNewMessageCount();
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      sendGlobeTyping(roomSlug, false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      if (successfulUploads.length < uris.length) {
+        Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
+      }
+    } catch (err) {
+      console.error('[media] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload images. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [input, roomSlug, isAgeGated, replyTo]);
 
   // ── Send message ────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
@@ -407,11 +522,14 @@ export default function GlobeRoomChat() {
             isMe={isMe}
             onLongPress={handleLongPress}
             onReactionToggle={handleReactionToggle}
+            translatedContent={translations[item.id]?.text ?? null}
+            showTranslation={translations[item.id]?.showing ?? false}
+            onToggleTranslation={handleToggleTranslation}
           />
         </SwipeableMessage>
       );
     },
-    [user?.id, handleLongPress, handleReactionToggle],
+    [user?.id, handleLongPress, handleReactionToggle, translations],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────
@@ -460,7 +578,7 @@ export default function GlobeRoomChat() {
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={90}
       >
         {/* Age gate banner */}
@@ -537,7 +655,11 @@ export default function GlobeRoomChat() {
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         {/* Chat input */}
-        <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+        <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: insets.bottom + 8 }]}>
+          {!isAgeGated && (
+            <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+          )}
+          {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
           <View
             style={[
               styles.inputWrap,
@@ -566,9 +688,9 @@ export default function GlobeRoomChat() {
           </View>
           <Pressable
             onPress={handleSend}
-            disabled={!input.trim() || isAgeGated || isRateLimited}
+            disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
             style={({ pressed }) => [
-              { opacity: input.trim() && !isAgeGated && !isRateLimited ? (pressed ? 0.8 : 1) : 0.4 },
+              { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
             ]}
           >
             <LinearGradient
@@ -587,7 +709,14 @@ export default function GlobeRoomChat() {
           onReact={handleReact}
           onReply={handleReply}
           onReport={handleReport}
+          onTranslate={handleTranslate}
           messageContent={selectedMessage?.content ?? ''}
+        />
+        <LanguagePicker
+          visible={langPickerVisible}
+          onClose={() => setLangPickerVisible(false)}
+          onSelect={handleLanguageSelect}
+          selectedLanguage={preferredLanguage}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -699,8 +828,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    paddingBottom: 88,
+    paddingTop: 8,
     gap: 8,
   },
   inputWrap: {

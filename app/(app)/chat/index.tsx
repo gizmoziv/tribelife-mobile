@@ -16,11 +16,14 @@ import {
   PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi } from '@/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   connectSocket,
   sendRoomMessage,
@@ -32,7 +35,11 @@ import {
   onTypingStop,
   onMessageRejected,
   onReactionUpdate,
+  onMediaRemoved,
+  onMediaRejected,
 } from '@/services/socket';
+import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { PillToggle } from '@/components/ui/PillToggle';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
@@ -96,10 +103,21 @@ function LocalChatPanel() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
+  const [langPickerVisible, setLangPickerVisible] = useState(false);
+  const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  const hasScrolledRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
+
+  useEffect(() => {
+    AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
+      if (lang) setPreferredLanguage(lang);
+    });
+  }, []);
 
   useEffect(() => {
     chat.getRoomMessages(roomId).then(({ messages: msgs }) => {
@@ -129,7 +147,20 @@ function LocalChatPanel() {
         );
       });
 
-      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); };
+      const offMediaRemoved = onMediaRemoved((data) => {
+        setMessages((prev) => prev.map((msg) => {
+          if (msg.id === data.messageId) {
+            return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
+          }
+          return msg;
+        }));
+      });
+
+      const offMediaRejected = onMediaRejected((data) => {
+        Alert.alert('Image Removed', data.message);
+      });
+
+      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); offMediaRemoved(); offMediaRejected(); };
     });
   }, [roomId]);
 
@@ -218,11 +249,82 @@ function LocalChatPanel() {
     }
   }, [selectedMessage]);
 
+  const handleTranslate = useCallback(() => {
+    if (!selectedMessage) return;
+    setMenuVisible(false);
+    const msgId = selectedMessage.id;
+    // If already translated, toggle visibility
+    if (translations[msgId]) {
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { ...prev[msgId], showing: !prev[msgId].showing },
+      }));
+      return;
+    }
+    // Show language picker
+    setLangPickerVisible(true);
+  }, [selectedMessage, translations]);
+
+  const handleLanguageSelect = useCallback(async (language: string) => {
+    if (!selectedMessage) return;
+    setPreferredLanguage(language);
+    AsyncStorage.setItem('preferredTranslateLanguage', language);
+    const msgId = selectedMessage.id;
+    try {
+      const { translation } = await chat.translateMessage(msgId, language);
+      setTranslations(prev => ({
+        ...prev,
+        [msgId]: { text: translation, showing: true },
+      }));
+    } catch {
+      Alert.alert('Translation Error', 'Could not translate this message.');
+    }
+  }, [selectedMessage]);
+
+  const handleToggleTranslation = useCallback((messageId: number) => {
+    setTranslations(prev => {
+      const entry = prev[messageId];
+      if (!entry) return prev;
+      return { ...prev, [messageId]: { ...entry, showing: !entry.showing } };
+    });
+  }, []);
+
   const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
     try {
       await reactionsApi.toggle(messageId, emoji);
     } catch { /* silent */ }
   }, []);
+
+  const handleImagesSelected = useCallback(async (uris: string[]) => {
+    setIsUploading(true);
+    try {
+      const { uploads } = await requestMediaUploadUrls(uris.length);
+      const results = await Promise.allSettled(
+        uploads.map((upload, i) => uploadToSpaces(upload.uploadUrl, uris[i])),
+      );
+      const successfulUploads = uploads.filter((_, i) => results[i].status === 'fulfilled');
+      if (successfulUploads.length === 0) {
+        Alert.alert('Upload Failed', 'Could not upload images. Please try again.');
+        return;
+      }
+      const keys = successfulUploads.map((u) => u.key);
+      await confirmMediaUpload(keys);
+      const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
+      const text = input.trim();
+      const replyToId = replyTo?.id ?? undefined;
+      sendRoomMessage(text, replyToId, mediaUrls);
+      setInput('');
+      setReplyTo(null);
+      if (successfulUploads.length < uris.length) {
+        Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
+      }
+    } catch (err) {
+      console.error('[media] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload images. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [input, replyTo]);
 
   const handleSend = useCallback(() => {
     const content = input.trim();
@@ -259,10 +361,13 @@ function LocalChatPanel() {
           isMe={isMe}
           onLongPress={handleLongPress}
           onReactionToggle={handleReactionToggle}
+          translatedContent={translations[item.id]?.text ?? null}
+          showTranslation={translations[item.id]?.showing ?? false}
+          onToggleTranslation={handleToggleTranslation}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations]);
 
   if (isLoading) {
     return <LoadingState />;
@@ -271,7 +376,7 @@ function LocalChatPanel() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
       <View style={styles.roomHeader}>
@@ -284,7 +389,12 @@ function LocalChatPanel() {
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => {
+          if (!hasScrolledRef.current) {
+            flatListRef.current?.scrollToEnd({ animated: false });
+            hasScrolledRef.current = true;
+          }
+        }}
       />
 
       {typingUsers.length > 0 && (
@@ -297,6 +407,8 @@ function LocalChatPanel() {
         value={input}
         onChangeText={handleInputChange}
         onSend={handleSend}
+        isUploading={isUploading}
+        onImagesSelected={handleImagesSelected}
       />
 
       <ContextMenu
@@ -305,7 +417,14 @@ function LocalChatPanel() {
         onReact={handleReact}
         onReply={handleReply}
         onReport={handleReport}
+        onTranslate={handleTranslate}
         messageContent={selectedMessage?.content ?? ''}
+      />
+      <LanguagePicker
+        visible={langPickerVisible}
+        onClose={() => setLangPickerVisible(false)}
+        onSelect={handleLanguageSelect}
+        selectedLanguage={preferredLanguage}
       />
     </KeyboardAvoidingView>
   );
@@ -587,15 +706,24 @@ function ChatInput({
   value,
   onChangeText,
   onSend,
+  isUploading,
+  onImagesSelected,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
+  isUploading?: boolean;
+  onImagesSelected?: (uris: string[]) => void;
 }) {
   const { colors } = useTheme();
+  const tabBarSpace = useTabBarSpace();
 
   return (
-    <View style={[styles.inputBar, { backgroundColor: 'transparent' }]}>
+    <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: tabBarSpace }]}>
+      {onImagesSelected && (
+        <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+      )}
+      {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
       <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
         <TextInput
           style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
@@ -610,8 +738,8 @@ function ChatInput({
       </View>
       <Pressable
         onPress={onSend}
-        disabled={!value.trim()}
-        style={({ pressed }) => [{ opacity: value.trim() ? (pressed ? 0.8 : 1) : 0.4 }]}
+        disabled={!value.trim() || isUploading}
+        style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
       >
         <LinearGradient
           colors={[...COLORS.gradientPrimary]}
@@ -680,8 +808,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    paddingBottom: 88,
+    paddingTop: 8,
     gap: 8,
   },
   inputWrap: {

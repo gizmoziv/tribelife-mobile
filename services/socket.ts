@@ -5,14 +5,18 @@ import type { Message } from '@/types';
 
 let socket: Socket | null = null;
 
-export async function connectSocket(): Promise<Socket> {
+export async function connectSocket(): Promise<Socket | null> {
   if (socket?.connected) return socket;
 
   const token = await getToken();
+  if (!token) {
+    console.log('[socket] No auth token — skipping connection');
+    return null;
+  }
 
   socket = io(API_URL, {
     auth: { token },
-    transports: ['websocket'],
+    transports: ['polling', 'websocket'],
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1500,
@@ -43,8 +47,8 @@ export function getSocket(): Socket | null {
 }
 
 // ── Room (location-based) chat ─────────────────────────────────────────────
-export function sendRoomMessage(content: string, replyToId?: number): void {
-  socket?.emit('room:message', { content, replyToId });
+export function sendRoomMessage(content: string, replyToId?: number, mediaUrls?: string[]): void {
+  socket?.emit('room:message', { content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
 }
 
 // ── Direct messages ────────────────────────────────────────────────────────
@@ -56,8 +60,8 @@ export function leaveConversation(conversationId: number): void {
   socket?.emit('dm:leave', { conversationId });
 }
 
-export function sendDirectMessage(conversationId: number, content: string, replyToId?: number): void {
-  socket?.emit('dm:message', { conversationId, content, replyToId });
+export function sendDirectMessage(conversationId: number, content: string, replyToId?: number, mediaUrls?: string[]): void {
+  socket?.emit('dm:message', { conversationId, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
 }
 
 // ── Typing ─────────────────────────────────────────────────────────────────
@@ -123,8 +127,8 @@ export function leaveGlobeRoom(slug: string): void {
   socket?.emit('globe:leave', { slug });
 }
 
-export function sendGlobeMessage(slug: string, content: string, replyToId?: number): void {
-  socket?.emit('globe:message', { slug, content, replyToId });
+export function sendGlobeMessage(slug: string, content: string, replyToId?: number, mediaUrls?: string[]): void {
+  socket?.emit('globe:message', { slug, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
 }
 
 export function sendGlobeTyping(slug: string, isTyping: boolean): void {
@@ -155,4 +159,15 @@ export function onGlobeAgeGated(callback: (data: { hoursRemaining: number }) => 
 export function onGlobeRateLimited(callback: (data: { retryAfterMs: number }) => void): () => void {
   socket?.on('globe:rate_limited', callback);
   return () => { socket?.off('globe:rate_limited', callback); };
+}
+
+// ── Media events ────────────────────────────────────────────────────────────
+export function onMediaRemoved(cb: (data: { messageId: number; removedUrls: string[]; remainingUrls: string[] }) => void): () => void {
+  socket?.on('message:media_removed', cb);
+  return () => { socket?.off('message:media_removed', cb); };
+}
+
+export function onMediaRejected(cb: (data: { messageId: number; category: string; message: string }) => void): () => void {
+  socket?.on('message:media_rejected', cb);
+  return () => { socket?.off('message:media_rejected', cb); };
 }

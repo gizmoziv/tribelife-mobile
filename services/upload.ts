@@ -68,3 +68,44 @@ export async function confirmAvatarUpload(key: string): Promise<{ avatarUrl: str
 
   return res.json();
 }
+
+// ── Media Upload Flow ──────────────────────────────────────────────────────
+
+/** Request N pre-signed upload URLs for media images */
+export async function requestMediaUploadUrls(count: number): Promise<{
+  uploads: Array<{ uploadUrl: string; key: string; cdnUrl: string }>;
+}> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/media-urls`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ count }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) throw new Error('Upload rate limit exceeded. Try again later.');
+    throw new Error(`Failed to get media upload URLs: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+/** Confirm media uploads — sets ACL to public-read */
+export async function confirmMediaUpload(keys: string[]): Promise<{ confirmed: boolean; cdnUrls: string[] }> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/media-confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ keys }),
+  });
+
+  if (!res.ok) throw new Error(`Media upload confirmation failed: ${res.statusText}`);
+  return res.json();
+}

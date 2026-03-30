@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Purchases from 'react-native-purchases';
@@ -17,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth } from '@/services/api';
+import { auth, referralsApi } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
 import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
@@ -52,6 +53,27 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [referralCount, setReferralCount] = useState(0);
+  const [premiumMonthsEarned, setPremiumMonthsEarned] = useState(0);
+
+  useEffect(() => {
+    referralsApi.getStats()
+      .then(({ totalReferrals, premiumMonthsEarned }) => {
+        setReferralCount(totalReferrals);
+        setPremiumMonthsEarned(premiumMonthsEarned);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleShare = async () => {
+    const handle = user?.handle ?? '';
+    const url = `https://tribelife.app/invite?ref=${handle}`;
+    try {
+      await Share.share({
+        message: `Join me on TribeLife — the global Jewish community app!\n${url}`,
+      });
+    } catch { /* user cancelled */ }
+  };
 
   async function handleAvatarUpload() {
     try {
@@ -342,6 +364,31 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
+        {/* Referrals */}
+        <AnimatedEntry delay={270}>
+          <GlassCard>
+            <View style={styles.referralSection}>
+              <Text style={[styles.referralTitle, { color: colors.text }]}>
+                Invite Friends
+              </Text>
+              <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
+              </Text>
+              {premiumMonthsEarned > 0 && (
+                <Text style={[styles.referralReward, { color: COLORS.primary }]}>
+                  {premiumMonthsEarned} {premiumMonthsEarned === 1 ? 'month' : 'months'} of free Premium earned!
+                </Text>
+              )}
+              <PillButton
+                title="Share TribeLife"
+                onPress={handleShare}
+                variant="primary"
+                style={{ marginTop: 12 }}
+              />
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
+
         {/* Session */}
         <AnimatedEntry delay={300}>
           <View style={styles.section}>
@@ -428,4 +475,21 @@ const styles = StyleSheet.create({
   restoreText: { fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
   legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
   legalLink: { fontSize: 12, fontFamily: FONTS.medium },
+  referralSection: {
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  referralTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.semiBold,
+  },
+  referralCount: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+  },
+  referralReward: {
+    fontSize: 14,
+    fontFamily: FONTS.semiBold,
+  },
 });

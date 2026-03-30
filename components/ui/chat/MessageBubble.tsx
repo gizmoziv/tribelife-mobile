@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -6,6 +6,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { FONTS, COLORS, SHADOWS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
+import { ImageGrid } from '@/components/ui/chat/ImageGrid';
+import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import type { Message, GlobeMessage } from '@/types';
 
 interface MessageBubbleProps {
@@ -14,6 +16,9 @@ interface MessageBubbleProps {
   onLongPress: (message: Message | GlobeMessage) => void;
   onReactionToggle: (messageId: number, emoji: string) => void;
   showAvatar?: boolean;
+  translatedContent?: string | null;
+  showTranslation?: boolean;
+  onToggleTranslation?: (messageId: number) => void;
 }
 
 export function MessageBubble({
@@ -22,8 +27,27 @@ export function MessageBubble({
   onLongPress,
   onReactionToggle,
   showAvatar = true,
+  translatedContent,
+  showTranslation,
+  onToggleTranslation,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
+  const mediaUrls = message.mediaUrls;
+  const hasMedia = mediaUrls && mediaUrls.length > 0;
+  const isEmpty = !message.content && !hasMedia;
+  const BUBBLE_WIDTH = 260;
+
+  const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
+  const isRTL = displayContent ? /[\u0590-\u05FF\u0600-\u06FF]/.test(displayContent) : false;
+  const textDirection = isRTL ? 'rtl' as const : 'ltr' as const;
+
+  const handleImagePress = useCallback((index: number) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  }, []);
 
   const handleLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -91,9 +115,36 @@ export function MessageBubble({
                   </View>
                 </View>
               )}
-              <Text style={[styles.bubbleText, { color: '#FFF' }]}>
-                {message.content}
-              </Text>
+              {hasMedia && (
+                <View style={message.content ? styles.mediaWithText : undefined}>
+                  <ImageGrid
+                    mediaUrls={mediaUrls}
+                    bubbleWidth={BUBBLE_WIDTH - 28}
+                    onImagePress={handleImagePress}
+                    borderRadius={14}
+                  />
+                </View>
+              )}
+              {displayContent ? (
+                <Text style={[styles.bubbleText, { color: '#FFF', writingDirection: textDirection }]}>
+                  {displayContent}
+                </Text>
+              ) : null}
+              {translatedContent && (
+                <TouchableOpacity
+                  onPress={() => onToggleTranslation?.(message.id)}
+                  style={styles.translationToggle}
+                >
+                  <Text style={[styles.translationToggleText, { color: 'rgba(255,255,255,0.7)' }]}>
+                    {showTranslation ? 'Show original' : 'Show translation'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {isEmpty && (
+                <Text style={[styles.removedText, { color: 'rgba(255,255,255,0.6)' }]}>
+                  Image removed by moderation
+                </Text>
+              )}
             </LinearGradient>
           ) : (
             <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
@@ -114,9 +165,36 @@ export function MessageBubble({
                   </View>
                 </View>
               )}
-              <Text style={[styles.bubbleText, { color: colors.text }]}>
-                {message.content}
-              </Text>
+              {hasMedia && (
+                <View style={message.content ? styles.mediaWithText : undefined}>
+                  <ImageGrid
+                    mediaUrls={mediaUrls}
+                    bubbleWidth={BUBBLE_WIDTH - 28}
+                    onImagePress={handleImagePress}
+                    borderRadius={14}
+                  />
+                </View>
+              )}
+              {displayContent ? (
+                <Text style={[styles.bubbleText, { color: colors.text, writingDirection: textDirection }]}>
+                  {displayContent}
+                </Text>
+              ) : null}
+              {translatedContent && (
+                <TouchableOpacity
+                  onPress={() => onToggleTranslation?.(message.id)}
+                  style={styles.translationToggle}
+                >
+                  <Text style={[styles.translationToggleText, { color: colors.primary }]}>
+                    {showTranslation ? 'Show original' : 'Show translation'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {isEmpty && (
+                <Text style={[styles.removedText, { color: colors.textMuted }]}>
+                  Image removed by moderation
+                </Text>
+              )}
             </View>
           )}
         </Pressable>
@@ -129,6 +207,16 @@ export function MessageBubble({
         {/* Reaction pills */}
         <ReactionPills reactions={reactions} onToggle={handleReactionToggle} />
       </View>
+
+      {/* Full-screen image viewer */}
+      {hasMedia && (
+        <ImageViewer
+          visible={viewerVisible}
+          images={mediaUrls}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerVisible(false)}
+        />
+      )}
     </View>
   );
 }
@@ -202,5 +290,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONTS.regular,
     marginTop: 2,
+  },
+  mediaWithText: {
+    marginBottom: 6,
+  },
+  removedText: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    fontStyle: 'italic',
+  },
+  translationToggle: {
+    marginTop: 4,
+  },
+  translationToggleText: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
   },
 });
