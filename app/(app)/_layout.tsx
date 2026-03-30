@@ -1,6 +1,12 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -50,7 +56,6 @@ export default function AppLayout() {
   const { totalUnread, setUnreadCounts } = useGlobeStore();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  console.log('[layout] insets.bottom:', insets.bottom, 'Platform:', Platform.OS);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -69,11 +74,14 @@ export default function AppLayout() {
 
   // Fetch Globe unread counts and listen for real-time globe messages
   useEffect(() => {
-    globeApi.unread()
+    globeApi
+      .unread()
       .then(({ unread }) => setUnreadCounts(unread))
       .catch(() => {});
 
-    let handler: ((msg: { roomSlug?: string; roomId?: string }) => void) | null = null;
+    let handler:
+      | ((msg: { roomSlug?: string; roomId?: string }) => void)
+      | null = null;
     connectSocket().then(() => {
       const socket = getSocket();
       if (socket) {

@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -18,8 +19,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { chat, globeApi, reactionsApi } from '@/services/api';
@@ -103,6 +106,9 @@ const AGE_GATE_HOURS = 24;
 
 export default function GlobeRoomChat() {
   const { roomSlug } = useLocalSearchParams<{ roomSlug: string }>();
+  const router = useRouter();
+  const keyboardBehavior = useKeyboardBehavior();
+  const tabBarSpace = useTabBarSpace();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
@@ -129,6 +135,7 @@ export default function GlobeRoomChat() {
 
   const [input, setInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isAgeGated, setIsAgeGated] = useState(false);
   const [ageGateHours, setAgeGateHours] = useState(0);
   const [isRateLimited, setIsRateLimited] = useState(false);
@@ -139,6 +146,7 @@ export default function GlobeRoomChat() {
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  const hasInitialScrolled = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -146,6 +154,12 @@ export default function GlobeRoomChat() {
       if (lang) setPreferredLanguage(lang);
     });
   }, []);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
   const typingClearTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const room = useMemo(
@@ -173,6 +187,7 @@ export default function GlobeRoomChat() {
 
     setActiveRoom(roomSlug);
     setLoadingMessages(true);
+    hasInitialScrolled.current = false;
 
     // Mark room as read on entry
     globeApi.markRead(roomSlug).catch(() => {});
@@ -186,6 +201,8 @@ export default function GlobeRoomChat() {
         if (!hasMore) {
           prependMessages([], hasMore);
         }
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
       })
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
@@ -522,6 +539,7 @@ export default function GlobeRoomChat() {
             isMe={isMe}
             onLongPress={handleLongPress}
             onReactionToggle={handleReactionToggle}
+            onProfilePress={() => !isMe && item.senderHandle && router.push(`/user/${item.senderHandle}`)}
             translatedContent={translations[item.id]?.text ?? null}
             showTranslation={translations[item.id]?.showing ?? false}
             onToggleTranslation={handleToggleTranslation}
@@ -529,7 +547,7 @@ export default function GlobeRoomChat() {
         </SwipeableMessage>
       );
     },
-    [user?.id, handleLongPress, handleReactionToggle, translations],
+    [user?.id, handleLongPress, handleReactionToggle, translations, router],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────
@@ -578,7 +596,7 @@ export default function GlobeRoomChat() {
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={keyboardBehavior}
         keyboardVerticalOffset={90}
       >
         {/* Age gate banner */}
@@ -609,11 +627,17 @@ export default function GlobeRoomChat() {
         <FlatList
           ref={flatListRef}
           data={messages}
+          extraData={messages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => {
-            if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false });
+            if (!hasInitialScrolled.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              hasInitialScrolled.current = true;
+            } else if (isAtBottom) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
           }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
@@ -655,7 +679,7 @@ export default function GlobeRoomChat() {
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         {/* Chat input */}
-        <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: insets.bottom + 8 }]}>
+        <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
           {!isAgeGated && (
             <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
           )}

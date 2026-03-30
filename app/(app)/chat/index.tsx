@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -17,6 +18,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -95,6 +97,7 @@ export default function ChatScreen() {
 function LocalChatPanel() {
   const { colors } = useTheme();
   const { user } = useAuthStore();
+  const keyboardBehavior = useKeyboardBehavior();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -123,6 +126,9 @@ function LocalChatPanel() {
     chat.getRoomMessages(roomId).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
+      // Multiple scroll attempts for Android's slower rendering pipeline
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
     }).catch(() => setIsLoading(false));
 
     connectSocket().then(() => {
@@ -361,13 +367,14 @@ function LocalChatPanel() {
           isMe={isMe}
           onLongPress={handleLongPress}
           onReactionToggle={handleReactionToggle}
+          onProfilePress={() => !isMe && item.senderHandle && router.push(`/user/${item.senderHandle}`)}
           translatedContent={translations[item.id]?.text ?? null}
           showTranslation={translations[item.id]?.showing ?? false}
           onToggleTranslation={handleToggleTranslation}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, router]);
 
   if (isLoading) {
     return <LoadingState />;
@@ -376,7 +383,7 @@ function LocalChatPanel() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={keyboardBehavior}
       keyboardVerticalOffset={90}
     >
       <View style={styles.roomHeader}>
@@ -386,15 +393,11 @@ function LocalChatPanel() {
       <FlatList
         ref={flatListRef}
         data={messages}
+        extraData={messages}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => {
-          if (!hasScrolledRef.current) {
-            flatListRef.current?.scrollToEnd({ animated: false });
-            hasScrolledRef.current = true;
-          }
-        }}
+        onContentSizeChange={() => {}}
       />
 
       {typingUsers.length > 0 && (
@@ -717,9 +720,18 @@ function ChatInput({
 }) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  const bottomPadding = keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace;
 
   return (
-    <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: tabBarSpace }]}>
+    <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
       {onImagesSelected && (
         <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
       )}

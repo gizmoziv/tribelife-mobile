@@ -16,6 +16,7 @@ interface MessageBubbleProps {
   onLongPress: (message: Message | GlobeMessage) => void;
   onReactionToggle: (messageId: number, emoji: string) => void;
   showAvatar?: boolean;
+  onProfilePress?: () => void;
   translatedContent?: string | null;
   showTranslation?: boolean;
   onToggleTranslation?: (messageId: number) => void;
@@ -27,6 +28,7 @@ export function MessageBubble({
   onLongPress,
   onReactionToggle,
   showAvatar = true,
+  onProfilePress,
   translatedContent,
   showTranslation,
   onToggleTranslation,
@@ -73,20 +75,24 @@ export function MessageBubble({
     <View style={[styles.container, isMe && styles.containerMe]}>
       {/* Avatar */}
       {!isMe && showAvatar && (
-        <AvatarCircle
-          name={message.senderHandle ?? '?'}
-          size={32}
-          showRing={false}
-          imageUrl={message.senderAvatar ?? undefined}
-        />
+        <TouchableOpacity onPress={onProfilePress} activeOpacity={0.7}>
+          <AvatarCircle
+            name={message.senderHandle ?? '?'}
+            size={32}
+            showRing={false}
+            imageUrl={message.senderAvatar ?? undefined}
+          />
+        </TouchableOpacity>
       )}
 
       <View style={isMe ? styles.bubbleWrapMe : styles.bubbleWrap}>
         {/* Sender name */}
         {!isMe && (
-          <Text style={[styles.senderHandle, { color: COLORS.primary }]}>
-            @{message.senderHandle}
-          </Text>
+          <TouchableOpacity onPress={onProfilePress} activeOpacity={0.7}>
+            <Text style={[styles.senderHandle, { color: COLORS.primary }]}>
+              @{message.senderHandle}
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* Bubble with long press */}

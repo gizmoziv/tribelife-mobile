@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -14,6 +15,7 @@ import {
   Pressable,
 } from 'react-native';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -64,6 +66,14 @@ export default function DMThreadScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
+  const keyboardBehavior = useKeyboardBehavior();
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -187,6 +197,8 @@ export default function DMThreadScreen() {
           navigation.setOptions({ title: `@${otherMsg.senderHandle} & You` });
         }
       }
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
     }).catch(() => setIsLoading(false));
 
     joinConversation(conversationId);
@@ -452,21 +464,17 @@ export default function DMThreadScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={keyboardBehavior}
         keyboardVerticalOffset={100}
       >
         <FlatList
           ref={flatListRef}
           data={messages}
+          extraData={messages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => {
-            if (!hasScrolledRef.current) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-              hasScrolledRef.current = true;
-            }
-          }}
+          onContentSizeChange={() => {}}
         />
 
         {isTyping && (
@@ -484,7 +492,7 @@ export default function DMThreadScreen() {
 
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
-        <View style={[styles.inputBar, { paddingBottom: tabBarSpace }]}>
+        <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
           <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
           {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
           <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
