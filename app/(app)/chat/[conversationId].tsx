@@ -205,7 +205,10 @@ export default function DMThreadScreen() {
 
     const offDm = onDirectMessage((msg) => {
       if (msg.conversationId !== conversationId) return;
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
       flatListRef.current?.scrollToEnd({ animated: true });
     });
 
@@ -252,6 +255,8 @@ export default function DMThreadScreen() {
       if (data.conversationId && data.conversationId !== conversationId) return;
       // Only process reactions that have a conversationId (DM context)
       if (!data.conversationId) return;
+      // Skip own reactions — already handled optimistically
+      if (data.userId === user?.id) return;
 
       setMessages((prev) =>
         prev.map((msg) => {
@@ -305,13 +310,49 @@ export default function DMThreadScreen() {
     setMenuVisible(true);
   }, []);
 
+  const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
+    const userId = user?.id;
+    if (!userId) return;
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== messageId) return msg;
+        const reactions = [...(msg.reactions ?? [])];
+        const idx = reactions.findIndex((r) => r.emoji === emoji);
+        if (idx >= 0 && reactions[idx].hasReacted) {
+          // Remove own reaction
+          const updated = {
+            ...reactions[idx],
+            count: reactions[idx].count - 1,
+            userIds: reactions[idx].userIds.filter((id) => id !== userId),
+            hasReacted: false,
+          };
+          if (updated.count <= 0) reactions.splice(idx, 1);
+          else reactions[idx] = updated;
+        } else if (idx >= 0) {
+          // Add to existing emoji
+          reactions[idx] = {
+            ...reactions[idx],
+            count: reactions[idx].count + 1,
+            userIds: [...reactions[idx].userIds, userId],
+            hasReacted: true,
+          };
+        } else {
+          // New emoji
+          reactions.push({ emoji, count: 1, userIds: [userId], hasReacted: true });
+        }
+        return { ...msg, reactions };
+      }),
+    );
+  }, [user?.id]);
+
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;
     setMenuVisible(false);
+    applyOptimisticReaction(selectedMessage.id, emoji);
     try {
       await reactionsApi.toggle(selectedMessage.id, emoji);
-    } catch { /* silent -- socket broadcast will update UI */ }
-  }, [selectedMessage]);
+    } catch { /* silent -- socket broadcast will reconcile */ }
+  }, [selectedMessage, applyOptimisticReaction]);
 
   const handleReply = useCallback(() => {
     if (!selectedMessage) return;
@@ -374,10 +415,11 @@ export default function DMThreadScreen() {
   }, []);
 
   const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
+    applyOptimisticReaction(messageId, emoji);
     try {
       await reactionsApi.toggle(messageId, emoji);
     } catch { /* silent */ }
-  }, []);
+  }, [applyOptimisticReaction]);
 
   const handleImagesSelected = useCallback(async (uris: string[]) => {
     setIsUploading(true);

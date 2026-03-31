@@ -51,10 +51,13 @@ export const useGlobeStore = create<GlobeState>((set) => ({
   setMessages: (messages) => set({ messages, hasMoreMessages: true }),
 
   addMessage: (message) =>
-    set((state) => ({
-      messages: [...state.messages, message],
-      newMessageCount: state.isAtBottom ? 0 : state.newMessageCount + 1,
-    })),
+    set((state) => {
+      if (state.messages.some((m) => m.id === message.id)) return state;
+      return {
+        messages: [...state.messages, message],
+        newMessageCount: state.isAtBottom ? 0 : state.newMessageCount + 1,
+      };
+    }),
 
   prependMessages: (messages, hasMore) =>
     set((state) => ({

@@ -13,6 +13,8 @@ import {
   ScrollView,
   Animated,
   Easing,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -20,6 +22,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { beacons as beaconsApi } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { PillToggle } from '@/components/ui/PillToggle';
@@ -56,24 +59,29 @@ export default function BeaconScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.toggleContainer}>
-        <PillToggle
-          options={['My Beacons', 'Matches']}
-          activeIndex={tabIndex}
-          onSelect={(i) => setActiveTab(i === 0 ? 'beacons' : 'matches')}
-          activeColor={COLORS.accent}
-        />
-      </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior="padding"
+      >
+        <View style={styles.toggleContainer}>
+          <PillToggle
+            options={['My Beacons', 'Matches']}
+            activeIndex={tabIndex}
+            onSelect={(i) => setActiveTab(i === 0 ? 'beacons' : 'matches')}
+            activeColor={COLORS.accent}
+          />
+        </View>
 
-      {activeTab === 'beacons' ? (
-        <MyBeaconsPanel />
-      ) : (
-        <MatchesPanel
-          matches={matches}
-          setMatches={setMatches}
-          isLoading={matchesLoading}
-        />
-      )}
+        {activeTab === 'beacons' ? (
+          <MyBeaconsPanel />
+        ) : (
+          <MatchesPanel
+            matches={matches}
+            setMatches={setMatches}
+            isLoading={matchesLoading}
+          />
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -81,6 +89,7 @@ export default function BeaconScreen() {
 // ── My Beacons Panel ──────────────────────────────────────────────────────
 function MyBeaconsPanel() {
   const { colors } = useTheme();
+  const tabBarSpace = useTabBarSpace();
   const { user } = useAuthStore();
   const router = useRouter();
   const [myBeacons, setMyBeacons] = useState<Beacon[]>([]);
@@ -172,7 +181,7 @@ function MyBeaconsPanel() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       {/* Explainer */}
       <AnimatedEntry>
         <GlassCard glowColor={COLORS.borderGlow}>
@@ -273,7 +282,7 @@ function MyBeaconsPanel() {
       )}
 
       {/* Bottom spacer for floating tab bar */}
-      <View style={{ height: 80 }} />
+      <View style={{ height: tabBarSpace }} />
     </ScrollView>
   );
 }
@@ -347,6 +356,7 @@ function MatchesPanel({
 }) {
   const { colors } = useTheme();
   const router = useRouter();
+  const tabBarSpace = useTabBarSpace();
 
   const handleDismiss = async (matchId: number) => {
     // Optimistically remove from local state
@@ -403,7 +413,7 @@ function MatchesPanel({
           />
         </AnimatedEntry>
       )}
-      ListFooterComponent={<View style={{ height: 80 }} />}
+      ListFooterComponent={<View style={{ height: tabBarSpace }} />}
     />
   );
 }
@@ -490,7 +500,7 @@ const styles = StyleSheet.create({
   },
   explainerTitle: { fontSize: 18, fontFamily: FONTS.semiBold, textAlign: 'center' },
   explainerBody: { fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
-  inputSection: { gap: SPACING.sm },
+  inputSection: { gap: SPACING.sm, alignSelf: 'stretch' },
   beaconInput: {
     borderWidth: 1.5,
     borderRadius: RADIUS.lg,

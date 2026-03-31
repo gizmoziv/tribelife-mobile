@@ -23,6 +23,7 @@ import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
 import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
@@ -51,6 +52,7 @@ export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, logout, updateUser } = useAuthStore();
   const router = useRouter();
+  const tabBarSpace = useTabBarSpace();
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [referralCount, setReferralCount] = useState(0);
@@ -418,7 +420,7 @@ export default function ProfileScreen() {
           </View>
         </AnimatedEntry>
 
-        <View style={{ height: 80 }} />
+        <View style={{ height: tabBarSpace }} />
       </ScrollView>
     </SafeAreaView>
   );

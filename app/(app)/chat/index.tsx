@@ -555,6 +555,7 @@ function SwipeableConversationRow({
 function DMListPanel() {
   const { colors } = useTheme();
   const router = useRouter();
+  const tabBarSpace = useTabBarSpace();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -645,7 +646,7 @@ function DMListPanel() {
           </SwipeableConversationRow>
         </AnimatedEntry>
       )}
-      ListFooterComponent={<View style={{ height: 80 }} />}
+      ListFooterComponent={<View style={{ height: tabBarSpace }} />}
     />
   );
 }

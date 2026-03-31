@@ -111,6 +111,7 @@ export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           position: 'absolute',
           bottom: insets.bottom + 12,

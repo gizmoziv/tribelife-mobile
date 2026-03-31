@@ -92,7 +92,18 @@ export default function OnboardingScreen() {
   }, []);
 
   const handleSubmit = async () => {
-    if (handleStatus !== 'available' || !handle || !acceptedTerms) return;
+    if (!handle.trim()) {
+      Alert.alert('Handle Required', 'Please choose a handle before continuing.');
+      return;
+    }
+    if (handleStatus !== 'available') {
+      Alert.alert('Handle Unavailable', 'Please choose an available handle before continuing.');
+      return;
+    }
+    if (!acceptedTerms) {
+      Alert.alert('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -265,8 +276,9 @@ export default function OnboardingScreen() {
                   <View style={[
                     styles.checkbox,
                     {
-                      borderColor: acceptedTerms ? COLORS.primary : colors.border,
-                      backgroundColor: acceptedTerms ? COLORS.primary : 'transparent',
+                      borderColor: acceptedTerms ? COLORS.secondary : COLORS.error,
+                      backgroundColor: acceptedTerms ? COLORS.secondary : 'transparent',
+                      borderWidth: acceptedTerms ? 1.5 : 2,
                     },
                   ]}>
                     {acceptedTerms && <Text style={styles.checkmark}>{'✓'}</Text>}
@@ -292,7 +304,7 @@ export default function OnboardingScreen() {
                   variant="primary"
                   size="lg"
                   loading={isSubmitting}
-                  disabled={handleStatus !== 'available' || !acceptedTerms || isSubmitting}
+                  disabled={isSubmitting}
                   style={{ width: '100%' }}
                 />
               </AnimatedEntry>

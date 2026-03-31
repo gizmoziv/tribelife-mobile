@@ -14,6 +14,7 @@ import { useGlobeStore } from '@/store/globeStore';
 import { globeApi } from '@/services/api';
 import { connectSocket, onGlobeParticipants } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
 import type { GlobeRoom } from '@/types';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -135,6 +136,7 @@ export default function GlobeScreen() {
     });
   }, []);
 
+  const tabBarSpace = useTabBarSpace();
   const sortedRooms = [...rooms].sort((a, b) => a.sortOrder - b.sortOrder);
 
   const renderItem = useCallback(
@@ -167,7 +169,7 @@ export default function GlobeScreen() {
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListFooterComponent={<View style={{ height: 40 }} />}
+        ListFooterComponent={<View style={{ height: tabBarSpace }} />}
       />
     </SafeAreaView>
   );

@@ -2,7 +2,7 @@
   "expo": {
     "name": "TribeLife App",
     "slug": "tribelife",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.tribelife.app",
       "usesAppleSignIn": true,
-      "associatedDomains": ["applinks:tribelife.app"],
+      "associatedDomains": [
+        "applinks:tribelife.app"
+      ],
       "infoPlist": {
         "CFBundleURLTypes": [
           {
@@ -31,7 +33,6 @@
       }
     },
     "android": {
-      "softwareKeyboardLayoutMode": "adjustResize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
@@ -53,8 +54,14 @@
               "pathPrefix": "/globe"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
+      ],
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
@@ -85,6 +92,12 @@
         "projectId": "cb085a03-8ad6-428e-ab61-b0bf57ecf0fc"
       },
       "router": {}
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cb085a03-8ad6-428e-ab61-b0bf57ecf0fc"
     }
   }
 }

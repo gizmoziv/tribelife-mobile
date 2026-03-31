@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ViewStyle, StyleSheet } from 'react-native';
+import { View, ViewStyle, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/contexts/ThemeContext';
 import { SHADOWS, RADIUS } from '@/constants';
@@ -28,8 +28,10 @@ export function GlassCard({
     borderWidth: 1,
     borderColor: glowColor ?? colors.border,
     borderRadius,
-    overflow: 'hidden',
+    ...(Platform.OS === 'ios' ? { overflow: 'hidden' as const } : {}),
     ...SHADOWS.lg,
+    // On Android, drop elevation to avoid conflicts with borderRadius rendering
+    ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
     ...(glowColor ? {
       shadowColor: glowColor,
       shadowOpacity: 0.3,
