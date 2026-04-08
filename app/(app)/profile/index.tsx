@@ -500,11 +500,11 @@ export default function ProfileScreen() {
               <Text style={[styles.referralCount, { color: colors.textMuted }]}>
                 {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
               </Text>
-              {premiumMonthsEarned > 0 && (
-                <Text style={[styles.referralReward, { color: COLORS.primary }]}>
-                  {premiumMonthsEarned} {premiumMonthsEarned === 1 ? 'month' : 'months'} of free Premium earned!
-                </Text>
-              )}
+              <Text style={[styles.referralReward, { color: COLORS.primary }]}>
+                {premiumMonthsEarned > 0
+                  ? `${premiumMonthsEarned} of 12 premium months earned!`
+                  : 'Share to earn free premium months!'}
+              </Text>
               <PillButton
                 title="Share TribeLife"
                 onPress={handleShare}
