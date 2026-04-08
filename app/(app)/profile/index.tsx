@@ -448,6 +448,31 @@ export default function ProfileScreen() {
           </AnimatedEntry>
         )}
 
+        {/* Referrals */}
+        <AnimatedEntry delay={150}>
+          <GlassCard>
+            <View style={styles.referralSection}>
+              <Text style={[styles.referralTitle, { color: colors.text }]}>
+                Invite Friends
+              </Text>
+              <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
+              </Text>
+              <Text style={[styles.referralReward, { color: COLORS.primary }]}>
+                {premiumMonthsEarned > 0
+                  ? `${premiumMonthsEarned} of 12 premium months earned!`
+                  : 'Share to earn free premium months!'}
+              </Text>
+              <PillButton
+                title="Share TribeLife"
+                onPress={handleShare}
+                variant="primary"
+                style={{ marginTop: 12 }}
+              />
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
+
         {/* Account */}
         <AnimatedEntry delay={240}>
           <SettingsSection title="Account">
@@ -488,31 +513,6 @@ export default function ProfileScreen() {
               <ChevronIcon color={colors.textMuted} />
             </TouchableOpacity>
           </SettingsSection>
-        </AnimatedEntry>
-
-        {/* Referrals */}
-        <AnimatedEntry delay={270}>
-          <GlassCard>
-            <View style={styles.referralSection}>
-              <Text style={[styles.referralTitle, { color: colors.text }]}>
-                Invite Friends
-              </Text>
-              <Text style={[styles.referralCount, { color: colors.textMuted }]}>
-                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
-              </Text>
-              <Text style={[styles.referralReward, { color: COLORS.primary }]}>
-                {premiumMonthsEarned > 0
-                  ? `${premiumMonthsEarned} of 12 premium months earned!`
-                  : 'Share to earn free premium months!'}
-              </Text>
-              <PillButton
-                title="Share TribeLife"
-                onPress={handleShare}
-                variant="primary"
-                style={{ marginTop: 12 }}
-              />
-            </View>
-          </GlassCard>
         </AnimatedEntry>
 
         {/* Session */}
