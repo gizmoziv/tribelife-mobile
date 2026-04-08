@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,19 @@ import {
   ActivityIndicator,
   Linking,
   Share,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Purchases from 'react-native-purchases';
 import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, referralsApi } from '@/services/api';
+import { auth, referralsApi, notificationsApi } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
+import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
 import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
@@ -76,6 +79,62 @@ export default function ProfileScreen() {
       });
     } catch { /* user cancelled */ }
   };
+
+  // Notification preferences
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState({
+    mentionsPush: true,
+    timezoneChatPush: true,
+    beaconMatchesPush: true,
+    dmPush: true,
+  });
+
+  useEffect(() => {
+    // Check device push permission status
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      setPushEnabled(status === 'granted');
+    });
+    // Load server-side preferences
+    notificationsApi.getPreferences().then(setNotifPrefs).catch(() => {});
+  }, []);
+
+  const handleTogglePush = useCallback(async (value: boolean) => {
+    if (value) {
+      const token = await registerForPushNotifications();
+      if (token) {
+        await sendPushTokenToServer(token);
+        setPushEnabled(true);
+      } else {
+        Alert.alert(
+          'Notifications Disabled',
+          'Please enable notifications in your device Settings to receive alerts.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+      }
+    } else {
+      Alert.alert(
+        'Disable Notifications',
+        'To turn off push notifications, go to your device Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+    }
+  }, []);
+
+  const updateNotifPref = useCallback(async (key: keyof typeof notifPrefs, value: boolean) => {
+    setNotifPrefs(prev => ({ ...prev, [key]: value }));
+    try {
+      await notificationsApi.updatePreferences({ [key]: value });
+    } catch {
+      // Revert on failure
+      setNotifPrefs(prev => ({ ...prev, [key]: !value }));
+    }
+  }, []);
 
   async function handleAvatarUpload() {
     try {
@@ -279,6 +338,71 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
+        {/* Notifications */}
+        <AnimatedEntry delay={90}>
+          <SettingsSection title="Notifications">
+            <SettingsRow
+              label="Push Notifications"
+              right={
+                <Switch
+                  value={pushEnabled}
+                  onValueChange={handleTogglePush}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                />
+              }
+            />
+            <SettingsRow
+              label="Mentions"
+              right={
+                <Switch
+                  value={notifPrefs.mentionsPush}
+                  onValueChange={(v) => updateNotifPref('mentionsPush', v)}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                  disabled={!pushEnabled}
+                />
+              }
+            />
+            <SettingsRow
+              label="Timezone Chat"
+              right={
+                <Switch
+                  value={notifPrefs.timezoneChatPush}
+                  onValueChange={(v) => updateNotifPref('timezoneChatPush', v)}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                  disabled={!pushEnabled}
+                />
+              }
+            />
+            <SettingsRow
+              label="Beacon Matches"
+              right={
+                <Switch
+                  value={notifPrefs.beaconMatchesPush}
+                  onValueChange={(v) => updateNotifPref('beaconMatchesPush', v)}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                  disabled={!pushEnabled}
+                />
+              }
+            />
+            <SettingsRow
+              label="Direct Messages"
+              right={
+                <Switch
+                  value={notifPrefs.dmPush}
+                  onValueChange={(v) => updateNotifPref('dmPush', v)}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                  disabled={!pushEnabled}
+                />
+              }
+            />
+          </SettingsSection>
+        </AnimatedEntry>
+
         {/* Premium */}
         {!user?.isPremium && (
           <AnimatedEntry delay={120}>
@@ -325,7 +449,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Account */}
-        <AnimatedEntry delay={180}>
+        <AnimatedEntry delay={240}>
           <SettingsSection title="Account">
             <SettingsRow
               label="Email"
@@ -354,7 +478,7 @@ export default function ProfileScreen() {
         </AnimatedEntry>
 
         {/* Help */}
-        <AnimatedEntry delay={240}>
+        <AnimatedEntry delay={300}>
           <SettingsSection title="Help">
             <TouchableOpacity
               style={[styles.row, { borderBottomColor: 'transparent' }]}
@@ -392,7 +516,7 @@ export default function ProfileScreen() {
         </AnimatedEntry>
 
         {/* Session */}
-        <AnimatedEntry delay={300}>
+        <AnimatedEntry delay={360}>
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SESSION</Text>
             <PillButton
@@ -406,7 +530,7 @@ export default function ProfileScreen() {
           </View>
         </AnimatedEntry>
 
-        <AnimatedEntry delay={360}>
+        <AnimatedEntry delay={420}>
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DANGER ZONE</Text>
             <PillButton

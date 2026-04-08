@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
@@ -23,6 +23,7 @@ import { auth, getToken } from '@/services/api';
 import { connectSocket } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
+import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -45,19 +46,11 @@ if (rcKey) {
   Purchases.configure({ apiKey: rcKey });
 }
 
-// Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
 function RootLayoutInner() {
   const { isDark } = useTheme();
-  const { setAuth, setLoading } = useAuthStore();
+  const { token, user, setAuth, setLoading } = useAuthStore();
   const { incrementUnread, addNotification } = useNotificationStore();
+  const router = useRouter();
 
   const [fontsLoaded] = useFonts({
     PlusJakartaSans_300Light,
@@ -107,6 +100,30 @@ function RootLayoutInner() {
       extractAndStoreReferralCode(url);
     });
     return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (token && user) {
+      registerForPushNotifications().then((pushToken) => {
+        if (pushToken) {
+          sendPushTokenToServer(pushToken);
+        }
+      });
+    }
+  }, [token, user]);
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data?.type === 'mention' && data?.roomId) {
+        router.push('/chat');
+      } else if (data?.type === 'new_dm' && data?.conversationId) {
+        router.push(`/chat/dm/${data.conversationId}`);
+      } else if (data?.type === 'beacon_match') {
+        router.push('/beacon');
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {

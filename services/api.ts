@@ -159,6 +159,25 @@ export const notificationsApi = {
   readAll: () => request('/api/notifications/read-all', { method: 'PUT' }),
 
   read: (id: number) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
+
+  getPreferences: () =>
+    request<{
+      mentionsPush: boolean;
+      timezoneChatPush: boolean;
+      beaconMatchesPush: boolean;
+      dmPush: boolean;
+    }>('/api/notifications/preferences'),
+
+  updatePreferences: (prefs: {
+    mentionsPush?: boolean;
+    timezoneChatPush?: boolean;
+    beaconMatchesPush?: boolean;
+    dmPush?: boolean;
+  }) =>
+    request('/api/notifications/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    }),
 };
 
 // ── Support ───────────────────────────────────────────────────────────────
