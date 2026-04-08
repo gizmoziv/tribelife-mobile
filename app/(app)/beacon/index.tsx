@@ -181,7 +181,7 @@ function MyBeaconsPanel() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
       {/* Explainer */}
       <AnimatedEntry>
         <GlassCard glowColor={COLORS.borderGlow}>

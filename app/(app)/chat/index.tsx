@@ -392,6 +392,7 @@ function LocalChatPanel() {
 
       <FlatList
         ref={flatListRef}
+        keyboardDismissMode="on-drag"
         data={messages}
         extraData={messages}
         keyExtractor={(item) => item.id.toString()}

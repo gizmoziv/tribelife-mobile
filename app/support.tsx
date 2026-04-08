@@ -51,7 +51,7 @@ export default function SupportScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()}>
