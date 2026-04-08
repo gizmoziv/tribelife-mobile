@@ -19,6 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
+import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -112,6 +113,7 @@ function LocalChatPanel() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
@@ -371,10 +373,12 @@ function LocalChatPanel() {
           translatedContent={translations[item.id]?.text ?? null}
           showTranslation={translations[item.id]?.showing ?? false}
           onToggleTranslation={handleToggleTranslation}
+          onReplyPress={scrollToMessage}
+          highlighted={item.id === highlightedId}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, router]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage]);
 
   if (isLoading) {
     return <LoadingState />;
@@ -399,6 +403,7 @@ function LocalChatPanel() {
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
         onContentSizeChange={() => {}}
+        onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
       />
 
       {typingUsers.length > 0 && (

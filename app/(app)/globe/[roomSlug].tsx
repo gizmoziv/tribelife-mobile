@@ -23,6 +23,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { chat, globeApi, reactionsApi } from '@/services/api';
@@ -147,6 +148,7 @@ export default function GlobeRoomChat() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasInitialScrolled = useRef(false);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -579,11 +581,13 @@ export default function GlobeRoomChat() {
             translatedContent={translations[item.id]?.text ?? null}
             showTranslation={translations[item.id]?.showing ?? false}
             onToggleTranslation={handleToggleTranslation}
+            onReplyPress={scrollToMessage}
+            highlighted={item.id === highlightedId}
           />
         </SwipeableMessage>
       );
     },
-    [user?.id, handleLongPress, handleReactionToggle, translations, router],
+    [user?.id, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────
@@ -679,6 +683,7 @@ export default function GlobeRoomChat() {
           onScroll={handleScroll}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
+          onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
           onEndReachedThreshold={0.3}
           maxToRenderPerBatch={15}
           windowSize={10}

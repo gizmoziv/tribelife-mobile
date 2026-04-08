@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
+import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -88,6 +89,7 @@ export default function DMThreadScreen() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -491,10 +493,12 @@ export default function DMThreadScreen() {
           translatedContent={translations[item.id]?.text ?? null}
           showTranslation={translations[item.id]?.showing ?? false}
           onToggleTranslation={handleToggleTranslation}
+          onReplyPress={scrollToMessage}
+          highlighted={item.id === highlightedId}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage]);
 
   if (isLoading) {
     return (
@@ -525,6 +529,7 @@ export default function DMThreadScreen() {
               hasScrolledRef.current = true;
             }
           }}
+          onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
         />
 
         {isTyping && (
