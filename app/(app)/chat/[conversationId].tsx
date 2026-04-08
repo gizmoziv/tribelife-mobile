@@ -442,6 +442,7 @@ export default function DMThreadScreen() {
       setInput('');
       setReplyTo(null);
       stopTyping({ conversationId });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       if (successfulUploads.length < uris.length) {
         Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
       }
@@ -462,6 +463,7 @@ export default function DMThreadScreen() {
     setInput('');
     setReplyTo(null);
     stopTyping({ conversationId });
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   }, [input, conversationId, replyTo]);
 
   const handleInputChange = (text: string) => {
@@ -516,7 +518,12 @@ export default function DMThreadScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => {}}
+          onContentSizeChange={() => {
+            if (!hasScrolledRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              hasScrolledRef.current = true;
+            }
+          }}
         />
 
         {isTyping && (
