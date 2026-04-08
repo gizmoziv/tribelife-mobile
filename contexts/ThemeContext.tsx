@@ -78,7 +78,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const THEME_KEY = 'tribelife_theme';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
     AsyncStorage.getItem(THEME_KEY).then((stored) => {
