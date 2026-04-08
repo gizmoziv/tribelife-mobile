@@ -14,11 +14,6 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) {
-    console.log('Push notifications require a physical device');
-    return null;
-  }
-
   // Check existing permission
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -42,6 +37,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#E8922F',
     });
+  }
+
+  // Push tokens only work on physical devices
+  if (!Device.isDevice) {
+    console.log('Push token requires a physical device, permission granted for simulator');
+    return null;
   }
 
   // Get Expo push token
