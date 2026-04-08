@@ -352,54 +352,56 @@ export default function ProfileScreen() {
                 />
               }
             />
-            <SettingsRow
-              label="Mentions"
-              right={
-                <Switch
-                  value={notifPrefs.mentionsPush}
-                  onValueChange={(v) => updateNotifPref('mentionsPush', v)}
-                  trackColor={{ false: colors.border, true: COLORS.primary }}
-                  thumbColor="#FFF"
-                  disabled={!pushEnabled}
-                />
-              }
-            />
-            <SettingsRow
-              label="Timezone Chat"
-              right={
-                <Switch
-                  value={notifPrefs.timezoneChatPush}
-                  onValueChange={(v) => updateNotifPref('timezoneChatPush', v)}
-                  trackColor={{ false: colors.border, true: COLORS.primary }}
-                  thumbColor="#FFF"
-                  disabled={!pushEnabled}
-                />
-              }
-            />
-            <SettingsRow
-              label="Beacon Matches"
-              right={
-                <Switch
-                  value={notifPrefs.beaconMatchesPush}
-                  onValueChange={(v) => updateNotifPref('beaconMatchesPush', v)}
-                  trackColor={{ false: colors.border, true: COLORS.primary }}
-                  thumbColor="#FFF"
-                  disabled={!pushEnabled}
-                />
-              }
-            />
-            <SettingsRow
-              label="Direct Messages"
-              right={
-                <Switch
-                  value={notifPrefs.dmPush}
-                  onValueChange={(v) => updateNotifPref('dmPush', v)}
-                  trackColor={{ false: colors.border, true: COLORS.primary }}
-                  thumbColor="#FFF"
-                  disabled={!pushEnabled}
-                />
-              }
-            />
+            <View style={{ paddingLeft: 16 }}>
+              <SettingsRow
+                label="Mentions"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.mentionsPush}
+                    onValueChange={(v) => updateNotifPref('mentionsPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Timezone Chat"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.timezoneChatPush}
+                    onValueChange={(v) => updateNotifPref('timezoneChatPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Beacon Matches"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.beaconMatchesPush}
+                    onValueChange={(v) => updateNotifPref('beaconMatchesPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Direct Messages"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.dmPush}
+                    onValueChange={(v) => updateNotifPref('dmPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+            </View>
           </SettingsSection>
         </AnimatedEntry>
 
