@@ -209,6 +209,13 @@ export default function DMThreadScreen() {
       if (msg.conversationId !== conversationId) return;
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
+        // Replace optimistic message (negative ID) from same sender with real one
+        const hasOptimistic = prev.some((m) => m.id < 0 && m.senderId === msg.senderId && m.content === msg.content);
+        if (hasOptimistic) {
+          return prev.map((m) =>
+            m.id < 0 && m.senderId === msg.senderId && m.content === msg.content ? msg : m
+          );
+        }
         return [...prev, msg];
       });
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -461,12 +468,26 @@ export default function DMThreadScreen() {
     if (!content) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
+
+    // Optimistic insert — show message immediately
+    const optimisticMsg: Message = {
+      id: -(Date.now()),
+      content,
+      senderId: user?.id ?? 0,
+      senderHandle: user?.handle ?? '',
+      conversationId,
+      createdAt: new Date().toISOString(),
+      replyToId: replyToId ?? null,
+      replyTo: replyTo ?? null,
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
     sendDirectMessage(conversationId, content, replyToId);
     setInput('');
     setReplyTo(null);
     stopTyping({ conversationId });
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [input, conversationId, replyTo]);
+  }, [input, conversationId, replyTo, user]);
 
   const handleInputChange = (text: string) => {
     setInput(text);
