@@ -30,7 +30,7 @@ export default function GroupInfoScreen() {
     inviteSlug?: string;
   }>();
   const conversationId = parseInt(rawId);
-  const groupName = rawGroupName ?? '';
+  const [groupName, setGroupName] = useState(rawGroupName ?? '');
   const inviteSlug = rawSlug ?? '';
   const { colors } = useTheme();
   const { user } = useAuthStore();
@@ -49,6 +49,31 @@ export default function GroupInfoScreen() {
       setIsLoading(false);
     }).catch(() => setIsLoading(false));
   }, [conversationId]);
+
+  const handleRename = useCallback(() => {
+    Alert.prompt(
+      'Rename Group',
+      'Enter a new name for this group.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: async (newName?: string) => {
+            const trimmed = newName?.trim();
+            if (!trimmed || trimmed === groupName) return;
+            try {
+              await groupsApi.update(conversationId, { name: trimmed });
+              setGroupName(trimmed);
+            } catch {
+              Alert.alert('Error', 'Could not rename the group.');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      groupName,
+    );
+  }, [conversationId, groupName]);
 
   const handleShare = useCallback(async () => {
     // We need the invite slug — find it from conversation list or use a fallback
@@ -146,6 +171,13 @@ export default function GroupInfoScreen() {
               <Text style={[styles.memberCountText, { color: colors.textMuted }]}>
                 {members.length} {members.length === 1 ? 'member' : 'members'}
               </Text>
+              {isAdmin && (
+                <TouchableOpacity onPress={handleRename} style={{ marginTop: 6 }}>
+                  <Text style={{ fontSize: 14, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+                    Rename Group
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </GlassCard>
         </AnimatedEntry>

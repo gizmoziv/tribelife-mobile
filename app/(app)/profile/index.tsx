@@ -20,7 +20,7 @@ import * as Notifications from 'expo-notifications';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, referralsApi, notificationsApi } from '@/services/api';
+import { auth, referralsApi, notificationsApi, groupsApi } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
@@ -60,6 +60,43 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [referralCount, setReferralCount] = useState(0);
   const [premiumMonthsEarned, setPremiumMonthsEarned] = useState(0);
+  const [myGroups, setMyGroups] = useState<{ id: number; groupName: string; inviteSlug: string; memberCount: number; role: string }[]>([]);
+
+  const loadMyGroups = useCallback(() => {
+    if (!user?.isPremium) return;
+    groupsApi.myGroups()
+      .then(({ groups }) => setMyGroups(groups))
+      .catch(() => {});
+  }, [user?.isPremium]);
+
+  useEffect(() => {
+    loadMyGroups();
+  }, [loadMyGroups]);
+
+  const handleRenameGroup = useCallback((group: { id: number; groupName: string }) => {
+    Alert.prompt(
+      'Rename Group',
+      'Enter a new name for this group.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: async (newName?: string) => {
+            const trimmed = newName?.trim();
+            if (!trimmed || trimmed === group.groupName) return;
+            try {
+              await groupsApi.update(group.id, { name: trimmed });
+              setMyGroups(prev => prev.map(g => g.id === group.id ? { ...g, groupName: trimmed } : g));
+            } catch {
+              Alert.alert('Error', 'Could not rename the group.');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      group.groupName,
+    );
+  }, []);
 
   useEffect(() => {
     referralsApi.getStats()
@@ -417,6 +454,57 @@ export default function ProfileScreen() {
                 <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
                   Create and manage private group chats for your community
                 </Text>
+                {myGroups.length > 0 && (
+                  <View style={{ gap: 8, marginTop: 4 }}>
+                    {myGroups.map((g) => (
+                      <View
+                        key={g.id}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingVertical: 10,
+                          paddingHorizontal: 12,
+                          borderRadius: RADIUS.md,
+                          backgroundColor: colors.surfaceGlass,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <TouchableOpacity
+                          style={{ flex: 1 }}
+                          onPress={() => router.push({
+                            pathname: '/(app)/chat/[conversationId]',
+                            params: {
+                              conversationId: g.id.toString(),
+                              isGroup: 'true',
+                              groupName: g.groupName,
+                              inviteSlug: g.inviteSlug,
+                            },
+                          })}
+                        >
+                          <Text style={{ fontSize: 15, fontFamily: FONTS.semiBold, color: colors.text }}>
+                            {g.groupName}
+                          </Text>
+                          <Text style={{ fontSize: 12, fontFamily: FONTS.regular, color: colors.textMuted, marginTop: 2 }}>
+                            {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
+                            {g.role === 'admin' ? ' · Admin' : ''}
+                          </Text>
+                        </TouchableOpacity>
+                        {g.role === 'admin' && (
+                          <TouchableOpacity
+                            onPress={() => handleRenameGroup(g)}
+                            hitSlop={8}
+                            style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+                          >
+                            <Text style={{ fontSize: 13, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+                              Rename
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                )}
                 <PillButton
                   title="Create Group"
                   onPress={() => router.push('/(app)/group/create')}

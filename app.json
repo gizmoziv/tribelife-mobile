@@ -25,7 +25,8 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.410620090041-ghtee9gta3slp7insln08dddvr8ud6cr"
+              "com.googleusercontent.apps.410620090041-ghtee9gta3slp7insln08dddvr8ud6cr",
+              "tribelife"
             ]
           }
         ],

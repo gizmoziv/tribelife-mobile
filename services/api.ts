@@ -233,6 +233,10 @@ export const referralsApi = {
 
 // ── Groups ─────────────────────────────────────────────────────────────────
 export const groupsApi = {
+  myGroups: () =>
+    request<{ groups: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; createdAt: string; role: string; memberCount: number }[] }>(
+      '/api/chat/groups'),
+
   create: (name: string, slug?: string) =>
     request<{ conversation: { id: number; groupName: string; inviteSlug: string; createdAt: string } }>(
       '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug }) }),
