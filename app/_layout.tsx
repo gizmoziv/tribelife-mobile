@@ -136,6 +136,26 @@ function RootLayoutInner() {
             // Could parse and add to store here
           });
 
+          // Handle cold-start notification (app was killed, user tapped notification)
+          const lastResponse = await Notifications.getLastNotificationResponseAsync();
+          if (lastResponse) {
+            const nData = lastResponse.notification.request.content.data;
+            if (nData?.type === 'new_dm' && nData?.conversationId) {
+              setTimeout(() => router.push({
+                pathname: '/(app)/chat/[conversationId]',
+                params: {
+                  conversationId: String(nData.conversationId),
+                  ...(nData.senderHandle ? { handle: String(nData.senderHandle) } : {}),
+                  ...(nData.isGroup ? { isGroup: 'true', groupName: String(nData.groupName ?? '') } : {}),
+                },
+              }), 500);
+            } else if (nData?.type === 'mention' && nData?.roomId) {
+              setTimeout(() => router.push('/(app)/chat'), 500);
+            } else if (nData?.type === 'beacon_match') {
+              setTimeout(() => router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } }), 500);
+            }
+          }
+
           return cleanup;
         }
       } catch {
@@ -177,7 +197,7 @@ function RootLayoutInner() {
   }, [token, user]);
 
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+    function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data;
       if (data?.type === 'mention' && data?.roomId) {
         router.push('/(app)/chat');
@@ -186,13 +206,16 @@ function RootLayoutInner() {
           pathname: '/(app)/chat/[conversationId]',
           params: {
             conversationId: String(data.conversationId),
+            ...(data.senderHandle ? { handle: String(data.senderHandle) } : {}),
             ...(data.isGroup ? { isGroup: 'true', groupName: String(data.groupName ?? '') } : {}),
           },
         });
       } else if (data?.type === 'beacon_match') {
         router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
       }
-    });
+    }
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
     return () => subscription.remove();
   }, []);
 
