@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { beacons as beaconsApi } from '@/services/api';
+import { beacons as beaconsApi, chat } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -400,10 +400,15 @@ function MatchesPanel({
             match={item}
             onMessage={async () => {
               if (!item.matchedUser) return;
-              router.push({
-                pathname: '/(app)/chat/[conversationId]',
-                params: { conversationId: item.matchedUser.userId, handle: item.matchedUser.userHandle },
-              });
+              try {
+                const { conversationId } = await chat.getOrCreateConversation(item.matchedUser.userId);
+                router.push({
+                  pathname: '/(app)/chat/[conversationId]',
+                  params: { conversationId: conversationId.toString(), handle: item.matchedUser.userHandle },
+                });
+              } catch {
+                Alert.alert('Error', 'Could not start conversation. Please try again.');
+              }
             }}
             onViewProfile={() => {
               if (item.matchedUser?.userHandle) {

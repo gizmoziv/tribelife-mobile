@@ -133,6 +133,8 @@ function LocalChatPanel() {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
     }).catch(() => setIsLoading(false));
 
+    const cleanups: (() => void)[] = [];
+
     connectSocket().then(() => {
       const offRoom = onRoomMessage((msg) => {
         setMessages((prev) => [...prev, msg]);
@@ -168,8 +170,10 @@ function LocalChatPanel() {
         Alert.alert('Image Removed', data.message);
       });
 
-      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); offMediaRemoved(); offMediaRejected(); };
+      cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offMediaRemoved, offMediaRejected);
     });
+
+    return () => { cleanups.forEach(fn => fn()); };
   }, [roomId]);
 
   // ── Real-time reaction updates ──────────────────────────────────────────

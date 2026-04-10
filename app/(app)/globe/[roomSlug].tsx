@@ -255,13 +255,13 @@ export default function GlobeRoomChat() {
     });
 
     const offMediaRemoved = onMediaRemoved((data) => {
-      const updatedMsgs = messages.map((msg) => {
+      const current = useGlobeStore.getState().messages;
+      setMessages(current.map((msg) => {
         if (msg.id === data.messageId) {
           return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
         }
         return msg;
-      });
-      setMessages(updatedMsgs);
+      }));
     });
 
     const offMediaRejected = onMediaRejected((data) => {
@@ -302,7 +302,8 @@ export default function GlobeRoomChat() {
       if (data.userId === user?.id) return;
 
       // Update messages in the globe store
-      const updatedMessages = messages.map((msg) => {
+      const current = useGlobeStore.getState().messages;
+      setMessages(current.map((msg) => {
         if (msg.id !== data.messageId) return msg;
         const reactions = [...(msg.reactions ?? [])];
         const idx = reactions.findIndex((r) => r.emoji === data.emoji);
@@ -340,12 +341,11 @@ export default function GlobeRoomChat() {
         }
 
         return { ...msg, reactions };
-      });
-      setMessages(updatedMessages);
+      }));
     });
 
     return () => { offReaction(); };
-  }, [globeRoomId, user?.id, messages, setMessages]);
+  }, [globeRoomId, user?.id, setMessages]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
   const handleLongPress = useCallback((message: Message | GlobeMessage) => {
@@ -356,8 +356,9 @@ export default function GlobeRoomChat() {
   const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
     const userId = user?.id;
     if (!userId) return;
+    const current = useGlobeStore.getState().messages;
     setMessages(
-      messages.map((msg) => {
+      current.map((msg) => {
         if (msg.id !== messageId) return msg;
         const reactions = [...(msg.reactions ?? [])];
         const idx = reactions.findIndex((r) => r.emoji === emoji);
@@ -383,7 +384,7 @@ export default function GlobeRoomChat() {
         return { ...msg, reactions };
       }),
     );
-  }, [user?.id, messages, setMessages]);
+  }, [user?.id, setMessages]);
 
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;

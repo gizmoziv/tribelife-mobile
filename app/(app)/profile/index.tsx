@@ -223,6 +223,7 @@ export default function ProfileScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
+                      try { await Purchases.logOut(); } catch { /* ignore if not logged in */ }
                       await auth.deleteAccount();
                       disconnectSocket();
                       await logout();
