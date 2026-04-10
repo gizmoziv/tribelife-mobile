@@ -116,11 +116,11 @@ function RootLayoutInner() {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
       if (data?.type === 'mention' && data?.roomId) {
-        router.push('/chat');
+        router.push('/(app)/chat');
       } else if (data?.type === 'new_dm' && data?.conversationId) {
-        router.push(`/chat/dm/${data.conversationId}`);
+        router.push(`/(app)/chat/${data.conversationId}`);
       } else if (data?.type === 'beacon_match') {
-        router.push('/beacon');
+        router.push('/(app)/beacon');
       }
     });
     return () => subscription.remove();
