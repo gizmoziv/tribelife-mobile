@@ -17,7 +17,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { beacons as beaconsApi } from '@/services/api';
@@ -43,7 +43,8 @@ type Tab = 'beacons' | 'matches';
 
 export default function BeaconScreen() {
   const { colors } = useTheme();
-  const [activeTab, setActiveTab] = useState<Tab>('beacons');
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const [activeTab, setActiveTab] = useState<Tab>(tab === 'matches' ? 'matches' : 'beacons');
   const tabIndex = activeTab === 'beacons' ? 0 : 1;
 
   // Lift match state here so it survives tab switches (MatchesPanel unmounting)

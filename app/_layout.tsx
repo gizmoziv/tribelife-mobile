@@ -165,7 +165,7 @@ function RootLayoutInner() {
       } else if (data?.type === 'new_dm' && data?.conversationId) {
         router.push(`/(app)/chat/${data.conversationId}`);
       } else if (data?.type === 'beacon_match') {
-        router.push('/(app)/beacon');
+        router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
       }
     });
     return () => subscription.remove();
