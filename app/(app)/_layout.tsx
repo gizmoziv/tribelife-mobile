@@ -213,6 +213,13 @@ export default function AppLayout() {
           headerShown: false,
         }}
       />
+      <Tabs.Screen
+        name="group"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }

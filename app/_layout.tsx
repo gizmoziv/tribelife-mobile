@@ -19,7 +19,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, getToken } from '@/services/api';
+import { auth, getToken, groupsApi } from '@/services/api';
 import { connectSocket } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
@@ -35,6 +35,35 @@ function extractAndStoreReferralCode(url: string) {
       AsyncStorage.setItem('referralCode', ref.toLowerCase());
     }
   } catch { /* ignore parse errors */ }
+}
+
+function extractGroupSlug(url: string): string | null {
+  try {
+    const match = url.match(/\/g\/([a-zA-Z0-9-]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleGroupInvite(slug: string, router: ReturnType<typeof useRouter>) {
+  try {
+    const token = await getToken();
+    if (!token) {
+      // Not authenticated — store for later
+      await AsyncStorage.setItem('pendingGroupSlug', slug);
+      return;
+    }
+    const { conversation } = await groupsApi.join(slug);
+    router.push({
+      pathname: '/(app)/chat/[conversationId]',
+      params: {
+        conversationId: conversation.id.toString(),
+        isGroup: 'true',
+        groupName: conversation.groupName,
+      },
+    });
+  } catch { /* silent — group may not exist or already joined */ }
 }
 
 // Configure RevenueCat
@@ -71,6 +100,14 @@ function RootLayoutInner() {
           const needsOnboarding = !user.handle;
           await setAuth(token, user, needsOnboarding);
 
+          // Handle pending group invite from deep link
+          const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
+          if (pendingGroupSlug) {
+            await AsyncStorage.removeItem('pendingGroupSlug');
+            // Defer to after navigation is ready
+            setTimeout(() => handleGroupInvite(pendingGroupSlug, router), 500);
+          }
+
           // Connect socket
           const socket = await connectSocket();
 
@@ -93,11 +130,19 @@ function RootLayoutInner() {
   }, []);
 
   useEffect(() => {
+    const processUrl = (url: string) => {
+      extractAndStoreReferralCode(url);
+      const groupSlug = extractGroupSlug(url);
+      if (groupSlug) {
+        handleGroupInvite(groupSlug, router);
+      }
+    };
+
     ExpoLinking.getInitialURL().then((url) => {
-      if (url) extractAndStoreReferralCode(url);
+      if (url) processUrl(url);
     });
     const sub = ExpoLinking.addEventListener('url', ({ url }) => {
-      extractAndStoreReferralCode(url);
+      processUrl(url);
     });
     return () => sub.remove();
   }, []);

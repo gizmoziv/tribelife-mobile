@@ -58,11 +58,15 @@ function SendIcon() {
 }
 
 export default function DMThreadScreen() {
-  const { conversationId: rawId, handle } = useLocalSearchParams<{
+  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName } = useLocalSearchParams<{
     conversationId: string;
     handle?: string;
+    isGroup?: string;
+    groupName?: string;
   }>();
   const conversationId = parseInt(rawId);
+  const isGroup = rawIsGroup === 'true';
+  const groupName = rawGroupName ?? '';
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
@@ -133,10 +137,32 @@ export default function DMThreadScreen() {
   }, [navigation, colors]);
 
   useEffect(() => {
-    if (handle) navigation.setOptions({ title: `@${handle} & You` });
-  }, [handle]);
+    if (isGroup && groupName) {
+      navigation.setOptions({ title: groupName });
+    } else if (handle) {
+      navigation.setOptions({ title: `@${handle} & You` });
+    }
+  }, [handle, isGroup, groupName]);
 
   useEffect(() => {
+    if (isGroup) {
+      navigation.setOptions({
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => router.push(`/(app)/group/${conversationId}`)}
+            hitSlop={8}
+            style={{ paddingRight: 12 }}
+          >
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+              <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke={colors.textMuted} strokeWidth={1.5} />
+              <Path d="M12 16v-4M12 8h.01" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
+        ),
+      });
+      return;
+    }
+
     const otherMsg = messages.find((m) => m.senderId !== user?.id);
     const otherUserId = otherMsg?.senderId;
     const otherHandle = handle ?? otherMsg?.senderHandle ?? 'user';
@@ -187,13 +213,13 @@ export default function DMThreadScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [messages, handle, user?.id]);
+  }, [messages, handle, user?.id, isGroup, conversationId]);
 
   useEffect(() => {
     chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
-      if (!handle && msgs.length > 0) {
+      if (!isGroup && !handle && msgs.length > 0) {
         const otherMsg = msgs.find((m) => m.senderId !== user?.id);
         if (otherMsg?.senderHandle) {
           navigation.setOptions({ title: `@${otherMsg.senderHandle} & You` });
@@ -510,7 +536,8 @@ export default function DMThreadScreen() {
           isMe={isMe}
           onLongPress={handleLongPress}
           onReactionToggle={handleReactionToggle}
-          showAvatar={false}
+          showAvatar={isGroup}
+          onProfilePress={() => !isMe && item.senderHandle ? router.push(`/user/${item.senderHandle}`) : undefined}
           translatedContent={translations[item.id]?.text ?? null}
           showTranslation={translations[item.id]?.showing ?? false}
           onToggleTranslation={handleToggleTranslation}

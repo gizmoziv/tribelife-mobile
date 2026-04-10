@@ -622,36 +622,67 @@ function DMListPanel() {
       data={conversations}
       keyExtractor={(item) => item.conversationId.toString()}
       contentContainerStyle={{ paddingVertical: SPACING.sm }}
-      renderItem={({ item, index }) => (
-        <AnimatedEntry delay={index * 40}>
-          <SwipeableConversationRow
-            onDelete={() => handleHideConversation(item.conversationId)}
-          >
-            <TouchableOpacity
-              style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
-              onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
-              activeOpacity={0.7}
+      renderItem={({ item, index }) => {
+        const isGroup = item.isGroup === true;
+        const displayName = isGroup ? (item.groupName ?? 'Group') : `@${item.participantHandle}`;
+        const avatarName = isGroup ? (item.groupName ?? 'G') : (item.participantName ?? '?');
+        const avatarUrl = isGroup ? (item.groupIconUrl ?? undefined) : (item.participantAvatar ?? undefined);
+        const subtitle = isGroup
+          ? (item.lastMessage?.content ?? `${item.memberCount ?? 0} members`)
+          : (item.lastMessage?.content ?? 'Start a conversation');
+
+        return (
+          <AnimatedEntry delay={index * 40}>
+            <SwipeableConversationRow
+              onDelete={() => handleHideConversation(item.conversationId)}
             >
-              <AvatarCircle name={item.participantName ?? '?'} size={44} imageUrl={item.participantAvatar ?? undefined} />
-              <View style={{ flex: 1 }}>
-                <View style={styles.dmRowTop}>
-                  <Text style={[styles.dmName, { color: colors.text }]}>
-                    @{item.participantHandle}
+              <TouchableOpacity
+                style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
+                onPress={() => router.push({
+                  pathname: '/(app)/chat/[conversationId]',
+                  params: {
+                    conversationId: item.conversationId.toString(),
+                    handle: item.participantHandle,
+                    ...(isGroup ? { isGroup: 'true', groupName: item.groupName ?? '' } : {}),
+                  },
+                })}
+                activeOpacity={0.7}
+              >
+                <AvatarCircle name={avatarName} size={44} imageUrl={avatarUrl} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.dmRowTop}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                      <Text style={[styles.dmName, { color: colors.text }]} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                      {isGroup && (
+                        <View style={{
+                          backgroundColor: COLORS.primaryGlow,
+                          borderRadius: 6,
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                        }}>
+                          <Text style={{ fontSize: 10, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+                            GROUP
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {item.lastMessage && (
+                      <Text style={[styles.dmTime, { color: colors.textMuted }]}>
+                        {formatTime(item.lastMessage.createdAt)}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
+                    {subtitle}
                   </Text>
-                  {item.lastMessage && (
-                    <Text style={[styles.dmTime, { color: colors.textMuted }]}>
-                      {formatTime(item.lastMessage.createdAt)}
-                    </Text>
-                  )}
                 </View>
-                <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
-                  {item.lastMessage?.content ?? 'Start a conversation'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </SwipeableConversationRow>
-        </AnimatedEntry>
-      )}
+              </TouchableOpacity>
+            </SwipeableConversationRow>
+          </AnimatedEntry>
+        );
+      }}
       ListFooterComponent={<View style={{ height: tabBarSpace }} />}
     />
   );

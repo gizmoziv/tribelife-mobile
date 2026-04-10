@@ -405,6 +405,28 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
+        {/* Private Groups (Premium) */}
+        {user?.isPremium && (
+          <AnimatedEntry delay={120}>
+            <GlassCard>
+              <View style={styles.premiumInner}>
+                <Text style={[styles.premiumTitle, { color: colors.text }]}>
+                  Private Groups
+                </Text>
+                <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
+                  Create and manage private group chats for your community
+                </Text>
+                <PillButton
+                  title="Create Group"
+                  onPress={() => router.push('/(app)/group/create')}
+                  variant="primary"
+                  style={{ width: '100%' }}
+                />
+              </View>
+            </GlassCard>
+          </AnimatedEntry>
+        )}
+
         {/* Premium */}
         {!user?.isPremium && (
           <AnimatedEntry delay={120}>
@@ -416,7 +438,7 @@ export default function ProfileScreen() {
                     Upgrade to Premium
                   </Text>
                   <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
-                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Support the TribeLife community`}
+                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
                   </Text>
                   <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
                     TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period.
