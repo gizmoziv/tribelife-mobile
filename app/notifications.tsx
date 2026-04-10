@@ -93,7 +93,6 @@ export default function NotificationsScreen() {
         break;
       case 'new_dm':
         if (data.conversationId) {
-          router.back();
           router.push({
             pathname: '/(app)/chat/[conversationId]',
             params: { conversationId: data.conversationId.toString() },

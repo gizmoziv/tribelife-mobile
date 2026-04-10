@@ -10,6 +10,7 @@ import type {
   PublicProfile,
   GlobeRoom,
   GlobeMessage,
+  GroupMember,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -159,6 +160,25 @@ export const notificationsApi = {
   readAll: () => request('/api/notifications/read-all', { method: 'PUT' }),
 
   read: (id: number) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
+
+  getPreferences: () =>
+    request<{
+      mentionsPush: boolean;
+      timezoneChatPush: boolean;
+      beaconMatchesPush: boolean;
+      dmPush: boolean;
+    }>('/api/notifications/preferences'),
+
+  updatePreferences: (prefs: {
+    mentionsPush?: boolean;
+    timezoneChatPush?: boolean;
+    beaconMatchesPush?: boolean;
+    dmPush?: boolean;
+  }) =>
+    request('/api/notifications/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    }),
 };
 
 // ── Support ───────────────────────────────────────────────────────────────
@@ -209,6 +229,33 @@ export const reactionsApi = {
 // ── Referrals ─────────────────────────────────────────────────────────────
 export const referralsApi = {
   getStats: () => request<{ totalReferrals: number; premiumMonthsEarned: number }>('/api/referrals/stats'),
+};
+
+// ── Groups ─────────────────────────────────────────────────────────────────
+export const groupsApi = {
+  create: (name: string, slug?: string) =>
+    request<{ conversation: { id: number; groupName: string; inviteSlug: string; createdAt: string } }>(
+      '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug }) }),
+
+  getInfo: (slug: string) =>
+    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; memberCount: number; isMember: boolean; createdAt: string } }>(
+      `/api/chat/groups/${slug}`),
+
+  join: (slug: string) =>
+    request<{ conversation: { id: number; groupName: string } }>(
+      `/api/chat/groups/${slug}/join`, { method: 'POST' }),
+
+  update: (id: number, data: { name?: string; slug?: string; groupIconUrl?: string }) =>
+    request(`/api/chat/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  members: (id: number) =>
+    request<{ members: GroupMember[] }>(`/api/chat/groups/${id}/members`),
+
+  kickMember: (id: number, userId: number) =>
+    request(`/api/chat/groups/${id}/members/${userId}`, { method: 'DELETE' }),
+
+  leave: (id: number) =>
+    request(`/api/chat/groups/${id}/leave`, { method: 'POST' }),
 };
 
 // ── Globe ──────────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
+import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -57,11 +58,17 @@ function SendIcon() {
 }
 
 export default function DMThreadScreen() {
-  const { conversationId: rawId, handle } = useLocalSearchParams<{
+  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug } = useLocalSearchParams<{
     conversationId: string;
     handle?: string;
+    isGroup?: string;
+    groupName?: string;
+    inviteSlug?: string;
   }>();
   const conversationId = parseInt(rawId);
+  const isGroup = rawIsGroup === 'true';
+  const groupName = rawGroupName ?? '';
+  const inviteSlug = rawInviteSlug ?? '';
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
@@ -88,6 +95,7 @@ export default function DMThreadScreen() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -131,10 +139,35 @@ export default function DMThreadScreen() {
   }, [navigation, colors]);
 
   useEffect(() => {
-    if (handle) navigation.setOptions({ title: `@${handle} & You` });
-  }, [handle]);
+    if (isGroup && groupName) {
+      navigation.setOptions({ title: groupName });
+    } else if (handle) {
+      navigation.setOptions({ title: `@${handle} & You` });
+    }
+  }, [handle, isGroup, groupName]);
 
   useEffect(() => {
+    if (isGroup) {
+      navigation.setOptions({
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => router.push({
+              pathname: '/(app)/group/[conversationId]',
+              params: { conversationId: conversationId.toString(), groupName, inviteSlug },
+            })}
+            hitSlop={8}
+            style={{ paddingRight: 12 }}
+          >
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+              <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke={colors.textMuted} strokeWidth={1.5} />
+              <Path d="M12 16v-4M12 8h.01" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
+        ),
+      });
+      return;
+    }
+
     const otherMsg = messages.find((m) => m.senderId !== user?.id);
     const otherUserId = otherMsg?.senderId;
     const otherHandle = handle ?? otherMsg?.senderHandle ?? 'user';
@@ -185,13 +218,13 @@ export default function DMThreadScreen() {
         </TouchableOpacity>
       ),
     });
-  }, [messages, handle, user?.id]);
+  }, [messages, handle, user?.id, isGroup, conversationId]);
 
   useEffect(() => {
     chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
-      if (!handle && msgs.length > 0) {
+      if (!isGroup && !handle && msgs.length > 0) {
         const otherMsg = msgs.find((m) => m.senderId !== user?.id);
         if (otherMsg?.senderHandle) {
           navigation.setOptions({ title: `@${otherMsg.senderHandle} & You` });
@@ -207,6 +240,13 @@ export default function DMThreadScreen() {
       if (msg.conversationId !== conversationId) return;
       setMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) return prev;
+        // Replace optimistic message (negative ID) from same sender with real one
+        const hasOptimistic = prev.some((m) => m.id < 0 && m.senderId === msg.senderId && m.content === msg.content);
+        if (hasOptimistic) {
+          return prev.map((m) =>
+            m.id < 0 && m.senderId === msg.senderId && m.content === msg.content ? msg : m
+          );
+        }
         return [...prev, msg];
       });
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -442,6 +482,7 @@ export default function DMThreadScreen() {
       setInput('');
       setReplyTo(null);
       stopTyping({ conversationId });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
       if (successfulUploads.length < uris.length) {
         Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
       }
@@ -458,11 +499,26 @@ export default function DMThreadScreen() {
     if (!content) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
+
+    // Optimistic insert — show message immediately
+    const optimisticMsg: Message = {
+      id: -(Date.now()),
+      content,
+      senderId: user?.id ?? 0,
+      senderHandle: user?.handle ?? '',
+      conversationId,
+      createdAt: new Date().toISOString(),
+      replyToId: replyToId ?? null,
+      replyTo: replyTo ?? null,
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
     sendDirectMessage(conversationId, content, replyToId);
     setInput('');
     setReplyTo(null);
     stopTyping({ conversationId });
-  }, [input, conversationId, replyTo]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  }, [input, conversationId, replyTo, user]);
 
   const handleInputChange = (text: string) => {
     setInput(text);
@@ -485,14 +541,17 @@ export default function DMThreadScreen() {
           isMe={isMe}
           onLongPress={handleLongPress}
           onReactionToggle={handleReactionToggle}
-          showAvatar={false}
+          showAvatar={isGroup}
+          onProfilePress={() => !isMe && item.senderHandle ? router.push(`/user/${item.senderHandle}`) : undefined}
           translatedContent={translations[item.id]?.text ?? null}
           showTranslation={translations[item.id]?.showing ?? false}
           onToggleTranslation={handleToggleTranslation}
+          onReplyPress={scrollToMessage}
+          highlighted={item.id === highlightedId}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage]);
 
   if (isLoading) {
     return (
@@ -511,12 +570,19 @@ export default function DMThreadScreen() {
       >
         <FlatList
           ref={flatListRef}
+          keyboardDismissMode="on-drag"
           data={messages}
           extraData={messages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => {}}
+          onContentSizeChange={() => {
+            if (!hasScrolledRef.current) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              hasScrolledRef.current = true;
+            }
+          }}
+          onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
         />
 
         {isTyping && (

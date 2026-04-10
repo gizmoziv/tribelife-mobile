@@ -146,7 +146,7 @@ export default function WelcomeScreen() {
   const features = [
     { icon: <ChatIcon />, text: 'Chat with people in your area' },
     { icon: <SparkleIcon />, text: 'Beacon — smart community matching' },
-    { icon: <ConnectIcon />, text: 'Connect one-on-one' },
+    { icon: <ConnectIcon />, text: 'Features you won\'t find anywhere else' },
   ];
 
   return (
@@ -162,7 +162,7 @@ export default function WelcomeScreen() {
 
         <Text style={[styles.title, { color: '#FFFFFF' }]}>TribeLife</Text>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>
-          Your community.{'\n'}Always within reach.
+          Our people are here.{'\n'}Just say what you need.
         </Text>
       </AnimatedEntry>
 

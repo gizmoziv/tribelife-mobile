@@ -126,14 +126,16 @@ export default function GlobeScreen() {
       .catch(() => {})
       .finally(() => setLoadingRooms(false));
 
+    const cleanups: (() => void)[] = [];
+
     connectSocket().then(() => {
       const offParticipants = onGlobeParticipants(({ slug, count }) => {
         updateParticipantCount(slug, count);
       });
-      return () => {
-        offParticipants();
-      };
+      cleanups.push(offParticipants);
     });
+
+    return () => { cleanups.forEach(fn => fn()); };
   }, []);
 
   const tabBarSpace = useTabBarSpace();

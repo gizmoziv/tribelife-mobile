@@ -19,11 +19,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
+import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi, reactionsApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi, groupsApi } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -112,6 +113,7 @@ function LocalChatPanel() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
@@ -130,6 +132,8 @@ function LocalChatPanel() {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
     }).catch(() => setIsLoading(false));
+
+    const cleanups: (() => void)[] = [];
 
     connectSocket().then(() => {
       const offRoom = onRoomMessage((msg) => {
@@ -166,8 +170,10 @@ function LocalChatPanel() {
         Alert.alert('Image Removed', data.message);
       });
 
-      return () => { offRoom(); offTypingStart(); offTypingStop(); offRejected(); offMediaRemoved(); offMediaRejected(); };
+      cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offMediaRemoved, offMediaRejected);
     });
+
+    return () => { cleanups.forEach(fn => fn()); };
   }, [roomId]);
 
   // ── Real-time reaction updates ──────────────────────────────────────────
@@ -371,10 +377,12 @@ function LocalChatPanel() {
           translatedContent={translations[item.id]?.text ?? null}
           showTranslation={translations[item.id]?.showing ?? false}
           onToggleTranslation={handleToggleTranslation}
+          onReplyPress={scrollToMessage}
+          highlighted={item.id === highlightedId}
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, router]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage]);
 
   if (isLoading) {
     return <LoadingState />;
@@ -392,12 +400,14 @@ function LocalChatPanel() {
 
       <FlatList
         ref={flatListRef}
+        keyboardDismissMode="on-drag"
         data={messages}
         extraData={messages}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
         onContentSizeChange={() => {}}
+        onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
       />
 
       {typingUsers.length > 0 && (
@@ -589,6 +599,30 @@ function DMListPanel() {
     }
   }, []);
 
+  const handleDeleteConversation = useCallback((item: Conversation) => {
+    if (item.isGroup) {
+      Alert.alert('Leave Group', `Leave "${item.groupName}"? You can rejoin via invite link.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setConversations((prev) => prev.filter((c) => c.conversationId !== item.conversationId));
+            try {
+              await groupsApi.leave(item.conversationId);
+            } catch {
+              chat.getConversations().then(({ conversations: convos }) => {
+                setConversations(convos);
+              }).catch(() => {});
+            }
+          },
+        },
+      ]);
+    } else {
+      handleHideConversation(item.conversationId);
+    }
+  }, [handleHideConversation]);
+
   if (isLoading) return <LoadingState />;
 
   if (conversations.length === 0) {
@@ -616,36 +650,67 @@ function DMListPanel() {
       data={conversations}
       keyExtractor={(item) => item.conversationId.toString()}
       contentContainerStyle={{ paddingVertical: SPACING.sm }}
-      renderItem={({ item, index }) => (
-        <AnimatedEntry delay={index * 40}>
-          <SwipeableConversationRow
-            onDelete={() => handleHideConversation(item.conversationId)}
-          >
-            <TouchableOpacity
-              style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
-              onPress={() => router.push({ pathname: '/(app)/chat/[conversationId]', params: { conversationId: item.conversationId.toString(), handle: item.participantHandle } })}
-              activeOpacity={0.7}
+      renderItem={({ item, index }) => {
+        const isGroup = item.isGroup === true;
+        const displayName = isGroup ? (item.groupName ?? 'Group') : `@${item.participantHandle}`;
+        const avatarName = isGroup ? (item.groupName ?? 'G') : (item.participantName ?? '?');
+        const avatarUrl = isGroup ? (item.groupIconUrl ?? undefined) : (item.participantAvatar ?? undefined);
+        const subtitle = isGroup
+          ? (item.lastMessage?.content ?? `${item.memberCount ?? 0} members`)
+          : (item.lastMessage?.content ?? 'Start a conversation');
+
+        return (
+          <AnimatedEntry delay={index * 40}>
+            <SwipeableConversationRow
+              onDelete={() => handleDeleteConversation(item)}
             >
-              <AvatarCircle name={item.participantName ?? '?'} size={44} imageUrl={item.participantAvatar ?? undefined} />
-              <View style={{ flex: 1 }}>
-                <View style={styles.dmRowTop}>
-                  <Text style={[styles.dmName, { color: colors.text }]}>
-                    @{item.participantHandle}
+              <TouchableOpacity
+                style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
+                onPress={() => router.push({
+                  pathname: '/(app)/chat/[conversationId]',
+                  params: {
+                    conversationId: item.conversationId.toString(),
+                    handle: item.participantHandle,
+                    ...(isGroup ? { isGroup: 'true', groupName: item.groupName ?? '', inviteSlug: item.inviteSlug ?? '' } : {}),
+                  },
+                })}
+                activeOpacity={0.7}
+              >
+                <AvatarCircle name={avatarName} size={44} imageUrl={avatarUrl} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.dmRowTop}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                      <Text style={[styles.dmName, { color: colors.text }]} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                      {isGroup && (
+                        <View style={{
+                          backgroundColor: COLORS.primaryGlow,
+                          borderRadius: 6,
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                        }}>
+                          <Text style={{ fontSize: 10, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+                            GROUP
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {item.lastMessage && (
+                      <Text style={[styles.dmTime, { color: colors.textMuted }]}>
+                        {formatTime(item.lastMessage.createdAt)}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
+                    {subtitle}
                   </Text>
-                  {item.lastMessage && (
-                    <Text style={[styles.dmTime, { color: colors.textMuted }]}>
-                      {formatTime(item.lastMessage.createdAt)}
-                    </Text>
-                  )}
                 </View>
-                <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
-                  {item.lastMessage?.content ?? 'Start a conversation'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </SwipeableConversationRow>
-        </AnimatedEntry>
-      )}
+              </TouchableOpacity>
+            </SwipeableConversationRow>
+          </AnimatedEntry>
+        );
+      }}
       ListFooterComponent={<View style={{ height: tabBarSpace }} />}
     />
   );

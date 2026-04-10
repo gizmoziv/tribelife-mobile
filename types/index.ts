@@ -47,6 +47,20 @@ export interface Conversation {
   participantAvatar: string | null;
   lastReadAt: string | null;
   lastMessage: { content: string; createdAt: string } | null;
+  isGroup?: boolean;
+  groupName?: string;
+  groupIconUrl?: string | null;
+  inviteSlug?: string;
+  memberCount?: number;
+}
+
+export interface GroupMember {
+  userId: number;
+  handle: string;
+  name: string;
+  avatarUrl: string | null;
+  role: string;
+  joinedAt: string;
 }
 
 export interface Beacon {

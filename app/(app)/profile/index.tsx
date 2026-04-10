@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,19 @@ import {
   ActivityIndicator,
   Linking,
   Share,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Purchases from 'react-native-purchases';
 import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, referralsApi } from '@/services/api';
+import { auth, referralsApi, notificationsApi } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
+import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
 import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
@@ -76,6 +79,62 @@ export default function ProfileScreen() {
       });
     } catch { /* user cancelled */ }
   };
+
+  // Notification preferences
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState({
+    mentionsPush: true,
+    timezoneChatPush: true,
+    beaconMatchesPush: true,
+    dmPush: true,
+  });
+
+  useEffect(() => {
+    // Check device push permission status
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      setPushEnabled(status === 'granted');
+    });
+    // Load server-side preferences
+    notificationsApi.getPreferences().then(setNotifPrefs).catch(() => {});
+  }, []);
+
+  const handleTogglePush = useCallback(async (value: boolean) => {
+    if (value) {
+      const token = await registerForPushNotifications();
+      if (token) {
+        await sendPushTokenToServer(token);
+        setPushEnabled(true);
+      } else {
+        Alert.alert(
+          'Notifications Disabled',
+          'Please enable notifications in your device Settings to receive alerts.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+      }
+    } else {
+      Alert.alert(
+        'Disable Notifications',
+        'To turn off push notifications, go to your device Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+    }
+  }, []);
+
+  const updateNotifPref = useCallback(async (key: keyof typeof notifPrefs, value: boolean) => {
+    setNotifPrefs(prev => ({ ...prev, [key]: value }));
+    try {
+      await notificationsApi.updatePreferences({ [key]: value });
+    } catch {
+      // Revert on failure
+      setNotifPrefs(prev => ({ ...prev, [key]: !value }));
+    }
+  }, []);
 
   async function handleAvatarUpload() {
     try {
@@ -164,6 +223,7 @@ export default function ProfileScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
+                      try { await Purchases.logOut(); } catch { /* ignore if not logged in */ }
                       await auth.deleteAccount();
                       disconnectSocket();
                       await logout();
@@ -279,6 +339,95 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
+        {/* Notifications */}
+        <AnimatedEntry delay={90}>
+          <SettingsSection title="Notifications">
+            <SettingsRow
+              label="Push Notifications"
+              right={
+                <Switch
+                  value={pushEnabled}
+                  onValueChange={handleTogglePush}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                />
+              }
+            />
+            <View style={{ paddingLeft: 16 }}>
+              <SettingsRow
+                label="Mentions"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.mentionsPush}
+                    onValueChange={(v) => updateNotifPref('mentionsPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Timezone Chat"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.timezoneChatPush}
+                    onValueChange={(v) => updateNotifPref('timezoneChatPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Beacon Matches"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.beaconMatchesPush}
+                    onValueChange={(v) => updateNotifPref('beaconMatchesPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Direct Messages"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.dmPush}
+                    onValueChange={(v) => updateNotifPref('dmPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+            </View>
+          </SettingsSection>
+        </AnimatedEntry>
+
+        {/* Private Groups (Premium) */}
+        {user?.isPremium && (
+          <AnimatedEntry delay={120}>
+            <GlassCard>
+              <View style={styles.premiumInner}>
+                <Text style={[styles.premiumTitle, { color: colors.text }]}>
+                  Private Groups
+                </Text>
+                <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
+                  Create and manage private group chats for your community
+                </Text>
+                <PillButton
+                  title="Create Group"
+                  onPress={() => router.push('/(app)/group/create')}
+                  variant="primary"
+                  style={{ width: '100%' }}
+                />
+              </View>
+            </GlassCard>
+          </AnimatedEntry>
+        )}
+
         {/* Premium */}
         {!user?.isPremium && (
           <AnimatedEntry delay={120}>
@@ -290,7 +439,7 @@ export default function ProfileScreen() {
                     Upgrade to Premium
                   </Text>
                   <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
-                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Support the TribeLife community`}
+                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
                   </Text>
                   <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
                     TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period.
@@ -324,8 +473,33 @@ export default function ProfileScreen() {
           </AnimatedEntry>
         )}
 
+        {/* Referrals */}
+        <AnimatedEntry delay={150}>
+          <GlassCard>
+            <View style={styles.referralSection}>
+              <Text style={[styles.referralTitle, { color: colors.text }]}>
+                Invite Friends
+              </Text>
+              <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
+              </Text>
+              <Text style={[styles.referralReward, { color: COLORS.primary }]}>
+                {premiumMonthsEarned > 0
+                  ? `${premiumMonthsEarned} of 12 premium months earned!`
+                  : 'Share to earn free premium months!'}
+              </Text>
+              <PillButton
+                title="Share TribeLife"
+                onPress={handleShare}
+                variant="primary"
+                style={{ marginTop: 12 }}
+              />
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
+
         {/* Account */}
-        <AnimatedEntry delay={180}>
+        <AnimatedEntry delay={240}>
           <SettingsSection title="Account">
             <SettingsRow
               label="Email"
@@ -354,7 +528,7 @@ export default function ProfileScreen() {
         </AnimatedEntry>
 
         {/* Help */}
-        <AnimatedEntry delay={240}>
+        <AnimatedEntry delay={300}>
           <SettingsSection title="Help">
             <TouchableOpacity
               style={[styles.row, { borderBottomColor: 'transparent' }]}
@@ -366,33 +540,8 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
-        {/* Referrals */}
-        <AnimatedEntry delay={270}>
-          <GlassCard>
-            <View style={styles.referralSection}>
-              <Text style={[styles.referralTitle, { color: colors.text }]}>
-                Invite Friends
-              </Text>
-              <Text style={[styles.referralCount, { color: colors.textMuted }]}>
-                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
-              </Text>
-              {premiumMonthsEarned > 0 && (
-                <Text style={[styles.referralReward, { color: COLORS.primary }]}>
-                  {premiumMonthsEarned} {premiumMonthsEarned === 1 ? 'month' : 'months'} of free Premium earned!
-                </Text>
-              )}
-              <PillButton
-                title="Share TribeLife"
-                onPress={handleShare}
-                variant="primary"
-                style={{ marginTop: 12 }}
-              />
-            </View>
-          </GlassCard>
-        </AnimatedEntry>
-
         {/* Session */}
-        <AnimatedEntry delay={300}>
+        <AnimatedEntry delay={360}>
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SESSION</Text>
             <PillButton
@@ -406,7 +555,7 @@ export default function ProfileScreen() {
           </View>
         </AnimatedEntry>
 
-        <AnimatedEntry delay={360}>
+        <AnimatedEntry delay={420}>
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DANGER ZONE</Text>
             <PillButton

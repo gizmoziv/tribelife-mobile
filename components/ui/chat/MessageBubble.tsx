@@ -17,6 +17,8 @@ interface MessageBubbleProps {
   onReactionToggle: (messageId: number, emoji: string) => void;
   showAvatar?: boolean;
   onProfilePress?: () => void;
+  onReplyPress?: (messageId: number) => void;
+  highlighted?: boolean;
   translatedContent?: string | null;
   showTranslation?: boolean;
   onToggleTranslation?: (messageId: number) => void;
@@ -29,6 +31,8 @@ export function MessageBubble({
   onReactionToggle,
   showAvatar = true,
   onProfilePress,
+  onReplyPress,
+  highlighted,
   translatedContent,
   showTranslation,
   onToggleTranslation,
@@ -72,7 +76,7 @@ export function MessageBubble({
   const reactions = message.reactions ?? [];
 
   return (
-    <View style={[styles.container, isMe && styles.containerMe]}>
+    <View style={[styles.container, isMe && styles.containerMe, highlighted && styles.highlighted]}>
       {/* Avatar */}
       {!isMe && showAvatar && (
         <TouchableOpacity onPress={onProfilePress} activeOpacity={0.7}>
@@ -106,7 +110,7 @@ export function MessageBubble({
             >
               {/* Reply preview inside bubble */}
               {replyTo && (
-                <View style={[styles.replyPreview, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+                <Pressable onPress={() => onReplyPress?.(replyTo.id)} style={[styles.replyPreview, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
                   <View style={[styles.replyBar, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                   <View style={styles.replyContent}>
                     <Text style={[styles.replyHandle, { color: 'rgba(255,255,255,0.8)' }]}>
@@ -119,7 +123,7 @@ export function MessageBubble({
                       {replyTo.content}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               )}
               {hasMedia && (
                 <View style={message.content ? styles.mediaWithText : undefined}>
@@ -156,7 +160,7 @@ export function MessageBubble({
             <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
               {/* Reply preview inside bubble */}
               {replyTo && (
-                <View style={[styles.replyPreview, { backgroundColor: colors.surface }]}>
+                <Pressable onPress={() => onReplyPress?.(replyTo.id)} style={[styles.replyPreview, { backgroundColor: colors.surface }]}>
                   <View style={[styles.replyBar, { backgroundColor: colors.primary, opacity: 0.6 }]} />
                   <View style={styles.replyContent}>
                     <Text style={[styles.replyHandle, { color: colors.primary }]}>
@@ -169,7 +173,7 @@ export function MessageBubble({
                       {replyTo.content}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               )}
               {hasMedia && (
                 <View style={message.content ? styles.mediaWithText : undefined}>
@@ -239,6 +243,12 @@ const styles = StyleSheet.create({
   containerMe: {
     alignSelf: 'flex-end',
     flexDirection: 'row-reverse',
+  },
+  highlighted: {
+    backgroundColor: 'rgba(232, 146, 47, 0.15)',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    marginHorizontal: -4,
   },
   bubbleWrap: {
     flexShrink: 1,

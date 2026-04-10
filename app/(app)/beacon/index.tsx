@@ -17,10 +17,10 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { beacons as beaconsApi } from '@/services/api';
+import { beacons as beaconsApi, chat } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -43,7 +43,8 @@ type Tab = 'beacons' | 'matches';
 
 export default function BeaconScreen() {
   const { colors } = useTheme();
-  const [activeTab, setActiveTab] = useState<Tab>('beacons');
+  const { tab } = useLocalSearchParams<{ tab?: string }>();
+  const [activeTab, setActiveTab] = useState<Tab>(tab === 'matches' ? 'matches' : 'beacons');
   const tabIndex = activeTab === 'beacons' ? 0 : 1;
 
   // Lift match state here so it survives tab switches (MatchesPanel unmounting)
@@ -181,7 +182,7 @@ function MyBeaconsPanel() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
       {/* Explainer */}
       <AnimatedEntry>
         <GlassCard glowColor={COLORS.borderGlow}>
@@ -399,10 +400,15 @@ function MatchesPanel({
             match={item}
             onMessage={async () => {
               if (!item.matchedUser) return;
-              router.push({
-                pathname: '/(app)/chat/[conversationId]',
-                params: { conversationId: item.matchedUser.userId, handle: item.matchedUser.userHandle },
-              });
+              try {
+                const { conversationId } = await chat.getOrCreateConversation(item.matchedUser.userId);
+                router.push({
+                  pathname: '/(app)/chat/[conversationId]',
+                  params: { conversationId: conversationId.toString(), handle: item.matchedUser.userHandle },
+                });
+              } catch {
+                Alert.alert('Error', 'Could not start conversation. Please try again.');
+              }
             }}
             onViewProfile={() => {
               if (item.matchedUser?.userHandle) {

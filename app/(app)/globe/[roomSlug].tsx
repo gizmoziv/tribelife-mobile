@@ -23,6 +23,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { chat, globeApi, reactionsApi } from '@/services/api';
@@ -147,6 +148,7 @@ export default function GlobeRoomChat() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasInitialScrolled = useRef(false);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -253,13 +255,13 @@ export default function GlobeRoomChat() {
     });
 
     const offMediaRemoved = onMediaRemoved((data) => {
-      const updatedMsgs = messages.map((msg) => {
+      const current = useGlobeStore.getState().messages;
+      setMessages(current.map((msg) => {
         if (msg.id === data.messageId) {
           return { ...msg, mediaUrls: data.remainingUrls.length > 0 ? data.remainingUrls : null };
         }
         return msg;
-      });
-      setMessages(updatedMsgs);
+      }));
     });
 
     const offMediaRejected = onMediaRejected((data) => {
@@ -300,7 +302,8 @@ export default function GlobeRoomChat() {
       if (data.userId === user?.id) return;
 
       // Update messages in the globe store
-      const updatedMessages = messages.map((msg) => {
+      const current = useGlobeStore.getState().messages;
+      setMessages(current.map((msg) => {
         if (msg.id !== data.messageId) return msg;
         const reactions = [...(msg.reactions ?? [])];
         const idx = reactions.findIndex((r) => r.emoji === data.emoji);
@@ -338,12 +341,11 @@ export default function GlobeRoomChat() {
         }
 
         return { ...msg, reactions };
-      });
-      setMessages(updatedMessages);
+      }));
     });
 
     return () => { offReaction(); };
-  }, [globeRoomId, user?.id, messages, setMessages]);
+  }, [globeRoomId, user?.id, setMessages]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
   const handleLongPress = useCallback((message: Message | GlobeMessage) => {
@@ -354,8 +356,9 @@ export default function GlobeRoomChat() {
   const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
     const userId = user?.id;
     if (!userId) return;
+    const current = useGlobeStore.getState().messages;
     setMessages(
-      messages.map((msg) => {
+      current.map((msg) => {
         if (msg.id !== messageId) return msg;
         const reactions = [...(msg.reactions ?? [])];
         const idx = reactions.findIndex((r) => r.emoji === emoji);
@@ -381,7 +384,7 @@ export default function GlobeRoomChat() {
         return { ...msg, reactions };
       }),
     );
-  }, [user?.id, messages, setMessages]);
+  }, [user?.id, setMessages]);
 
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;
@@ -579,11 +582,13 @@ export default function GlobeRoomChat() {
             translatedContent={translations[item.id]?.text ?? null}
             showTranslation={translations[item.id]?.showing ?? false}
             onToggleTranslation={handleToggleTranslation}
+            onReplyPress={scrollToMessage}
+            highlighted={item.id === highlightedId}
           />
         </SwipeableMessage>
       );
     },
-    [user?.id, handleLongPress, handleReactionToggle, translations, router],
+    [user?.id, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────
@@ -662,6 +667,7 @@ export default function GlobeRoomChat() {
         {/* Message list */}
         <FlatList
           ref={flatListRef}
+          keyboardDismissMode="on-drag"
           data={messages}
           extraData={messages}
           keyExtractor={(item) => item.id.toString()}
@@ -678,6 +684,7 @@ export default function GlobeRoomChat() {
           onScroll={handleScroll}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
+          onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
           onEndReachedThreshold={0.3}
           maxToRenderPerBatch={15}
           windowSize={10}
