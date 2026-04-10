@@ -58,15 +58,17 @@ function SendIcon() {
 }
 
 export default function DMThreadScreen() {
-  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName } = useLocalSearchParams<{
+  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug } = useLocalSearchParams<{
     conversationId: string;
     handle?: string;
     isGroup?: string;
     groupName?: string;
+    inviteSlug?: string;
   }>();
   const conversationId = parseInt(rawId);
   const isGroup = rawIsGroup === 'true';
   const groupName = rawGroupName ?? '';
+  const inviteSlug = rawInviteSlug ?? '';
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
@@ -149,7 +151,10 @@ export default function DMThreadScreen() {
       navigation.setOptions({
         headerRight: () => (
           <TouchableOpacity
-            onPress={() => router.push(`/(app)/group/${conversationId}`)}
+            onPress={() => router.push({
+              pathname: '/(app)/group/[conversationId]',
+              params: { conversationId: conversationId.toString(), groupName, inviteSlug },
+            })}
             hitSlop={8}
             style={{ paddingRight: 12 }}
           >

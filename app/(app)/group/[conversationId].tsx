@@ -24,8 +24,14 @@ import type { GroupMember } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 export default function GroupInfoScreen() {
-  const { conversationId: rawId } = useLocalSearchParams<{ conversationId: string }>();
+  const { conversationId: rawId, groupName: rawGroupName, inviteSlug: rawSlug } = useLocalSearchParams<{
+    conversationId: string;
+    groupName?: string;
+    inviteSlug?: string;
+  }>();
   const conversationId = parseInt(rawId);
+  const groupName = rawGroupName ?? '';
+  const inviteSlug = rawSlug ?? '';
   const { colors } = useTheme();
   const { user } = useAuthStore();
   const router = useRouter();
@@ -47,12 +53,12 @@ export default function GroupInfoScreen() {
   const handleShare = useCallback(async () => {
     // We need the invite slug — find it from conversation list or use a fallback
     try {
-      const url = `https://tribelife.app/g/${conversationId}`;
+      const url = `https://tribelife.app/g/${inviteSlug}`;
       await Share.share({
         message: `Join our group on TribeLife!\n${url}`,
       });
     } catch { /* user cancelled */ }
-  }, [conversationId]);
+  }, [inviteSlug]);
 
   const handleKick = useCallback((memberId: number, memberHandle: string) => {
     Alert.alert(
@@ -136,7 +142,7 @@ export default function GroupInfoScreen() {
           <GlassCard>
             <View style={styles.overviewInner}>
               <AvatarCircle name="G" size={64} />
-              <Text style={[styles.groupName, { color: colors.text }]}>Group Chat</Text>
+              <Text style={[styles.groupName, { color: colors.text }]}>{groupName || 'Group Chat'}</Text>
               <Text style={[styles.memberCountText, { color: colors.textMuted }]}>
                 {members.length} {members.length === 1 ? 'member' : 'members'}
               </Text>

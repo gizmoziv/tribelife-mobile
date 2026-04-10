@@ -24,7 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi, reactionsApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi, groupsApi } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -595,6 +595,30 @@ function DMListPanel() {
     }
   }, []);
 
+  const handleDeleteConversation = useCallback((item: Conversation) => {
+    if (item.isGroup) {
+      Alert.alert('Leave Group', `Leave "${item.groupName}"? You can rejoin via invite link.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setConversations((prev) => prev.filter((c) => c.conversationId !== item.conversationId));
+            try {
+              await groupsApi.leave(item.conversationId);
+            } catch {
+              chat.getConversations().then(({ conversations: convos }) => {
+                setConversations(convos);
+              }).catch(() => {});
+            }
+          },
+        },
+      ]);
+    } else {
+      handleHideConversation(item.conversationId);
+    }
+  }, [handleHideConversation]);
+
   if (isLoading) return <LoadingState />;
 
   if (conversations.length === 0) {
@@ -634,7 +658,7 @@ function DMListPanel() {
         return (
           <AnimatedEntry delay={index * 40}>
             <SwipeableConversationRow
-              onDelete={() => handleHideConversation(item.conversationId)}
+              onDelete={() => handleDeleteConversation(item)}
             >
               <TouchableOpacity
                 style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
@@ -643,7 +667,7 @@ function DMListPanel() {
                   params: {
                     conversationId: item.conversationId.toString(),
                     handle: item.participantHandle,
-                    ...(isGroup ? { isGroup: 'true', groupName: item.groupName ?? '' } : {}),
+                    ...(isGroup ? { isGroup: 'true', groupName: item.groupName ?? '', inviteSlug: item.inviteSlug ?? '' } : {}),
                   },
                 })}
                 activeOpacity={0.7}

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuthStore } from '@/store/authStore';
 import { groupsApi } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -30,6 +31,7 @@ function slugify(text: string): string {
 
 export default function CreateGroupScreen() {
   const { colors } = useTheme();
+  const { user } = useAuthStore();
   const router = useRouter();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -80,6 +82,40 @@ export default function CreateGroupScreen() {
       router.replace('/(app)/profile');
     }
   };
+
+  if (!user?.isPremium) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={goBack} hitSlop={8} style={styles.backButton}>
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+              <Path d="M15 18l-6-6 6-6" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Create Group</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={styles.content}>
+          <AnimatedEntry>
+            <GlassCard>
+              <View style={styles.formInner}>
+                <Text style={[styles.label, { color: colors.text, textAlign: 'center', fontSize: 16 }]}>
+                  Upgrade to Premium to create private groups
+                </Text>
+                <PillButton
+                  title="Upgrade"
+                  onPress={() => router.push('/(app)/profile')}
+                  variant="primary"
+                  size="lg"
+                  style={{ width: '100%', marginTop: SPACING.lg }}
+                />
+              </View>
+            </GlassCard>
+          </AnimatedEntry>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>

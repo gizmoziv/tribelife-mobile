@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ExpoLinking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -50,20 +50,39 @@ async function handleGroupInvite(slug: string, router: ReturnType<typeof useRout
   try {
     const token = await getToken();
     if (!token) {
-      // Not authenticated — store for later
       await AsyncStorage.setItem('pendingGroupSlug', slug);
       return;
     }
-    const { conversation } = await groupsApi.join(slug);
-    router.push({
-      pathname: '/(app)/chat/[conversationId]',
-      params: {
-        conversationId: conversation.id.toString(),
-        isGroup: 'true',
-        groupName: conversation.groupName,
-      },
-    });
-  } catch { /* silent — group may not exist or already joined */ }
+    const { group } = await groupsApi.getInfo(slug);
+    if (group.isMember) {
+      router.push({
+        pathname: '/(app)/chat/[conversationId]',
+        params: { conversationId: group.id.toString(), isGroup: 'true', groupName: group.groupName, inviteSlug: group.inviteSlug },
+      });
+      return;
+    }
+    Alert.alert(
+      'Join Group',
+      `Join "${group.groupName}" (${group.memberCount} members)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Join',
+          onPress: async () => {
+            try {
+              const { conversation } = await groupsApi.join(slug);
+              router.push({
+                pathname: '/(app)/chat/[conversationId]',
+                params: { conversationId: conversation.id.toString(), isGroup: 'true', groupName: conversation.groupName, inviteSlug: slug },
+              });
+            } catch { Alert.alert('Error', 'Could not join this group.'); }
+          },
+        },
+      ]
+    );
+  } catch {
+    Alert.alert('Error', 'This group was not found.');
+  }
 }
 
 // Configure RevenueCat
@@ -163,7 +182,13 @@ function RootLayoutInner() {
       if (data?.type === 'mention' && data?.roomId) {
         router.push('/(app)/chat');
       } else if (data?.type === 'new_dm' && data?.conversationId) {
-        router.push(`/(app)/chat/${data.conversationId}`);
+        router.push({
+          pathname: '/(app)/chat/[conversationId]',
+          params: {
+            conversationId: String(data.conversationId),
+            ...(data.isGroup ? { isGroup: 'true', groupName: String(data.groupName ?? '') } : {}),
+          },
+        });
       } else if (data?.type === 'beacon_match') {
         router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
       }
