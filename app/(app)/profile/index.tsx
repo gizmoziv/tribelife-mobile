@@ -12,6 +12,9 @@ import {
   Linking,
   Share,
   Platform,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Purchases from 'react-native-purchases';
@@ -73,30 +76,33 @@ export default function ProfileScreen() {
     loadMyGroups();
   }, [loadMyGroups]);
 
+  const [renameTarget, setRenameTarget] = useState<{ id: number; groupName: string } | null>(null);
+  const [renameInput, setRenameInput] = useState('');
+  const [isSavingRename, setIsSavingRename] = useState(false);
+
   const handleRenameGroup = useCallback((group: { id: number; groupName: string }) => {
-    Alert.prompt(
-      'Rename Group',
-      'Enter a new name for this group.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: async (newName?: string) => {
-            const trimmed = newName?.trim();
-            if (!trimmed || trimmed === group.groupName) return;
-            try {
-              await groupsApi.update(group.id, { name: trimmed });
-              setMyGroups(prev => prev.map(g => g.id === group.id ? { ...g, groupName: trimmed } : g));
-            } catch {
-              Alert.alert('Error', 'Could not rename the group.');
-            }
-          },
-        },
-      ],
-      'plain-text',
-      group.groupName,
-    );
+    setRenameInput(group.groupName);
+    setRenameTarget(group);
   }, []);
+
+  const handleSaveRename = useCallback(async () => {
+    if (!renameTarget) return;
+    const trimmed = renameInput.trim();
+    if (!trimmed || trimmed === renameTarget.groupName) {
+      setRenameTarget(null);
+      return;
+    }
+    setIsSavingRename(true);
+    try {
+      await groupsApi.update(renameTarget.id, { name: trimmed });
+      setMyGroups(prev => prev.map(g => g.id === renameTarget.id ? { ...g, groupName: trimmed } : g));
+      setRenameTarget(null);
+    } catch {
+      Alert.alert('Error', 'Could not rename the group.');
+    } finally {
+      setIsSavingRename(false);
+    }
+  }, [renameTarget, renameInput]);
 
   useEffect(() => {
     referralsApi.getStats()
@@ -659,9 +665,101 @@ export default function ProfileScreen() {
 
         <View style={{ height: tabBarSpace }} />
       </ScrollView>
+
+      <Modal
+        visible={renameTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameTarget(null)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={renameStyles.backdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setRenameTarget(null)}
+          />
+          <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[renameStyles.title, { color: colors.text }]}>Rename Group</Text>
+            <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+              Enter a new name for this group.
+            </Text>
+            <TextInput
+              value={renameInput}
+              onChangeText={setRenameInput}
+              placeholder="Group name"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              maxLength={50}
+              style={[renameStyles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceGlass }]}
+              onSubmitEditing={handleSaveRename}
+              returnKeyType="done"
+            />
+            <View style={renameStyles.actions}>
+              <TouchableOpacity
+                onPress={() => setRenameTarget(null)}
+                style={[renameStyles.button, { borderColor: colors.border }]}
+                disabled={isSavingRename}
+              >
+                <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveRename}
+                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                disabled={isSavingRename || !renameInput.trim()}
+              >
+                {isSavingRename ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+const renameStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.page,
+  },
+  card: {
+    width: '100%',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    padding: SPACING.md,
+    gap: 12,
+  },
+  title: { fontSize: 18, fontFamily: FONTS.semiBold },
+  subtitle: { fontSize: 13, fontFamily: FONTS.regular },
+  input: {
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+  },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  button: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    minWidth: 84,
+    alignItems: 'center',
+  },
+  buttonText: { fontSize: 14, fontFamily: FONTS.semiBold },
+});
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   const { colors } = useTheme();
