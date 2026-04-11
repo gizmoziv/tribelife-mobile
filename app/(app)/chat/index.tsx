@@ -21,7 +21,7 @@ import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi, groupsApi } from '@/services/api';
@@ -569,12 +569,14 @@ function DMListPanel() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    chat.getConversations().then(({ conversations: convos }) => {
-      setConversations(convos);
-      setIsLoading(false);
-    }).catch(() => setIsLoading(false));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      chat.getConversations().then(({ conversations: convos }) => {
+        setConversations(convos);
+        setIsLoading(false);
+      }).catch(() => setIsLoading(false));
+    }, [])
+  );
 
   // Refetch conversations when a DM arrives (handles unhide case)
   useEffect(() => {

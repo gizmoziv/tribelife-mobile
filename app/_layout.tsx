@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
 import { Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import * as ExpoLinking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Purchases from 'react-native-purchases';
@@ -35,6 +36,32 @@ function extractAndStoreReferralCode(url: string) {
       AsyncStorage.setItem('referralCode', ref.toLowerCase());
     }
   } catch { /* ignore parse errors */ }
+}
+
+/**
+ * Recover a referral code left on the clipboard by the /invite interstitial
+ * page. Runs ONCE per install (guarded by a flag) and only when the user is
+ * not yet authenticated, to avoid inspecting the clipboard on every launch.
+ */
+async function recoverReferralCodeFromClipboard() {
+  try {
+    const alreadyChecked = await AsyncStorage.getItem('clipboardRefChecked');
+    if (alreadyChecked) return;
+    await AsyncStorage.setItem('clipboardRefChecked', '1');
+
+    const hasString = await Clipboard.hasStringAsync();
+    if (!hasString) return;
+
+    const content = await Clipboard.getStringAsync();
+    const match = content?.match(/^tribelife-ref:([a-zA-Z0-9_-]+)$/);
+    if (!match) return;
+
+    const ref = match[1].toLowerCase();
+    await AsyncStorage.setItem('referralCode', ref);
+
+    // Clear the clipboard so the user doesn't accidentally paste it elsewhere
+    await Clipboard.setStringAsync('');
+  } catch { /* ignore clipboard errors */ }
 }
 
 function extractGroupSlug(url: string): string | null {
@@ -113,6 +140,11 @@ function RootLayoutInner() {
     async function restoreSession() {
       try {
         const token = await getToken();
+        // First launch without a session: recover a referral code the
+        // /invite interstitial may have left on the clipboard.
+        if (!token) {
+          await recoverReferralCodeFromClipboard();
+        }
         if (token) {
           const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
           const { user } = await auth.me(deviceTimezone);

@@ -10,11 +10,15 @@ import {
   Alert,
   ActivityIndicator,
   Share,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { groupsApi } from '@/services/api';
+import { requestGroupIconUploadUrl, uploadToSpaces, confirmGroupIconUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
@@ -39,6 +43,8 @@ export default function GroupInfoScreen() {
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [groupIconUrl, setGroupIconUrl] = useState<string | null>(null);
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
 
   const currentMember = members.find((m) => m.userId === user?.id);
   const isAdmin = currentMember?.role === 'admin';
@@ -49,6 +55,53 @@ export default function GroupInfoScreen() {
       setIsLoading(false);
     }).catch(() => setIsLoading(false));
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!inviteSlug) return;
+    groupsApi.getInfo(inviteSlug)
+      .then(({ group }) => setGroupIconUrl(group.groupIconUrl ?? null))
+      .catch(() => {});
+  }, [inviteSlug]);
+
+  const handleUploadIcon = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        Alert.alert('Permission needed', 'Please allow access to your photo library to upload a group icon.');
+        return;
+      }
+
+      const pickResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (pickResult.canceled) return;
+
+      setIsUploadingIcon(true);
+
+      const processed = await manipulateAsync(
+        pickResult.assets[0].uri,
+        [{ resize: { width: 500, height: 500 } }],
+        { compress: 0.8, format: SaveFormat.JPEG },
+      );
+
+      // Optimistic preview
+      setGroupIconUrl(processed.uri);
+
+      const { uploadUrl, key } = await requestGroupIconUploadUrl(conversationId);
+      await uploadToSpaces(uploadUrl, processed.uri);
+      const { groupIconUrl: cdnUrl } = await confirmGroupIconUpload(conversationId, key);
+      setGroupIconUrl(cdnUrl);
+    } catch (err: any) {
+      Alert.alert('Upload failed', err?.message ?? 'Could not upload the group icon. Please try again.');
+    } finally {
+      setIsUploadingIcon(false);
+    }
+  }, [isAdmin, conversationId]);
 
   const handleRename = useCallback(() => {
     Alert.prompt(
@@ -166,7 +219,31 @@ export default function GroupInfoScreen() {
         <AnimatedEntry>
           <GlassCard>
             <View style={styles.overviewInner}>
-              <AvatarCircle name="G" size={64} />
+              <TouchableOpacity
+                onPress={handleUploadIcon}
+                disabled={!isAdmin || isUploadingIcon}
+                activeOpacity={isAdmin ? 0.7 : 1}
+              >
+                <View>
+                  <AvatarCircle
+                    name={groupName || 'G'}
+                    size={72}
+                    imageUrl={groupIconUrl ?? undefined}
+                  />
+                  {isAdmin && (
+                    <View style={[styles.cameraBadge, { borderColor: colors.background }]}>
+                      {isUploadingIcon ? (
+                        <ActivityIndicator size={12} color="#fff" />
+                      ) : (
+                        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                          <Path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                          <Path d="M12 17a4 4 0 100-8 4 4 0 000 8z" stroke="#fff" strokeWidth={2} />
+                        </Svg>
+                      )}
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
               <Text style={[styles.groupName, { color: colors.text }]}>{groupName || 'Group Chat'}</Text>
               <Text style={[styles.memberCountText, { color: colors.textMuted }]}>
                 {members.length} {members.length === 1 ? 'member' : 'members'}
@@ -297,6 +374,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingVertical: 8,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
   },
   groupName: {
     fontSize: 20,

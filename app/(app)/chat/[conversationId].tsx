@@ -158,9 +158,10 @@ export default function DMThreadScreen() {
             hitSlop={8}
             style={{ paddingRight: 12 }}
           >
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-              <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke={colors.textMuted} strokeWidth={1.5} />
-              <Path d="M12 16v-4M12 8h.01" stroke={colors.textMuted} strokeWidth={2} strokeLinecap="round" />
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="M12 6.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
+              <Path d="M12 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
+              <Path d="M12 20.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
             </Svg>
           </TouchableOpacity>
         ),

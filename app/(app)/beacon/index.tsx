@@ -34,7 +34,14 @@ import Svg, { Path } from 'react-native-svg';
 function FlameIcon({ size = 18 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 22c4.97 0 8-3.03 8-7 0-2-1-3.5-2-5-1.5 1-2 2-2 2s-1-2-2-4c-1.5 2-3 4-3 7 0 1-1 2-2 2s-2-1-2-2c0-2.5 2-5 3-6-2 0-4 2-5 4-1 2-1 3-1 4 0 3.97 3.03 7 8 7z" stroke="#F59E0B" strokeWidth={1.5} fill="rgba(245,158,11,0.15)" strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M12 22c4.97 0 8-3.03 8-7 0-2-1-3.5-2-5-1.5 1-2 2-2 2s-1-2-2-4c-1.5 2-3 4-3 7 0 1-1 2-2 2s-2-1-2-2c0-2.5 2-5 3-6-2 0-4 2-5 4-1 2-1 3-1 4 0 3.97 3.03 7 8 7z"
+        stroke="#F59E0B"
+        strokeWidth={1.5}
+        fill="rgba(245,158,11,0.15)"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -44,7 +51,9 @@ type Tab = 'beacons' | 'matches';
 export default function BeaconScreen() {
   const { colors } = useTheme();
   const { tab } = useLocalSearchParams<{ tab?: string }>();
-  const [activeTab, setActiveTab] = useState<Tab>(tab === 'matches' ? 'matches' : 'beacons');
+  const [activeTab, setActiveTab] = useState<Tab>(
+    tab === 'matches' ? 'matches' : 'beacons',
+  );
   const tabIndex = activeTab === 'beacons' ? 0 : 1;
 
   // Lift match state here so it survives tab switches (MatchesPanel unmounting)
@@ -52,18 +61,20 @@ export default function BeaconScreen() {
   const [matchesLoading, setMatchesLoading] = useState(true);
 
   useEffect(() => {
-    beaconsApi.getMatches().then(({ matches: m }) => {
-      setMatches(m);
-      setMatchesLoading(false);
-    }).catch(() => setMatchesLoading(false));
+    beaconsApi
+      .getMatches()
+      .then(({ matches: m }) => {
+        setMatches(m);
+        setMatchesLoading(false);
+      })
+      .catch(() => setMatchesLoading(false));
   }, []);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior="padding"
-      >
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <View style={styles.toggleContainer}>
           <PillToggle
             options={['My Beacons', 'Matches']}
@@ -114,14 +125,17 @@ function MyBeaconsPanel() {
     try {
       const { beacons } = await beaconsApi.mine();
       setMyBeacons(beacons);
-    } catch { }
+    } catch {}
     setIsLoading(false);
   };
 
   const handleSubmit = async () => {
     const text = inputText.trim();
     if (!text || text.length < 10) {
-      Alert.alert('Too Short', 'Please describe your beacon in at least 10 characters.');
+      Alert.alert(
+        'Too Short',
+        'Please describe your beacon in at least 10 characters.',
+      );
       return;
     }
 
@@ -133,7 +147,7 @@ function MyBeaconsPanel() {
       Alert.alert(
         'Beacon Lit!',
         "Your beacon has been posted. We'll notify you when we find a match.",
-        [{ text: 'Great!' }]
+        [{ text: 'Great!' }],
       );
     } catch (err: any) {
       if (err.data?.upgradeRequired) {
@@ -143,13 +157,13 @@ function MyBeaconsPanel() {
           [
             { text: 'Not Now', style: 'cancel' },
             { text: 'Upgrade', onPress: () => router.push('/(app)/profile') },
-          ]
+          ],
         );
       } else {
         Alert.alert(
           'Beacon Not Posted',
           err.message ?? 'Something went wrong. Please try again.',
-          [{ text: 'OK' }]
+          [{ text: 'OK' }],
         );
       }
     } finally {
@@ -158,19 +172,25 @@ function MyBeaconsPanel() {
   };
 
   const handleDeactivate = async (beaconId: number) => {
-    Alert.alert('Remove Beacon', 'Are you sure you want to remove this beacon?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await beaconsApi.deactivate(beaconId);
-          setMyBeacons((prev) =>
-            prev.map((b) => (b.id === beaconId ? { ...b, isActive: false } : b))
-          );
+    Alert.alert(
+      'Remove Beacon',
+      'Are you sure you want to remove this beacon?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await beaconsApi.deactivate(beaconId);
+            setMyBeacons((prev) =>
+              prev.map((b) =>
+                b.id === beaconId ? { ...b, isActive: false } : b,
+              ),
+            );
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   if (isLoading) {
@@ -182,7 +202,12 @@ function MyBeaconsPanel() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets
+    >
       {/* Explainer */}
       <AnimatedEntry>
         <GlassCard glowColor={COLORS.borderGlow}>
@@ -190,9 +215,13 @@ function MyBeaconsPanel() {
             <View style={styles.explainerIconWrap}>
               <FlameIcon size={28} />
             </View>
-            <Text style={[styles.explainerTitle, { color: colors.text }]}>What is a Beacon?</Text>
+            <Text style={[styles.explainerTitle, { color: colors.text }]}>
+              What is a Beacon?
+            </Text>
             <Text style={[styles.explainerBody, { color: colors.textMuted }]}>
-              A beacon is a short description of something you're looking for or offering. Every 24 hours, we match your beacon with others in your timezone using AI.
+              A beacon is a short description of something you're looking for or
+              offering. Every 24 hours, we match your beacon with others in your
+              timezone.
             </Text>
             <GlowBadge
               text={`${activeBeacons.length}/${limit} beacons active${!isPremium ? ' (Free plan)' : ''}`}
@@ -206,9 +235,21 @@ function MyBeaconsPanel() {
       {/* Input */}
       {canAddMore ? (
         <AnimatedEntry delay={100} style={styles.inputSection}>
-          <View style={[styles.beaconInput, { backgroundColor: colors.surfaceGlass, borderColor: inputText.length >= 10 ? COLORS.accent : colors.border }]}>
+          <View
+            style={[
+              styles.beaconInput,
+              {
+                backgroundColor: colors.surfaceGlass,
+                borderColor:
+                  inputText.length >= 10 ? COLORS.accent : colors.border,
+              },
+            ]}
+          >
             <TextInput
-              style={[styles.beaconInputText, { color: colors.text, fontFamily: FONTS.regular }]}
+              style={[
+                styles.beaconInputText,
+                { color: colors.text, fontFamily: FONTS.regular },
+              ]}
               placeholder="e.g. I want to find people to play chess in the evenings"
               placeholderTextColor={colors.textMuted}
               value={inputText}
@@ -223,7 +264,11 @@ function MyBeaconsPanel() {
                 {showExamples ? 'Hide examples' : 'See examples'}
               </Text>
             </TouchableOpacity>
-            <GlowBadge text={`${inputText.length}/280`} color={colors.textMuted} size="sm" />
+            <GlowBadge
+              text={`${inputText.length}/280`}
+              color={colors.textMuted}
+              size="sm"
+            />
           </View>
 
           {showExamples && (
@@ -235,10 +280,20 @@ function MyBeaconsPanel() {
               {BEACON_EXAMPLES.map((ex: string) => (
                 <TouchableOpacity
                   key={ex}
-                  style={[styles.exampleChip, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}
+                  style={[
+                    styles.exampleChip,
+                    {
+                      backgroundColor: colors.surfaceGlass,
+                      borderColor: colors.border,
+                    },
+                  ]}
                   onPress={() => setInputText(ex)}
                 >
-                  <Text style={[styles.exampleChipText, { color: colors.text }]}>{ex}</Text>
+                  <Text
+                    style={[styles.exampleChipText, { color: colors.text }]}
+                  >
+                    {ex}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -258,7 +313,9 @@ function MyBeaconsPanel() {
       ) : (
         <AnimatedEntry delay={100}>
           <GlassCard>
-            <Text style={[styles.limitReachedText, { color: colors.textMuted }]}>
+            <Text
+              style={[styles.limitReachedText, { color: colors.textMuted }]}
+            >
               {isPremium
                 ? 'You have 3 active beacons (maximum for premium).'
                 : 'You have 1 active beacon. Upgrade to Premium to run up to 3.'}
@@ -270,7 +327,9 @@ function MyBeaconsPanel() {
       {/* Existing beacons */}
       {myBeacons.length > 0 && (
         <View style={styles.beaconList}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Your Beacons</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+            Your Beacons
+          </Text>
           {myBeacons.map((beacon, i) => (
             <AnimatedEntry key={beacon.id} delay={200 + i * 60}>
               <BeaconCard
@@ -288,20 +347,39 @@ function MyBeaconsPanel() {
   );
 }
 
-function BeaconCard({ beacon, onDeactivate }: { beacon: Beacon; onDeactivate: () => void }) {
+function BeaconCard({
+  beacon,
+  onDeactivate,
+}: {
+  beacon: Beacon;
+  onDeactivate: () => void;
+}) {
   const { colors } = useTheme();
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
   const daysLeft = beacon.expiresAt
-    ? Math.ceil((new Date(beacon.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    ? Math.ceil(
+        (new Date(beacon.expiresAt).getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24),
+      )
     : null;
 
   useEffect(() => {
     if (beacon.isActive) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 0.8, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 0.3, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        ])
+          Animated.timing(pulseAnim, {
+            toValue: 0.8,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0.3,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
       ).start();
     }
   }, [beacon.isActive]);
@@ -313,16 +391,32 @@ function BeaconCard({ beacon, onDeactivate }: { beacon: Beacon; onDeactivate: ()
     >
       <View style={styles.beaconCardHeader}>
         {beacon.isActive && (
-          <Animated.View style={[styles.statusDot, { backgroundColor: COLORS.accent, opacity: pulseAnim }]} />
+          <Animated.View
+            style={[
+              styles.statusDot,
+              { backgroundColor: COLORS.accent, opacity: pulseAnim },
+            ]}
+          />
         )}
         {!beacon.isActive && (
-          <View style={[styles.statusDot, { backgroundColor: colors.textMuted }]} />
+          <View
+            style={[styles.statusDot, { backgroundColor: colors.textMuted }]}
+          />
         )}
-        <Text style={[styles.beaconStatus, { color: beacon.isActive ? COLORS.accent : colors.textMuted }]}>
+        <Text
+          style={[
+            styles.beaconStatus,
+            { color: beacon.isActive ? COLORS.accent : colors.textMuted },
+          ]}
+        >
           {beacon.isActive ? 'Active' : 'Inactive'}
         </Text>
         {beacon.isActive && daysLeft !== null && (
-          <GlowBadge text={`${daysLeft}d left`} color={colors.textMuted} size="sm" />
+          <GlowBadge
+            text={`${daysLeft}d left`}
+            color={colors.textMuted}
+            size="sm"
+          />
         )}
         {beacon.isActive && (
           <TouchableOpacity onPress={onDeactivate}>
@@ -330,7 +424,9 @@ function BeaconCard({ beacon, onDeactivate }: { beacon: Beacon; onDeactivate: ()
           </TouchableOpacity>
         )}
       </View>
-      <Text style={[styles.beaconText, { color: colors.text }]}>{beacon.rawText}</Text>
+      <Text style={[styles.beaconText, { color: colors.text }]}>
+        {beacon.rawText}
+      </Text>
       {beacon.parsedIntent && beacon.parsedIntent !== beacon.rawText && (
         <Text style={[styles.parsedIntent, { color: colors.textMuted }]}>
           AI understood: {beacon.parsedIntent}
@@ -369,7 +465,12 @@ function MatchesPanel({
     }
   };
 
-  if (isLoading) return <View style={styles.loading}><ActivityIndicator color={COLORS.accent} /></View>;
+  if (isLoading)
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator color={COLORS.accent} />
+      </View>
+    );
 
   if (matches.length === 0) {
     return (
@@ -378,9 +479,12 @@ function MatchesPanel({
           <GlassCard>
             <View style={styles.emptyInner}>
               <FlameIcon size={36} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No matches yet</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                No matches yet
+              </Text>
               <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                We run matching daily at 6 AM UTC. Light a beacon and check back tomorrow!
+                We run matching daily at 6 AM UTC. Light a beacon and check back
+                tomorrow!
               </Text>
             </View>
           </GlassCard>
@@ -393,7 +497,10 @@ function MatchesPanel({
     <FlatList
       data={matches}
       keyExtractor={(item) => item.matchId.toString()}
-      contentContainerStyle={{ paddingVertical: 12, paddingHorizontal: SPACING.page }}
+      contentContainerStyle={{
+        paddingVertical: 12,
+        paddingHorizontal: SPACING.page,
+      }}
       renderItem={({ item, index }) => (
         <AnimatedEntry delay={index * 60}>
           <MatchCard
@@ -401,13 +508,21 @@ function MatchesPanel({
             onMessage={async () => {
               if (!item.matchedUser) return;
               try {
-                const { conversationId } = await chat.getOrCreateConversation(item.matchedUser.userId);
+                const { conversationId } = await chat.getOrCreateConversation(
+                  item.matchedUser.userId,
+                );
                 router.push({
                   pathname: '/(app)/chat/[conversationId]',
-                  params: { conversationId: conversationId.toString(), handle: item.matchedUser.userHandle },
+                  params: {
+                    conversationId: conversationId.toString(),
+                    handle: item.matchedUser.userHandle,
+                  },
                 });
               } catch {
-                Alert.alert('Error', 'Could not start conversation. Please try again.');
+                Alert.alert(
+                  'Error',
+                  'Could not start conversation. Please try again.',
+                );
               }
             }}
             onViewProfile={() => {
@@ -445,12 +560,19 @@ function MatchCard({
           colors={[...COLORS.gradientAccent]}
           style={styles.scoreCircle}
         >
-          <View style={[styles.scoreInner, { backgroundColor: colors.background }]}>
-            <Text style={[styles.scoreText, { color: COLORS.accent }]}>{score}%</Text>
+          <View
+            style={[styles.scoreInner, { backgroundColor: colors.background }]}
+          >
+            <Text style={[styles.scoreText, { color: COLORS.accent }]}>
+              {score}%
+            </Text>
           </View>
         </LinearGradient>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.matchedBeaconText, { color: colors.text }]} numberOfLines={2}>
+          <Text
+            style={[styles.matchedBeaconText, { color: colors.text }]}
+            numberOfLines={2}
+          >
             {match.matchedUser?.rawText}
           </Text>
           <TouchableOpacity onPress={onViewProfile}>
@@ -459,13 +581,24 @@ function MatchCard({
             </Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={onDismiss} style={styles.dismissButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={[styles.dismissText, { color: colors.textMuted }]}>✕</Text>
+        <TouchableOpacity
+          onPress={onDismiss}
+          style={styles.dismissButton}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={[styles.dismissText, { color: colors.textMuted }]}>
+            ✕
+          </Text>
         </TouchableOpacity>
       </View>
 
       {match.matchReason && (
-        <View style={[styles.matchReasonCard, { backgroundColor: colors.surfaceGlass }]}>
+        <View
+          style={[
+            styles.matchReasonCard,
+            { backgroundColor: colors.surfaceGlass },
+          ]}
+        >
           <Text style={[styles.matchReason, { color: colors.textMuted }]}>
             {match.matchReason}
           </Text>
@@ -504,8 +637,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...SHADOWS.glow(COLORS.accent),
   },
-  explainerTitle: { fontSize: 18, fontFamily: FONTS.semiBold, textAlign: 'center' },
-  explainerBody: { fontSize: 14, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
+  explainerTitle: {
+    fontSize: 18,
+    fontFamily: FONTS.semiBold,
+    textAlign: 'center',
+  },
+  explainerBody: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   inputSection: { gap: SPACING.sm, alignSelf: 'stretch' },
   beaconInput: {
     borderWidth: 1.5,
@@ -518,7 +660,12 @@ const styles = StyleSheet.create({
     minHeight: 100,
     textAlignVertical: 'top',
   },
-  inputMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4 },
+  inputMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
   exampleToggle: { fontSize: 13, fontFamily: FONTS.medium },
   examplesScroll: { marginTop: 4 },
   exampleChip: {
@@ -532,18 +679,44 @@ const styles = StyleSheet.create({
   exampleChipText: { fontSize: 13, fontFamily: FONTS.regular },
   limitReachedText: { fontSize: 14, fontFamily: FONTS.regular, lineHeight: 22 },
   beaconList: { gap: 12 },
-  sectionTitle: { fontSize: 11, fontFamily: FONTS.semiBold, textTransform: 'uppercase', letterSpacing: 1 },
-  beaconCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  beaconCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   beaconStatus: { fontSize: 12, fontFamily: FONTS.semiBold, flex: 1 },
   beaconText: { fontSize: 15, fontFamily: FONTS.medium, lineHeight: 22 },
-  parsedIntent: { fontSize: 13, fontFamily: FONTS.regular, fontStyle: 'italic', lineHeight: 20, marginTop: 4 },
+  parsedIntent: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    fontStyle: 'italic',
+    lineHeight: 20,
+    marginTop: 4,
+  },
   lastMatched: { fontSize: 12, fontFamily: FONTS.regular, marginTop: 4 },
   emptyMatches: { flex: 1, padding: SPACING.xl, justifyContent: 'center' },
   emptyInner: { alignItems: 'center', gap: 12 },
   emptyTitle: { fontSize: 20, fontFamily: FONTS.semiBold },
-  emptyBody: { fontSize: 15, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
-  matchHeader: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 12 },
+  emptyBody: {
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  matchHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
   scoreCircle: {
     width: 52,
     height: 52,

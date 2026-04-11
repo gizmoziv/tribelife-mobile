@@ -42,9 +42,8 @@ function SparkleIcon() {
 function ConnectIcon() {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Circle cx={9} cy={7} r={4} stroke="#34D399" strokeWidth={1.5} />
-      <Path d="M2 21v-2a4 4 0 014-4h6a4 4 0 014 4v2" stroke="#34D399" strokeWidth={1.5} strokeLinecap="round" />
-      <Path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87" stroke="#34D399" strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M12 3 L19.8 16.5 L4.2 16.5 Z" stroke="#34D399" strokeWidth={1.5} strokeLinejoin="round" />
+      <Path d="M12 21 L4.2 7.5 L19.8 7.5 Z" stroke="#34D399" strokeWidth={1.5} strokeLinejoin="round" />
     </Svg>
   );
 }

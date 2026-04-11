@@ -69,6 +69,55 @@ export async function confirmAvatarUpload(key: string): Promise<{ avatarUrl: str
   return res.json();
 }
 
+// ── Group Icon Upload Flow (admin only) ────────────────────────────────────
+
+export async function requestGroupIconUploadUrl(conversationId: number): Promise<{
+  uploadUrl: string;
+  key: string;
+  cdnUrl: string;
+}> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/group-icon-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ conversationId }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 403) throw new Error('Only group admins can upload the group icon.');
+    if (res.status === 429) throw new Error('Upload rate limit exceeded. Try again later.');
+    throw new Error(`Failed to get upload URL: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+export async function confirmGroupIconUpload(
+  conversationId: number,
+  key: string,
+): Promise<{ groupIconUrl: string }> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/group-icon-confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ conversationId, key }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Group icon confirmation failed: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
 // ── Media Upload Flow ──────────────────────────────────────────────────────
 
 /** Request N pre-signed upload URLs for media images */
