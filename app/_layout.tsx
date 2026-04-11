@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ExpoLinking from 'expo-linking';
@@ -20,7 +20,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, getToken, groupsApi } from '@/services/api';
+import { auth, getToken } from '@/services/api';
 import { connectSocket } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
@@ -64,53 +64,6 @@ async function recoverReferralCodeFromClipboard() {
   } catch { /* ignore clipboard errors */ }
 }
 
-function extractGroupSlug(url: string): string | null {
-  try {
-    const match = url.match(/\/g\/([a-zA-Z0-9-]+)/);
-    return match ? match[1] : null;
-  } catch {
-    return null;
-  }
-}
-
-async function handleGroupInvite(slug: string, router: ReturnType<typeof useRouter>) {
-  try {
-    const token = await getToken();
-    if (!token) {
-      await AsyncStorage.setItem('pendingGroupSlug', slug);
-      return;
-    }
-    const { group } = await groupsApi.getInfo(slug);
-    if (group.isMember) {
-      router.push({
-        pathname: '/(app)/chat/[conversationId]',
-        params: { conversationId: group.id.toString(), isGroup: 'true', groupName: group.groupName, inviteSlug: group.inviteSlug },
-      });
-      return;
-    }
-    Alert.alert(
-      'Join Group',
-      `Join "${group.groupName}" (${group.memberCount} members)?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Join',
-          onPress: async () => {
-            try {
-              const { conversation } = await groupsApi.join(slug);
-              router.push({
-                pathname: '/(app)/chat/[conversationId]',
-                params: { conversationId: conversation.id.toString(), isGroup: 'true', groupName: conversation.groupName, inviteSlug: slug },
-              });
-            } catch { Alert.alert('Error', 'Could not join this group.'); }
-          },
-        },
-      ]
-    );
-  } catch {
-    Alert.alert('Error', 'This group was not found.');
-  }
-}
 
 // Configure RevenueCat
 const rcKey = Platform.OS === 'ios'
@@ -151,12 +104,11 @@ function RootLayoutInner() {
           const needsOnboarding = !user.handle;
           await setAuth(token, user, needsOnboarding);
 
-          // Handle pending group invite from deep link
+          // Handle pending group invite from deep link (saved pre-auth)
           const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
           if (pendingGroupSlug) {
             await AsyncStorage.removeItem('pendingGroupSlug');
-            // Defer to after navigation is ready
-            setTimeout(() => handleGroupInvite(pendingGroupSlug, router), 500);
+            setTimeout(() => router.push(`/g/${pendingGroupSlug}`), 500);
           }
 
           // Connect socket
@@ -201,19 +153,13 @@ function RootLayoutInner() {
   }, []);
 
   useEffect(() => {
-    const processUrl = (url: string) => {
-      extractAndStoreReferralCode(url);
-      const groupSlug = extractGroupSlug(url);
-      if (groupSlug) {
-        handleGroupInvite(groupSlug, router);
-      }
-    };
-
+    // Group invite routes (/g/:slug) are handled by app/g/[slug].tsx via Expo
+    // Router's native linking. This listener only extracts the referral code.
     ExpoLinking.getInitialURL().then((url) => {
-      if (url) processUrl(url);
+      if (url) extractAndStoreReferralCode(url);
     });
     const sub = ExpoLinking.addEventListener('url', ({ url }) => {
-      processUrl(url);
+      extractAndStoreReferralCode(url);
     });
     return () => sub.remove();
   }, []);
@@ -267,6 +213,7 @@ function RootLayoutInner() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
         <Stack.Screen name="user/[handle]" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="g/[slug]" options={{ headerShown: false }} />
       </Stack>
     </GestureHandlerRootView>
   );

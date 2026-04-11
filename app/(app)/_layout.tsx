@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/authStore';
@@ -64,12 +65,42 @@ export default function AppLayout() {
   }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
-    notificationsApi
-      .list()
-      .then(({ notifications, unreadCount }) => {
-        setNotifications(notifications, unreadCount);
-      })
-      .catch(() => {});
+    const refetchNotifications = () => {
+      notificationsApi
+        .list()
+        .then(({ notifications, unreadCount }) => {
+          setNotifications(notifications, unreadCount);
+        })
+        .catch(() => {});
+    };
+
+    // Initial fetch on mount
+    refetchNotifications();
+
+    // Android aggressively kills sockets in background, so any notification:new
+    // events emitted while the socket was disconnected are permanently lost.
+    // Refetch from the server on foreground and on socket reconnect so the bell
+    // always reflects server truth.
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetchNotifications();
+    });
+
+    let socketReconnectHandler: (() => void) | null = null;
+    connectSocket().then(() => {
+      const socket = getSocket();
+      if (socket) {
+        socketReconnectHandler = () => refetchNotifications();
+        socket.io.on('reconnect', socketReconnectHandler);
+      }
+    });
+
+    return () => {
+      appStateSub.remove();
+      if (socketReconnectHandler) {
+        const socket = getSocket();
+        socket?.io.off('reconnect', socketReconnectHandler);
+      }
+    };
   }, []);
 
   // Fetch Globe unread counts and listen for real-time globe messages

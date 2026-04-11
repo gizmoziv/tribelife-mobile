@@ -182,6 +182,8 @@ function LocalChatPanel() {
       if (data.roomId && data.roomId !== roomId) return;
       // Only process reactions that have a roomId (timezone room context)
       if (!data.roomId) return;
+      // Skip own reactions — already applied optimistically in handleReact
+      if (data.userId === user?.id) return;
 
       setMessages((prev) =>
         prev.map((msg) => {
@@ -235,13 +237,49 @@ function LocalChatPanel() {
     setMenuVisible(true);
   }, []);
 
+  const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
+    const userId = user?.id;
+    if (!userId) return;
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== messageId) return msg;
+        const reactions = [...(msg.reactions ?? [])];
+        const idx = reactions.findIndex((r) => r.emoji === emoji);
+        if (idx >= 0 && reactions[idx].hasReacted) {
+          // Remove own reaction
+          const updated = {
+            ...reactions[idx],
+            count: reactions[idx].count - 1,
+            userIds: reactions[idx].userIds.filter((id) => id !== userId),
+            hasReacted: false,
+          };
+          if (updated.count <= 0) reactions.splice(idx, 1);
+          else reactions[idx] = updated;
+        } else if (idx >= 0) {
+          // Add to existing emoji
+          reactions[idx] = {
+            ...reactions[idx],
+            count: reactions[idx].count + 1,
+            userIds: [...reactions[idx].userIds, userId],
+            hasReacted: true,
+          };
+        } else {
+          // New emoji
+          reactions.push({ emoji, count: 1, userIds: [userId], hasReacted: true });
+        }
+        return { ...msg, reactions };
+      }),
+    );
+  }, [user?.id]);
+
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;
     setMenuVisible(false);
+    applyOptimisticReaction(selectedMessage.id, emoji);
     try {
       await reactionsApi.toggle(selectedMessage.id, emoji);
-    } catch { /* silent -- socket broadcast will update UI */ }
-  }, [selectedMessage]);
+    } catch { /* silent -- socket broadcast will reconcile */ }
+  }, [selectedMessage, applyOptimisticReaction]);
 
   const handleReply = useCallback(() => {
     if (!selectedMessage) return;
@@ -302,10 +340,11 @@ function LocalChatPanel() {
   }, []);
 
   const handleReactionToggle = useCallback(async (messageId: number, emoji: string) => {
+    applyOptimisticReaction(messageId, emoji);
     try {
       await reactionsApi.toggle(messageId, emoji);
     } catch { /* silent */ }
-  }, []);
+  }, [applyOptimisticReaction]);
 
   const handleImagesSelected = useCallback(async (uris: string[]) => {
     setIsUploading(true);
@@ -406,7 +445,12 @@ function LocalChatPanel() {
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => {}}
+        onContentSizeChange={() => {
+          if (!hasScrolledRef.current && messages.length > 0) {
+            flatListRef.current?.scrollToEnd({ animated: false });
+            hasScrolledRef.current = true;
+          }
+        }}
         onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
       />
 
