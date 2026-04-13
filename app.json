@@ -43,6 +43,7 @@
         "resizeMode": "contain",
         "backgroundColor": "#0F172A"
       },
+      "googleServicesFile": "./google-services.json",
       "package": "com.tribelife.app",
       "intentFilters": [
         {

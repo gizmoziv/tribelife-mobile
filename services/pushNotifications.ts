@@ -14,50 +14,43 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {
-  // Check existing permission
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-  // Request if not granted
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
 
-  if (finalStatus !== 'granted') {
-    console.log('Push notification permission not granted');
+    if (finalStatus !== 'granted') return null;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#E8922F',
+      });
+    }
+
+    if (!Device.isDevice) return null;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) return null;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+    return tokenData.data;
+  } catch (err) {
+    console.error('[push] registration failed:', err);
     return null;
   }
-
-  // Set up Android notification channel
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'Default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#E8922F',
-    });
-  }
-
-  // Push tokens only work on physical devices
-  if (!Device.isDevice) {
-    console.log('Push token requires a physical device, permission granted for simulator');
-    return null;
-  }
-
-  // Get Expo push token
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-  const tokenData = await Notifications.getExpoPushTokenAsync({
-    projectId,
-  });
-
-  return tokenData.data;
 }
 
 export async function sendPushTokenToServer(token: string): Promise<void> {
   try {
     await auth.updatePushToken(token);
-  } catch (error) {
-    console.error('Failed to send push token to server:', error);
+  } catch (err) {
+    console.error('[push] Failed to send push token to server:', err);
   }
 }
