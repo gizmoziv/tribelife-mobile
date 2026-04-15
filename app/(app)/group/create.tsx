@@ -259,14 +259,14 @@ export default function CreateGroupScreen() {
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconCompass color={COLORS.accent} />}
+                icon={<IconCompass color={COLORS.primary} />}
                 text="Discoverable & monetizable groups"
                 comingSoon
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconChart color={COLORS.accent} />}
+                icon={<IconChart color={COLORS.primary} />}
                 text="Group owner dashboard with engagement insights"
                 comingSoon
                 textColor={colors.text}
@@ -293,17 +293,11 @@ export default function CreateGroupScreen() {
           <View style={styles.cardInner}>
             <View style={styles.cardTitleRow}>
               <View style={[styles.cardIconWrap, { backgroundColor: COLORS.accentSoft }]}>
-                <IconAleph color={COLORS.accent} size={18} />
+                <IconFlame color={COLORS.accent} size={18} />
               </View>
               <Text style={[styles.cardTitle, { color: colors.text }]}>For Jewish life, by design</Text>
             </View>
             <View style={styles.bulletList}>
-              <BulletRow
-                icon={<IconMoon color={COLORS.accent} />}
-                text="Shabbat mode notifications — auto-pause and resume"
-                textColor={colors.text}
-                mutedColor={colors.textMuted}
-              />
               <BulletRow
                 icon={<IconGlobe color={COLORS.accent} />}
                 text="Timezone-aware community rooms across the diaspora"
@@ -319,6 +313,13 @@ export default function CreateGroupScreen() {
               <BulletRow
                 icon={<IconScroll color={COLORS.primary} />}
                 text="Curated Jewish news feed"
+                comingSoon
+                textColor={colors.text}
+                mutedColor={colors.textMuted}
+              />
+              <BulletRow
+                icon={<IconMoon color={COLORS.primary} />}
+                text="Shabbat mode notifications — auto-pause and resume"
                 comingSoon
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
