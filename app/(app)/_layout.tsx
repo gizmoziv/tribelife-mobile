@@ -9,6 +9,7 @@ import {
   AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useGlobeStore } from '@/store/globeStore';
@@ -68,6 +69,13 @@ export default function AppLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { unreadCount, setNotifications } = useNotificationStore();
+
+  // Sync the app icon badge count to the in-app unread notifications count.
+  // Industry standard (WhatsApp/iMessage): badge = total unread items across
+  // the app. Clears automatically when the user has caught up (marked as read).
+  useEffect(() => {
+    Notifications.setBadgeCountAsync(unreadCount).catch(() => {});
+  }, [unreadCount]);
   const { totalUnread, setUnreadCounts } = useGlobeStore();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
