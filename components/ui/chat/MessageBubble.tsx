@@ -2,13 +2,35 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuthStore } from '@/store/authStore';
 import { FONTS, COLORS, SHADOWS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
 import { ImageGrid } from '@/components/ui/chat/ImageGrid';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import type { Message, GlobeMessage } from '@/types';
+
+// Parse message content into plain text and @mention fragments.
+// Returns an array of { text, isMention, handle } parts.
+function parseContent(content: string): Array<{ text: string; isMention: boolean; handle?: string }> {
+  const regex = /@([a-zA-Z0-9_]+)/g;
+  const parts: Array<{ text: string; isMention: boolean; handle?: string }> = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: content.slice(lastIndex, match.index), isMention: false });
+    }
+    parts.push({ text: match[0], isMention: true, handle: match[1].toLowerCase() });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < content.length) {
+    parts.push({ text: content.slice(lastIndex), isMention: false });
+  }
+  return parts;
+}
 
 interface MessageBubbleProps {
   message: Message | GlobeMessage;
@@ -38,6 +60,8 @@ export function MessageBubble({
   onToggleTranslation,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
+  const router = useRouter();
+  const { user } = useAuthStore();
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
 
@@ -49,6 +73,36 @@ export function MessageBubble({
   const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
   const isRTL = displayContent ? /[\u0590-\u05FF\u0600-\u06FF]/.test(displayContent) : false;
   const textDirection = isRTL ? 'rtl' as const : 'ltr' as const;
+
+  // Detect if the current user is mentioned — gives the bubble a subtle tint
+  const myHandle = user?.handle?.toLowerCase();
+  const mentionsMe = !!(myHandle && displayContent && new RegExp(`@${myHandle}(?![a-zA-Z0-9_])`, 'i').test(displayContent));
+
+  const handleMentionPress = useCallback((handle: string) => {
+    router.push(`/user/${handle}`);
+  }, [router]);
+
+  const renderContent = (baseColor: string, mentionColor: string) => {
+    if (!displayContent) return null;
+    const parts = parseContent(displayContent);
+    return (
+      <Text style={[styles.bubbleText, { color: baseColor, writingDirection: textDirection }]}>
+        {parts.map((p, i) =>
+          p.isMention && p.handle ? (
+            <Text
+              key={i}
+              style={{ color: mentionColor, fontFamily: FONTS.semiBold }}
+              onPress={() => handleMentionPress(p.handle!)}
+            >
+              {p.text}
+            </Text>
+          ) : (
+            <Text key={i}>{p.text}</Text>
+          ),
+        )}
+      </Text>
+    );
+  };
 
   const handleImagePress = useCallback((index: number) => {
     setViewerIndex(index);
@@ -135,11 +189,7 @@ export function MessageBubble({
                   />
                 </View>
               )}
-              {displayContent ? (
-                <Text style={[styles.bubbleText, { color: '#FFF', writingDirection: textDirection }]}>
-                  {displayContent}
-                </Text>
-              ) : null}
+              {renderContent('#FFF', '#FFE9A8')}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -157,7 +207,11 @@ export function MessageBubble({
               )}
             </LinearGradient>
           ) : (
-            <View style={[styles.bubble, { backgroundColor: colors.surfaceGlass }]}>
+            <View style={[
+              styles.bubble,
+              { backgroundColor: colors.surfaceGlass },
+              mentionsMe && styles.bubbleMentionsMe,
+            ]}>
               {/* Reply preview inside bubble */}
               {replyTo && (
                 <Pressable onPress={() => onReplyPress?.(replyTo.id)} style={[styles.replyPreview, { backgroundColor: colors.surface }]}>
@@ -185,11 +239,7 @@ export function MessageBubble({
                   />
                 </View>
               )}
-              {displayContent ? (
-                <Text style={[styles.bubbleText, { color: colors.text, writingDirection: textDirection }]}>
-                  {displayContent}
-                </Text>
-              ) : null}
+              {renderContent(colors.text, COLORS.primary)}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -268,6 +318,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     ...SHADOWS.sm,
+  },
+  bubbleMentionsMe: {
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: 'rgba(139, 69, 214, 0.12)',
   },
   bubbleText: {
     fontSize: 15,
