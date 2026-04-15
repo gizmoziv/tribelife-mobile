@@ -95,6 +95,19 @@ const IconSun = ({ color = COLORS.accent, size = 16 }: IconProps) => (
   </Svg>
 );
 
+const IconFlame = ({ color = COLORS.accent, size = 16 }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 2s-6 6-6 12a6 6 0 0012 0c0-3-2-5-2-5s-1 1.5-2 1.5c0-3-2-5-2-8.5z"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinejoin="round"
+      fill={color}
+      fillOpacity={0.15}
+    />
+  </Svg>
+);
+
 const IconAleph = ({ color = COLORS.accent, size = 16 }: IconProps) => (
   // Hebrew aleph glyph outline — simple, recognizable
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -193,10 +206,6 @@ export default function CreateGroupScreen() {
     }
   };
 
-  const openSite = () => {
-    Linking.openURL('https://tribelife.app').catch(() => {});
-  };
-
   const isPremium = !!user?.isPremium;
 
   // ---------- Shared marketing blocks (both premium + non-premium) ----------
@@ -226,45 +235,39 @@ export default function CreateGroupScreen() {
         <GlassCard>
           <View style={styles.cardInner}>
             <View style={styles.cardTitleRow}>
-              <View style={[styles.cardIconWrap, { backgroundColor: COLORS.primaryGlow }]}>
-                <IconCompass color={COLORS.primary} size={18} />
+              <View style={[styles.cardIconWrap, { backgroundColor: COLORS.accentSoft }]}>
+                <IconFlame color={COLORS.accent} size={18} />
               </View>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>vs. WhatsApp & other apps</Text>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>TribeLife vs. other chat apps</Text>
             </View>
             <View style={styles.bulletList}>
               <BulletRow
-                icon={<IconClock color={COLORS.primary} />}
+                icon={<IconClock color={COLORS.accent} />}
                 text="Historical conversations from day one — not just from when you joined"
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconGlobe color={COLORS.primary} />}
+                icon={<IconGlobe color={COLORS.accent} />}
                 text="Smart translation of every comment, in any language"
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconSparkles color={COLORS.primary} />}
-                text="Intelligent matching by location and shared interests"
-                textColor={colors.text}
-                mutedColor={colors.textMuted}
-              />
-              <BulletRow
                 icon={<IconBeacon color={COLORS.accent} />}
-                text="Beacon system to find what you need, when you need it"
+                text="Beacon system for intelligent matching by location and shared interests"
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconCompass color={COLORS.primary} />}
+                icon={<IconCompass color={COLORS.accent} />}
                 text="Discoverable & monetizable groups"
                 comingSoon
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconChart color={COLORS.primary} />}
+                icon={<IconChart color={COLORS.accent} />}
                 text="Group owner dashboard with engagement insights"
                 comingSoon
                 textColor={colors.text}
@@ -303,13 +306,6 @@ export default function CreateGroupScreen() {
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconScroll color={COLORS.accent} />}
-                text="Curated Jewish news feed"
-                comingSoon
-                textColor={colors.text}
-                mutedColor={colors.textMuted}
-              />
-              <BulletRow
                 icon={<IconGlobe color={COLORS.accent} />}
                 text="Timezone-aware community rooms across the diaspora"
                 textColor={colors.text}
@@ -322,8 +318,9 @@ export default function CreateGroupScreen() {
                 mutedColor={colors.textMuted}
               />
               <BulletRow
-                icon={<IconSun color={COLORS.accent} />}
-                text="Jewish holiday awareness in every interaction"
+                icon={<IconScroll color={COLORS.primary} />}
+                text="Curated Jewish news feed"
+                comingSoon
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
@@ -338,14 +335,9 @@ export default function CreateGroupScreen() {
     <AnimatedEntry delay={360} style={{ marginTop: SPACING.lg, alignItems: 'center' }}>
       <View style={styles.taglineWrap}>
         <View style={[styles.taglineDot, { backgroundColor: COLORS.accent }]} />
-        <GradientTagline text="If you know, you know." />
+        <GradientTagline text="Our community, supercharged." />
         <View style={[styles.taglineDot, { backgroundColor: COLORS.primary }]} />
       </View>
-      <TouchableOpacity onPress={openSite} hitSlop={8} style={{ marginTop: 6 }}>
-        <Text style={[styles.taglineLink, { color: colors.textMuted }]}>
-          tribelife.app
-        </Text>
-      </TouchableOpacity>
     </AnimatedEntry>
   );
 
