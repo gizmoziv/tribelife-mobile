@@ -97,6 +97,17 @@ export default function CreateGroupScreen() {
         </View>
         <View style={styles.content}>
           <AnimatedEntry>
+            <GlassCard glowColor={COLORS.borderGlow}>
+              <View style={styles.leaderInner}>
+                <Text style={[styles.leaderTitle, { color: colors.text }]}>For Community Leaders</Text>
+                <Text style={[styles.leaderBody, { color: colors.textMuted }]}>
+                  Running a kabbalah study group, beach yoga meetup or commercial network in a given industry? TribeLife helps your members find each other for study partners, Shabbat meals, volunteering and more. The connections that used to happen organically in Jewish community settings now happen in our digital Tribe.
+                </Text>
+              </View>
+            </GlassCard>
+          </AnimatedEntry>
+
+          <AnimatedEntry delay={80} style={{ marginTop: SPACING.md }}>
             <GlassCard>
               <View style={styles.formInner}>
                 <Text style={[styles.label, { color: colors.text, textAlign: 'center', fontSize: 16 }]}>
