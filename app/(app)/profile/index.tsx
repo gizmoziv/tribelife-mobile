@@ -398,7 +398,7 @@ export default function ProfileScreen() {
             />
             <View style={{ paddingLeft: 16 }}>
               <SettingsRow
-                label="Mentions"
+                label="Replies & Mentions"
                 right={
                   <Switch
                     value={pushEnabled && notifPrefs.mentionsPush}
