@@ -177,19 +177,7 @@ export default function AppLayout() {
         },
         headerRight: () => (
           <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => router.push('/(app)/globe')}
-            >
-              <GlobeIcon color={colors.textMuted} />
-              {totalUnread > 0 && (
-                <View style={styles.globeBadge}>
-                  <Text style={styles.badgeText}>
-                    {totalUnread > 99 ? '99+' : totalUnread}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            {/* Globe icon moved to bottom nav between Chat and Beacon */}
             <TouchableOpacity
               style={styles.bellButton}
               onPress={() => router.push('/notifications')}
@@ -218,6 +206,18 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="globe"
+        options={{
+          title: 'Globe',
+          tabBarIcon: ({ color, focused }) => (
+            <GradientTabIcon icon="globe" color={color} focused={focused} />
+          ),
+          // Notification badge on the icon intentionally disabled per UX request
+          // tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
         name="beacon"
         options={{
           title: 'Beacon',
@@ -235,13 +235,6 @@ export default function AppLayout() {
             <GradientTabIcon icon="profile" color={color} focused={focused} />
           ),
           headerTitle: 'My Profile',
-        }}
-      />
-      <Tabs.Screen
-        name="globe"
-        options={{
-          href: null,
-          headerShown: false,
         }}
       />
       <Tabs.Screen

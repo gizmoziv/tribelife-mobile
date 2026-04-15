@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient as SvgGradient, Stop, Path, Circle } from 're
 
 interface GradientTabIconProps {
   focused: boolean;
-  icon: 'chat' | 'beacon' | 'profile';
+  icon: 'chat' | 'globe' | 'beacon' | 'profile';
   color: string;
   size?: number;
 }
@@ -32,6 +32,8 @@ function renderPaths(icon: string, color: string) {
   switch (icon) {
     case 'chat':
       return <ChatPaths color={color} />;
+    case 'globe':
+      return <GlobePaths color={color} />;
     case 'beacon':
       return <BeaconPaths color={color} />;
     case 'profile':
@@ -39,6 +41,21 @@ function renderPaths(icon: string, color: string) {
     default:
       return null;
   }
+}
+
+function GlobePaths({ color }: { color: string }) {
+  return (
+    <>
+      <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill="none" />
+      <Path
+        d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
 }
 
 function ChatPaths({ color }: { color: string }) {
