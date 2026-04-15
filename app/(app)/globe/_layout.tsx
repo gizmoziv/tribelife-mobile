@@ -12,6 +12,8 @@ export default function GlobeLayout() {
         headerTitleStyle: { fontFamily: FONTS.semiBold, fontSize: 18 },
         headerShadowVisible: false,
       }}
-    />
+    >
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+    </Stack>
   );
 }

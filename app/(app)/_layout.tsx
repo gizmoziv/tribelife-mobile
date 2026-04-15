@@ -235,7 +235,7 @@ export default function AppLayout() {
           ),
           // Notification badge on the icon intentionally disabled per UX request
           // tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
-          headerShown: false,
+          headerTitle: 'Globe',
         }}
       />
       <Tabs.Screen
