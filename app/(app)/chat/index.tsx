@@ -52,6 +52,7 @@ import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import type { Message, Conversation, ReactionGroup } from '@/types';
 import Svg, { Path } from 'react-native-svg';
@@ -102,6 +103,7 @@ function LocalChatPanel() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -466,6 +468,14 @@ function LocalChatPanel() {
         onSend={handleSend}
         isUploading={isUploading}
         onImagesSelected={handleImagesSelected}
+        selection={selection}
+        onSelectionChange={setSelection}
+        mentionScope={user?.timezone ? 'timezone' : undefined}
+        mentionContextId={user?.timezone ?? ''}
+        onMentionSelect={(newText, newCursor) => {
+          setInput(newText);
+          setSelection({ start: newCursor, end: newCursor });
+        }}
       />
 
       <ContextMenu
@@ -823,12 +833,22 @@ function ChatInput({
   onSend,
   isUploading,
   onImagesSelected,
+  selection,
+  onSelectionChange,
+  mentionScope,
+  mentionContextId,
+  onMentionSelect,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
   isUploading?: boolean;
   onImagesSelected?: (uris: string[]) => void;
+  selection?: { start: number; end: number };
+  onSelectionChange?: (sel: { start: number; end: number }) => void;
+  mentionScope?: MentionScope;
+  mentionContextId?: string;
+  onMentionSelect?: (newText: string, newCursor: number) => void;
 }) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
@@ -843,35 +863,48 @@ function ChatInput({
   const bottomPadding = keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace;
 
   return (
-    <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
-      {onImagesSelected && (
-        <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
-      )}
-      {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-      <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-        <TextInput
-          style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-          placeholder="Message..."
-          placeholderTextColor={colors.textMuted}
-          value={value}
-          onChangeText={onChangeText}
-          multiline
-          maxLength={2000}
-          onSubmitEditing={onSend}
+    <View style={{ position: 'relative' }}>
+      {mentionScope && mentionContextId && onMentionSelect && selection && (
+        <MentionAutocomplete
+          text={value}
+          selection={selection}
+          scope={mentionScope}
+          contextId={mentionContextId}
+          onSelect={onMentionSelect}
         />
-      </View>
-      <Pressable
-        onPress={onSend}
-        disabled={!value.trim() || isUploading}
-        style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
-      >
-        <LinearGradient
-          colors={[...COLORS.gradientPrimary]}
-          style={styles.sendButton}
+      )}
+      <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
+        {onImagesSelected && (
+          <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+        )}
+        {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+        <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+          <TextInput
+            style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+            placeholder="Message..."
+            placeholderTextColor={colors.textMuted}
+            value={value}
+            onChangeText={onChangeText}
+            selection={selection}
+            onSelectionChange={onSelectionChange ? (e) => onSelectionChange(e.nativeEvent.selection) : undefined}
+            multiline
+            maxLength={2000}
+            onSubmitEditing={onSend}
+          />
+        </View>
+        <Pressable
+          onPress={onSend}
+          disabled={!value.trim() || isUploading}
+          style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
         >
-          <SendIcon />
-        </LinearGradient>
-      </Pressable>
+          <LinearGradient
+            colors={[...COLORS.gradientPrimary]}
+            style={styles.sendButton}
+          >
+            <SendIcon />
+          </LinearGradient>
+        </Pressable>
+      </View>
     </View>
   );
 }

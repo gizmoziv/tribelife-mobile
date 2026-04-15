@@ -51,6 +51,7 @@ import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { Message, GlobeMessage } from '@/types';
@@ -135,6 +136,7 @@ export default function GlobeRoomChat() {
   } = useGlobeStore();
 
   const [input, setInput] = useState('');
+  const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isAgeGated, setIsAgeGated] = useState(false);
@@ -722,51 +724,65 @@ export default function GlobeRoomChat() {
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         {/* Chat input */}
-        <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
-          {!isAgeGated && (
-            <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
-          )}
-          {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-          <View
-            style={[
-              styles.inputWrap,
-              {
-                backgroundColor: colors.surfaceGlass,
-                borderColor: colors.border,
-                opacity: isAgeGated ? 0.5 : 1,
-              },
-            ]}
-          >
-            <TextInput
-              style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-              placeholder={
-                isAgeGated
-                  ? `You can post in ${ageGateHours} hour${ageGateHours !== 1 ? 's' : ''}`
-                  : 'Message...'
-              }
-              placeholderTextColor={colors.textMuted}
-              value={input}
-              onChangeText={handleInputChange}
-              editable={!isAgeGated}
-              multiline
-              maxLength={2000}
-              onSubmitEditing={handleSend}
-            />
-          </View>
-          <Pressable
-            onPress={handleSend}
-            disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
-            style={({ pressed }) => [
-              { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
-            ]}
-          >
-            <LinearGradient
-              colors={[...COLORS.gradientPrimary]}
-              style={styles.sendButton}
+        <View style={{ position: 'relative' }}>
+          <MentionAutocomplete
+            text={input}
+            selection={selection}
+            scope="globe"
+            contextId={roomSlug}
+            onSelect={(newText, newCursor) => {
+              setInput(newText);
+              setSelection({ start: newCursor, end: newCursor });
+            }}
+          />
+          <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+            {!isAgeGated && (
+              <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+            )}
+            {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+            <View
+              style={[
+                styles.inputWrap,
+                {
+                  backgroundColor: colors.surfaceGlass,
+                  borderColor: colors.border,
+                  opacity: isAgeGated ? 0.5 : 1,
+                },
+              ]}
             >
-              <SendIcon />
-            </LinearGradient>
-          </Pressable>
+              <TextInput
+                style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                placeholder={
+                  isAgeGated
+                    ? `You can post in ${ageGateHours} hour${ageGateHours !== 1 ? 's' : ''}`
+                    : 'Message...'
+                }
+                placeholderTextColor={colors.textMuted}
+                value={input}
+                onChangeText={handleInputChange}
+                selection={selection}
+                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                editable={!isAgeGated}
+                multiline
+                maxLength={2000}
+                onSubmitEditing={handleSend}
+              />
+            </View>
+            <Pressable
+              onPress={handleSend}
+              disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
+              style={({ pressed }) => [
+                { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
+              ]}
+            >
+              <LinearGradient
+                colors={[...COLORS.gradientPrimary]}
+                style={styles.sendButton}
+              >
+                <SendIcon />
+              </LinearGradient>
+            </Pressable>
+          </View>
         </View>
 
         {/* Context menu */}

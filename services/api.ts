@@ -215,6 +215,15 @@ export const usersApi = {
 
   searchByHandle: (q: string) =>
     request<{ users: PublicProfile[] }>(`/api/users/search/handle?q=${encodeURIComponent(q)}`),
+
+  suggest: (
+    q: string,
+    scope: 'timezone' | 'globe' | 'group' | 'dm',
+    contextId: string,
+  ) =>
+    request<{ users: Array<{ userId: number; handle: string; name: string; avatarUrl: string | null }> }>(
+      `/api/users/suggest?q=${encodeURIComponent(q)}&scope=${scope}&contextId=${encodeURIComponent(contextId)}`,
+    ),
 };
 
 // ── Reactions ─────────────────────────────────────────────────────────────
