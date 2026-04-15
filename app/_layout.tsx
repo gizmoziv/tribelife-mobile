@@ -20,7 +20,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, getToken } from '@/services/api';
+import { auth, getToken, notificationsApi } from '@/services/api';
 import { connectSocket } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
@@ -77,7 +77,7 @@ if (rcKey) {
 function RootLayoutInner() {
   const { isDark } = useTheme();
   const { token, user, setAuth, setLoading } = useAuthStore();
-  const { incrementUnread, addNotification } = useNotificationStore();
+  const { incrementUnread, addNotification, markOneRead } = useNotificationStore();
   const router = useRouter();
 
   const [fontsLoaded] = useFonts({
@@ -124,6 +124,14 @@ function RootLayoutInner() {
           const lastResponse = await Notifications.getLastNotificationResponseAsync();
           if (lastResponse) {
             const nData = lastResponse.notification.request.content.data;
+            // Auto-mark-as-read the tapped notification (industry standard: WhatsApp/iMessage)
+            const notifId = typeof nData?.notificationId === 'number'
+              ? nData.notificationId
+              : Number(nData?.notificationId);
+            if (notifId && !Number.isNaN(notifId)) {
+              markOneRead(notifId);
+              notificationsApi.read(notifId).catch(() => {});
+            }
             if (nData?.type === 'new_dm' && nData?.conversationId) {
               setTimeout(() => router.push({
                 pathname: '/(app)/chat/[conversationId]',
@@ -177,6 +185,14 @@ function RootLayoutInner() {
   useEffect(() => {
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data;
+      // Auto-mark-as-read the tapped notification (industry standard: WhatsApp/iMessage)
+      const notifId = typeof data?.notificationId === 'number'
+        ? data.notificationId
+        : Number(data?.notificationId);
+      if (notifId && !Number.isNaN(notifId)) {
+        markOneRead(notifId);
+        notificationsApi.read(notifId).catch(() => {});
+      }
       if (data?.type === 'mention' && data?.roomId) {
         router.push('/(app)/chat');
       } else if (data?.type === 'new_dm' && data?.conversationId) {
