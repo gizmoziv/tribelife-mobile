@@ -50,6 +50,20 @@ function GlobeIcon({ color }: { color: string }) {
   );
 }
 
+function PlusIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 5v14M5 12h14"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export default function AppLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -178,6 +192,13 @@ export default function AppLayout() {
         headerRight: () => (
           <View style={styles.headerRight}>
             {/* Globe icon moved to bottom nav between Chat and Beacon */}
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => router.push('/(app)/group/create')}
+              hitSlop={8}
+            >
+              <PlusIcon color={colors.textMuted} />
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.bellButton}
               onPress={() => router.push('/notifications')}
