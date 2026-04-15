@@ -206,6 +206,15 @@ export default function CreateGroupScreen() {
   };
 
   const isPremium = !!user?.isPremium;
+  const scrollRef = React.useRef<ScrollView>(null);
+
+  const scrollToForm = () => {
+    if (!isPremium) {
+      router.push('/(app)/profile');
+      return;
+    }
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
 
   // ---------- Shared marketing blocks (both premium + non-premium) ----------
   const LeaderCard = (
@@ -214,8 +223,15 @@ export default function CreateGroupScreen() {
         <View style={styles.leaderInner}>
           <Text style={[styles.leaderTitle, { color: colors.text }]}>For Community Leaders</Text>
           <Text style={[styles.leaderBody, { color: colors.textMuted }]}>
-            Running a kabbalah study group, beach yoga meetup or commercial network in a given industry? TribeLife helps your members find each other for study partners, Shabbat meals, volunteering and more. The connections that used to happen organically in Jewish community settings now happen in our digital Tribe.
+            Running a kabbalah study group, volunteer meetup or commercial network? The connections that used to happen organically are now happening digitally in TribeLife.
           </Text>
+          <PillButton
+            title={isPremium ? 'Create a Group' : 'Upgrade to Create a Group'}
+            onPress={scrollToForm}
+            variant="primary"
+            size="md"
+            style={{ width: '100%', marginTop: SPACING.sm }}
+          />
         </View>
       </GlassCard>
     </AnimatedEntry>
@@ -356,6 +372,7 @@ export default function CreateGroupScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -404,6 +421,7 @@ export default function CreateGroupScreen() {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
