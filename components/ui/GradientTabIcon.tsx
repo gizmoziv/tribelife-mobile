@@ -84,13 +84,28 @@ function BeaconPaths({ color }: { color: string }) {
 
 function NewsPaths({ color }: { color: string }) {
   return (
-    <Path
-      d="M4 5h16v14H4zM8 9h8M8 13h8M8 17h5"
-      stroke={color}
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      fill="none"
-    />
+    <>
+      <Path
+        d="M4 4.5h12l4 4V19a.5.5 0 0 1-.5.5h-15.5a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Path
+        d="M16 4.5v4h4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Path
+        d="M7 12h10M7 14.5h10M7 17h6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </>
   );
 }
 
