@@ -257,6 +257,16 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="news"
+        options={{
+          title: 'News',
+          tabBarIcon: ({ color, focused }) => (
+            <GradientTabIcon icon="news" color={color} focused={focused} />
+          ),
+          headerTitle: 'News',
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
