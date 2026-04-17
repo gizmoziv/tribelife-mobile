@@ -45,6 +45,9 @@ export function NewsTile({ article, onLongPress, onReactionToggle }: NewsTilePro
 
   // Translation toggle state (D-05 — tile-level, not context menu)
   const [showOriginal, setShowOriginal] = useState(false);
+  // Flip to summary-fallback layout if the image URL fails to load (broken CDN,
+  // 404, cross-origin) — otherwise the tile would show a 16:9 blank region.
+  const [imageFailed, setImageFailed] = useState(false);
 
   // D-01: show English translated title when available; fall back to rephrased
   const englishHeadline = article.translatedTitle ?? article.rephrasedTitle;
@@ -59,7 +62,7 @@ export function NewsTile({ article, onLongPress, onReactionToggle }: NewsTilePro
   const canToggleLanguage = !!article.translatedTitle;
 
   // D-01: image-top layout vs. summary-fallback layout
-  const showImage = !!article.imageUrl;
+  const showImage = !!article.imageUrl && !imageFailed;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -114,6 +117,7 @@ export function NewsTile({ article, onLongPress, onReactionToggle }: NewsTilePro
             source={{ uri: article.imageUrl! }}
             style={styles.image}
             resizeMode="cover"
+            onError={() => setImageFailed(true)}
           />
         )}
 
