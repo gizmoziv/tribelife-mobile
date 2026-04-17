@@ -9,14 +9,18 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { newsApi } from '@/services/api';
+import { newsApi, applyReactionToggle } from '@/services/api';
+import { useAuthStore } from '@/store/authStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { COLORS, FONTS, SPACING } from '@/constants';
+import { NewsTile } from '@/components/ui/news/NewsTile';
+import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import type { NewsArticle } from '@/types';
 
 export default function NewsScreen() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -25,7 +29,13 @@ export default function NewsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Shared fetch routine. `mode` determines whether articles replace or append.
+  // ContextMenu state — one article selected at a time (T-03-03-06: boolean guard)
+  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  // ── Feed loading ──────────────────────────────────────────────────────────
+
+  /** Shared fetch routine. `mode` determines whether articles replace or append. */
   const load = useCallback(
     async (beforeCursor: string | null, mode: 'initial' | 'more' | 'refresh') => {
       const res = await newsApi.feed(beforeCursor ?? undefined);
@@ -37,7 +47,7 @@ export default function NewsScreen() {
       setCursor(res.nextCursor);
       setHasMore(res.hasMore);
     },
-    []
+    [],
   );
 
   // Initial load
@@ -67,20 +77,64 @@ export default function NewsScreen() {
     }
   }, [load]);
 
-  // PLACEHOLDER renderItem — Plan 03 replaces with <NewsTile>
+  // ── Reaction handler (unified — used by both menu pick AND pill tap) ───────
+
+  /**
+   * Optimistic reaction toggle with rollback on network error.
+   * D-07: applyReactionToggle flips add/remove based on current userIds membership.
+   * Passes currentUserId so optimistic userIds[] matches server shape — prevents
+   * count flicker on pull-to-refresh (first-tap produces userIds:[currentUserId]).
+   */
+  const handleReactionToggle = useCallback(
+    async (articleId: number, emoji: string) => {
+      if (!currentUserId) return; // unreachable for authenticated users, but typesafe guard
+      // Optimistic update
+      setArticles(prev =>
+        prev.map(a => (a.id === articleId ? applyReactionToggle(a, emoji, currentUserId) : a)),
+      );
+      try {
+        await newsApi.toggleReaction(articleId, emoji);
+      } catch {
+        // Rollback: applying toggle twice with same args reverts to original state
+        setArticles(prev =>
+          prev.map(a => (a.id === articleId ? applyReactionToggle(a, emoji, currentUserId) : a)),
+        );
+      }
+    },
+    [currentUserId],
+  );
+
+  // ── ContextMenu handlers ──────────────────────────────────────────────────
+
+  const handleLongPress = useCallback((a: NewsArticle) => {
+    setSelectedArticle(a);
+    setMenuVisible(true);
+  }, []);
+
+  /** Called when user picks an emoji from the context menu. */
+  const handleMenuReact = useCallback(
+    (emoji: string) => {
+      if (!selectedArticle) return;
+      setMenuVisible(false);
+      handleReactionToggle(selectedArticle.id, emoji);
+    },
+    [selectedArticle, handleReactionToggle],
+  );
+
+  // ── Render item ───────────────────────────────────────────────────────────
+
   const renderItem = useCallback(
     ({ item }: { item: NewsArticle }) => (
-      <View style={[styles.placeholderRow, { borderColor: colors.border }]}>
-        <Text style={[styles.placeholderText, { color: colors.text }]} numberOfLines={3}>
-          {item.translatedTitle ?? item.rephrasedTitle}
-        </Text>
-        <Text style={[styles.placeholderMeta, { color: colors.textMuted }]}>
-          {item.outletName}
-        </Text>
-      </View>
+      <NewsTile
+        article={item}
+        onLongPress={handleLongPress}
+        onReactionToggle={handleReactionToggle}
+      />
     ),
-    [colors.border, colors.text, colors.textMuted]
+    [handleLongPress, handleReactionToggle],
   );
+
+  // ── Loading state ─────────────────────────────────────────────────────────
 
   if (loadingInitial) {
     return (
@@ -89,6 +143,8 @@ export default function NewsScreen() {
       </SafeAreaView>
     );
   }
+
+  // ── Main render ───────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -123,18 +179,28 @@ export default function NewsScreen() {
         windowSize={10}
         removeClippedSubviews
       />
+
+      {/* ContextMenu — reaction-only: onReply, onTranslate, onReport intentionally OMITTED.
+          Task 1 made all three optional; omitting hides the rows (no dead buttons).
+          News (Phase 3) has no reply flow, D-05 translation is tile-level, and article
+          moderation is deferred to a future phase (extend content_type enum to 'news'). */}
+      <ContextMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onReact={handleMenuReact}
+        messageContent={selectedArticle?.rephrasedTitle ?? ''}
+      />
     </SafeAreaView>
   );
 }
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { padding: SPACING.md, flexGrow: 1 },
   footerLoader: { marginVertical: SPACING.md },
-  placeholderRow: { padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderRadius: 8 },
-  placeholderText: { fontFamily: FONTS.medium, fontSize: 16, marginBottom: SPACING.xs },
-  placeholderMeta: { fontFamily: FONTS.regular, fontSize: 12 },
   emptyTitle: { fontFamily: FONTS.bold, fontSize: 18, marginBottom: SPACING.sm },
   emptyBody: { fontFamily: FONTS.regular, fontSize: 14, textAlign: 'center', paddingHorizontal: SPACING.xl },
 });
