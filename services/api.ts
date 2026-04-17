@@ -11,6 +11,8 @@ import type {
   GlobeRoom,
   GlobeMessage,
   GroupMember,
+  NewsArticle,
+  ReactionGroup,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -287,3 +289,77 @@ export const globeApi = {
   markRead: (slug: string) =>
     request<{ ok: true }>(`/api/globe/rooms/${slug}/read`, { method: 'PUT' }),
 };
+
+// ── News ────────────────────────────────────────────────────────────────────
+export const newsApi = {
+  feed: (before?: string) =>
+    request<{ articles: NewsArticle[]; hasMore: boolean; nextCursor: string | null }>(
+      `/api/news/feed${before ? `?before=${encodeURIComponent(before)}` : ''}`
+    ),
+
+  toggleReaction: (articleId: number, emoji: string) =>
+    request<{ action: 'added' | 'removed' }>(
+      '/api/news/reactions/toggle',
+      { method: 'POST', body: JSON.stringify({ articleId, emoji }) }
+    ),
+};
+
+/**
+ * Optimistic reaction toggle for NewsArticle.reactions.
+ *
+ * D-07 semantics (per-user, per-emoji). Requires `currentUserId` so the optimistic
+ * mutation mirrors server-side `userIds[]` state (server's attachNewsReactions pushes
+ * `req.user!.id` into userIds on add). Without this parameter, the optimistic update
+ * leaves userIds: [] for a brand-new group, which diverges from the authoritative
+ * response on next pull-to-refresh.
+ *
+ * Branches:
+ * - No group for this emoji on this article → append {emoji, count:1, userIds:[currentUserId], hasReacted:true}.
+ * - Group exists and currentUserId is NOT in userIds → count+1, append currentUserId to userIds, hasReacted:true.
+ * - Group exists and currentUserId IS in userIds → count-1, filter currentUserId out of userIds, hasReacted:false; drop group when count hits 0.
+ *
+ * Pure. Calling with the same (article, emoji, currentUserId) twice returns the original article — used by Plan 03 rollback.
+ */
+export function applyReactionToggle(
+  article: NewsArticle,
+  emoji: string,
+  currentUserId: number,
+): NewsArticle {
+  const existing = article.reactions.find(r => r.emoji === emoji);
+  const userAlreadyReacted = !!existing && existing.userIds.includes(currentUserId);
+
+  let next: ReactionGroup[];
+  if (userAlreadyReacted && existing) {
+    // Remove: decrement, drop currentUserId from userIds, drop group if empty
+    next = article.reactions
+      .map(r => r.emoji === emoji
+        ? {
+            ...r,
+            count: r.count - 1,
+            userIds: r.userIds.filter(id => id !== currentUserId),
+            hasReacted: false,
+          }
+        : r
+      )
+      .filter(r => r.count > 0);
+  } else if (existing) {
+    // Add to existing group
+    next = article.reactions.map(r =>
+      r.emoji === emoji
+        ? {
+            ...r,
+            count: r.count + 1,
+            userIds: [...r.userIds, currentUserId],
+            hasReacted: true,
+          }
+        : r
+    );
+  } else {
+    // First reaction for this emoji — create the group with currentUserId present
+    next = [
+      ...article.reactions,
+      { emoji, count: 1, userIds: [currentUserId], hasReacted: true },
+    ];
+  }
+  return { ...article, reactions: next };
+}

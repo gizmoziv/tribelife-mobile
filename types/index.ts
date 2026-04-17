@@ -141,3 +141,19 @@ export interface GlobeMessage {
   replyToId?: number | null;
   mediaUrls?: string[] | null;
 }
+
+// ── News ─────────────────────────────────────────────────────────────────────
+export interface NewsArticle {
+  id: number;
+  outletSlug: string;
+  outletName: string;
+  rephrasedTitle: string;
+  translatedTitle: string | null;
+  originalLanguage: string | null;
+  summary: string | null;
+  imageUrl: string | null;
+  sourceUrl: string;
+  publishedAt: string;              // ISO timestamp
+  importance: 'breaking' | 'major'; // 'routine' is server-filtered
+  reactions: ReactionGroup[];       // reuse v1.1 type
+}
