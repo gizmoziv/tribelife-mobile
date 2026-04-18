@@ -19,7 +19,7 @@ export async function connectSocket(): Promise<Socket | null> {
 
     const s = io(API_URL, {
       auth: { token },
-      transports: ['polling', 'websocket'],
+      transports: ['websocket'],   // websocket-only: eliminates polling handshake + sticky-session requirement
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1500,
