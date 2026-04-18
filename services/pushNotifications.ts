@@ -32,6 +32,13 @@ export async function registerForPushNotifications(): Promise<string | null> {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#E8922F',
       });
+      await Notifications.setNotificationChannelAsync('news', {
+        name: 'Breaking News',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#E8922F',
+        sound: 'default',
+      });
     }
 
     if (!Device.isDevice) return null;
