@@ -183,6 +183,18 @@ export const notificationsApi = {
     }),
 };
 
+// ── News Push ──────────────────────────────────────────────────────────────
+export const newsPushApi = {
+  getPreference: () =>
+    request<{ newsPushEnabled: boolean }>('/api/users/me/news-push'),
+
+  updatePreference: (newsPushEnabled: boolean) =>
+    request<{ ok: true }>('/api/users/me/news-push', {
+      method: 'PUT',
+      body: JSON.stringify({ newsPushEnabled }),
+    }),
+};
+
 // ── Support ───────────────────────────────────────────────────────────────
 export const supportApi = {
   send: (subject: string, message: string) =>
