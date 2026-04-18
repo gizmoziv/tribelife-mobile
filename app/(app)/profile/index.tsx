@@ -23,7 +23,7 @@ import * as Notifications from 'expo-notifications';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, referralsApi, notificationsApi, groupsApi } from '@/services/api';
+import { auth, referralsApi, notificationsApi, groupsApi, newsPushApi } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
@@ -131,6 +131,7 @@ export default function ProfileScreen() {
     beaconMatchesPush: true,
     dmPush: true,
   });
+  const [newsPushEnabled, setNewsPushEnabled] = useState(true); // default true matches DB column default
 
   useEffect(() => {
     // Check device push permission status
@@ -139,6 +140,9 @@ export default function ProfileScreen() {
     });
     // Load server-side preferences
     notificationsApi.getPreferences().then(setNotifPrefs).catch(() => {});
+    newsPushApi.getPreference()
+      .then(({ newsPushEnabled }) => setNewsPushEnabled(newsPushEnabled))
+      .catch(() => {});
   }, []);
 
   const handleTogglePush = useCallback(async (value: boolean) => {
@@ -176,6 +180,15 @@ export default function ProfileScreen() {
     } catch {
       // Revert on failure
       setNotifPrefs(prev => ({ ...prev, [key]: !value }));
+    }
+  }, []);
+
+  const updateNewsPushPref = useCallback(async (value: boolean) => {
+    setNewsPushEnabled(value); // optimistic
+    try {
+      await newsPushApi.updatePreference(value);
+    } catch {
+      setNewsPushEnabled(!value); // revert on failure
     }
   }, []);
 
@@ -439,6 +452,18 @@ export default function ProfileScreen() {
                   <Switch
                     value={pushEnabled && notifPrefs.dmPush}
                     onValueChange={(v) => updateNotifPref('dmPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Breaking News Notifications"
+                right={
+                  <Switch
+                    value={pushEnabled && newsPushEnabled}
+                    onValueChange={(v) => updateNewsPushPref(v)}
                     trackColor={{ false: colors.border, true: COLORS.primary }}
                     thumbColor="#FFF"
                     disabled={!pushEnabled}
