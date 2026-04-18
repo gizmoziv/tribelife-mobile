@@ -26,9 +26,9 @@ interface ContextMenuProps {
   visible: boolean;
   onClose: () => void;
   onReact: (emoji: string) => void;
-  onReply: () => void;
-  onReport: () => void;
-  onTranslate: () => void;
+  onReply?: () => void;      // optional — news feed omits Reply row (news has no reply concept)
+  onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
+  onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
   messageContent: string;
 }
 
@@ -74,17 +74,17 @@ export function ContextMenu({
   };
 
   const handleReply = () => {
-    onReply();
+    onReply?.();
     onClose();
   };
 
   const handleTranslate = () => {
-    onTranslate();
+    onTranslate?.();
     onClose();
   };
 
   const handleReport = () => {
-    onReport();
+    onReport?.();
     onClose();
   };
 
@@ -125,35 +125,41 @@ export function ContextMenu({
             {/* Divider */}
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            {/* Action items */}
-            <TouchableOpacity
-              style={styles.actionRow}
-              onPress={handleReply}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.actionIcon}>&#x21A9;</Text>
-              <Text style={[styles.actionLabel, { color: colors.text }]}>Reply</Text>
-            </TouchableOpacity>
+            {/* Action items — rows hidden when their prop is undefined (e.g. news tiles omit all three) */}
+            {onReply && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleReply}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x21A9;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Reply</Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              style={styles.actionRow}
-              onPress={handleTranslate}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.actionIcon}>&#x1F310;</Text>
-              <Text style={[styles.actionLabel, { color: colors.text }]}>
-                Translate
-              </Text>
-            </TouchableOpacity>
+            {onTranslate && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleTranslate}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x1F310;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>
+                  Translate
+                </Text>
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              style={styles.actionRow}
-              onPress={handleReport}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.actionIcon}>&#x26A0;</Text>
-              <Text style={[styles.actionLabel, { color: colors.error }]}>Report</Text>
-            </TouchableOpacity>
+            {onReport && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleReport}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x26A0;</Text>
+                <Text style={[styles.actionLabel, { color: colors.error }]}>Report</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Bottom safe area padding */}
             <View style={{ height: insets.bottom + 20 }} />

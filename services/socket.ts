@@ -4,40 +4,50 @@ import { getToken } from './api';
 import type { Message } from '@/types';
 
 let socket: Socket | null = null;
+let connecting: Promise<Socket | null> | null = null;
 
 export async function connectSocket(): Promise<Socket | null> {
   if (socket?.connected) return socket;
+  if (connecting) return connecting;
 
-  const token = await getToken();
-  if (!token) {
-    console.log('[socket] No auth token — skipping connection');
-    return null;
-  }
+  connecting = (async () => {
+    const token = await getToken();
+    if (!token) {
+      console.log('[socket] No auth token — skipping connection');
+      return null;
+    }
 
-  socket = io(API_URL, {
-    auth: { token },
-    transports: ['polling', 'websocket'],
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1500,
+    const s = io(API_URL, {
+      auth: { token },
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1500,
+    });
+
+    s.on('connect', () => {
+      console.log('[socket] Connected:', s.id);
+    });
+
+    s.on('disconnect', (reason) => {
+      console.log('[socket] Disconnected:', reason);
+    });
+
+    s.on('connect_error', (err) => {
+      console.error('[socket] Connection error:', err.message);
+    });
+
+    socket = s;
+    return s;
+  })().finally(() => {
+    connecting = null;
   });
 
-  socket.on('connect', () => {
-    console.log('[socket] Connected:', socket?.id);
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log('[socket] Disconnected:', reason);
-  });
-
-  socket.on('connect_error', (err) => {
-    console.error('[socket] Connection error:', err.message);
-  });
-
-  return socket;
+  return connecting;
 }
 
 export function disconnectSocket(): void {
+  connecting = null;
   socket?.disconnect();
   socket = null;
 }

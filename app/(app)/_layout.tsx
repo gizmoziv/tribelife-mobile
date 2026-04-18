@@ -9,6 +9,7 @@ import {
   AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useGlobeStore } from '@/store/globeStore';
@@ -50,10 +51,31 @@ function GlobeIcon({ color }: { color: string }) {
   );
 }
 
+function PlusIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 5v14M5 12h14"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export default function AppLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
   const { unreadCount, setNotifications } = useNotificationStore();
+
+  // Sync the app icon badge count to the in-app unread notifications count.
+  // Industry standard (WhatsApp/iMessage): badge = total unread items across
+  // the app. Clears automatically when the user has caught up (marked as read).
+  useEffect(() => {
+    Notifications.setBadgeCountAsync(unreadCount).catch(() => {});
+  }, [unreadCount]);
   const { totalUnread, setUnreadCounts } = useGlobeStore();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -177,18 +199,13 @@ export default function AppLayout() {
         },
         headerRight: () => (
           <View style={styles.headerRight}>
+            {/* Globe icon moved to bottom nav between Chat and Beacon */}
             <TouchableOpacity
               style={styles.headerButton}
-              onPress={() => router.push('/(app)/globe')}
+              onPress={() => router.push('/(app)/group/create')}
+              hitSlop={8}
             >
-              <GlobeIcon color={colors.textMuted} />
-              {totalUnread > 0 && (
-                <View style={styles.globeBadge}>
-                  <Text style={styles.badgeText}>
-                    {totalUnread > 99 ? '99+' : totalUnread}
-                  </Text>
-                </View>
-              )}
+              <PlusIcon color={colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.bellButton}
@@ -218,6 +235,18 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="globe"
+        options={{
+          title: 'Globe',
+          tabBarIcon: ({ color, focused }) => (
+            <GradientTabIcon icon="globe" color={color} focused={focused} />
+          ),
+          // Notification badge on the icon intentionally disabled per UX request
+          // tabBarBadge: totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
+          headerTitle: 'Globe',
+        }}
+      />
+      <Tabs.Screen
         name="beacon"
         options={{
           title: 'Beacon',
@@ -228,6 +257,16 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="news"
+        options={{
+          title: 'News',
+          tabBarIcon: ({ color, focused }) => (
+            <GradientTabIcon icon="news" color={color} focused={focused} />
+          ),
+          headerTitle: 'News',
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
@@ -235,13 +274,6 @@ export default function AppLayout() {
             <GradientTabIcon icon="profile" color={color} focused={focused} />
           ),
           headerTitle: 'My Profile',
-        }}
-      />
-      <Tabs.Screen
-        name="globe"
-        options={{
-          href: null,
-          headerShown: false,
         }}
       />
       <Tabs.Screen

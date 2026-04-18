@@ -45,6 +45,7 @@ import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import type { Message } from '@/types';
 import Svg, { Path } from 'react-native-svg';
@@ -84,6 +85,7 @@ export default function DMThreadScreen() {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -601,32 +603,46 @@ export default function DMThreadScreen() {
 
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
-        <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
-          <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
-          {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-          <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-            <TextInput
-              style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-              placeholder="Message..."
-              placeholderTextColor={colors.textMuted}
-              value={input}
-              onChangeText={handleInputChange}
-              multiline
-              maxLength={2000}
-            />
-          </View>
-          <Pressable
-            onPress={handleSend}
-            disabled={!input.trim() || isUploading}
-            style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
-          >
-            <LinearGradient
-              colors={[...COLORS.gradientPrimary]}
-              style={styles.sendButton}
+        <View style={{ position: 'relative' }}>
+          <MentionAutocomplete
+            text={input}
+            selection={selection}
+            scope={isGroup ? 'group' : 'dm'}
+            contextId={isGroup ? conversationId.toString() : (handle ?? '')}
+            onSelect={(newText, newCursor) => {
+              setInput(newText);
+              setSelection({ start: newCursor, end: newCursor });
+            }}
+          />
+          <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+            <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+            {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+            <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+              <TextInput
+                style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                placeholder="Message..."
+                placeholderTextColor={colors.textMuted}
+                value={input}
+                onChangeText={handleInputChange}
+                selection={selection}
+                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                multiline
+                maxLength={2000}
+              />
+            </View>
+            <Pressable
+              onPress={handleSend}
+              disabled={!input.trim() || isUploading}
+              style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
             >
-              <SendIcon />
-            </LinearGradient>
-          </Pressable>
+              <LinearGradient
+                colors={[...COLORS.gradientPrimary]}
+                style={styles.sendButton}
+              >
+                <SendIcon />
+              </LinearGradient>
+            </Pressable>
+          </View>
         </View>
 
         <ContextMenu

@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient as SvgGradient, Stop, Path, Circle } from 're
 
 interface GradientTabIconProps {
   focused: boolean;
-  icon: 'chat' | 'beacon' | 'profile';
+  icon: 'chat' | 'globe' | 'beacon' | 'news' | 'profile';
   color: string;
   size?: number;
 }
@@ -32,13 +32,32 @@ function renderPaths(icon: string, color: string) {
   switch (icon) {
     case 'chat':
       return <ChatPaths color={color} />;
+    case 'globe':
+      return <GlobePaths color={color} />;
     case 'beacon':
       return <BeaconPaths color={color} />;
+    case 'news':
+      return <NewsPaths color={color} />;
     case 'profile':
       return <ProfilePaths color={color} />;
     default:
       return null;
   }
+}
+
+function GlobePaths({ color }: { color: string }) {
+  return (
+    <>
+      <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill="none" />
+      <Path
+        d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </>
+  );
 }
 
 function ChatPaths({ color }: { color: string }) {
@@ -60,6 +79,33 @@ function BeaconPaths({ color }: { color: string }) {
       d="M12 0.5C5.5 8 4 11.5 4 15C4 19.7 7.58 23.5 12 23.5C16.42 23.5 20 19.7 20 15C20 11.5 18.5 8 12 0.5ZM12 20C9.79 20 8 18.25 8 16C8 14.1 9.4 11.8 12 8.5C14.6 11.8 16 14.1 16 16C16 18.25 14.21 20 12 20Z"
       fill={color}
     />
+  );
+}
+
+function NewsPaths({ color }: { color: string }) {
+  return (
+    <>
+      <Path
+        d="M4 4.5h12l4 4V19a.5.5 0 0 1-.5.5h-15.5a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Path
+        d="M16 4.5v4h4"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+        fill="none"
+      />
+      <Path
+        d="M7 12h10M7 14.5h10M7 17h6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+      />
+    </>
   );
 }
 
