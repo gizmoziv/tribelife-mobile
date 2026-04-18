@@ -145,6 +145,11 @@ function RootLayoutInner() {
               setTimeout(() => router.push('/(app)/chat'), 500);
             } else if (nData?.type === 'beacon_match') {
               setTimeout(() => router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } }), 500);
+            } else if (nData?.type === 'news_breaking') {
+              setTimeout(() => router.push({
+                pathname: '/(app)/news',
+                params: nData?.articleId ? { highlightArticleId: String(nData.articleId) } : {},
+              }), 500);
             }
           }
 
@@ -206,6 +211,11 @@ function RootLayoutInner() {
         });
       } else if (data?.type === 'beacon_match') {
         router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
+      } else if (data?.type === 'news_breaking') {
+        router.push({
+          pathname: '/(app)/news',
+          params: data?.articleId ? { highlightArticleId: String(data.articleId) } : {},
+        });
       }
     }
 
