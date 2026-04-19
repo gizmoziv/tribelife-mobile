@@ -329,7 +329,6 @@ export default function CreateGroupScreen() {
               <BulletRow
                 icon={<IconScroll color={COLORS.primary} />}
                 text="Curated Jewish news feed"
-                comingSoon
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />

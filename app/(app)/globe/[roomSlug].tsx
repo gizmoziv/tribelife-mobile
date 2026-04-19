@@ -19,7 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, useNavigation, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
@@ -113,6 +113,15 @@ export default function GlobeRoomChat() {
   const tabBarSpace = useTabBarSpace();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const parent = navigation.getParent();
+    parent?.setOptions({ headerShown: false });
+    return () => {
+      parent?.setOptions({ headerShown: true });
+    };
+  }, [navigation]);
   const { user } = useAuthStore();
   const {
     rooms,
@@ -608,11 +617,13 @@ export default function GlobeRoomChat() {
   if (isLoadingMessages && messages.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen
-          options={{
-            title: room?.displayName ?? 'Globe Room',
-            headerBackTitle: 'Globe',
-          }}
+        <Stack.Screen options={{ headerShown: false }} />
+        <CustomHeader
+          title={room?.displayName ?? 'Globe Room'}
+          participantCount={0}
+          onBack={() => router.back()}
+          colors={colors}
+          insetsTop={insets.top}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
@@ -623,24 +634,18 @@ export default function GlobeRoomChat() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen
-        options={{
-          title: room?.displayName ?? 'Globe Room',
-          headerBackTitle: 'Globe',
-          headerRight: () => (
-            <View style={styles.headerParticipants}>
-              <View style={[styles.participantDot, { backgroundColor: COLORS.secondary }]} />
-              <Text style={[styles.participantText, { color: colors.textMuted }]}>
-                {participantCount}
-              </Text>
-            </View>
-          ),
-        }}
+      <Stack.Screen options={{ headerShown: false }} />
+      <CustomHeader
+        title={room?.displayName ?? 'Globe Room'}
+        participantCount={participantCount}
+        onBack={() => router.back()}
+        colors={colors}
+        insetsTop={insets.top}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={0}
       >
         {/* Age gate banner */}
         {isAgeGated && (
@@ -806,6 +811,51 @@ export default function GlobeRoomChat() {
   );
 }
 
+// ── Custom header ────────────────────────────────────────────────────────────
+interface CustomHeaderProps {
+  title: string;
+  participantCount: number;
+  onBack: () => void;
+  colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
+  insetsTop: number;
+}
+
+function CustomHeader({ title, participantCount, onBack, colors, insetsTop }: CustomHeaderProps) {
+  return (
+    <View
+      style={[
+        styles.headerRow,
+        {
+          paddingTop: (Platform.OS === 'android' ? insetsTop : 0) + 6,
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      <Pressable
+        onPress={onBack}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.headerBackPill,
+          { backgroundColor: colors.surfaceGlass, opacity: pressed ? 0.8 : 1 },
+          SHADOWS.sm,
+        ]}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+          <Path d="M15 18l-6-6 6-6" stroke={colors.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+        <Text style={[styles.headerBackText, { color: colors.text }]}>Globe</Text>
+      </Pressable>
+      <View style={styles.headerTitleWrap} pointerEvents="none">
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+      </View>
+      <View style={[styles.headerParticipants, { backgroundColor: colors.surfaceGlass }, SHADOWS.sm]}>
+        <View style={[styles.participantDot, { backgroundColor: COLORS.secondary }]} />
+        <Text style={[styles.participantText, { color: colors.textMuted }]}>{participantCount}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -816,11 +866,42 @@ function formatTime(iso: string): string {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headerParticipants: {
+  headerRow: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.page,
+    paddingBottom: 10,
+  },
+  headerBackPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginRight: SPACING.page,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+  },
+  headerBackText: {
+    fontSize: 15,
+    fontFamily: FONTS.semiBold,
+  },
+  headerTitleWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontFamily: FONTS.semiBold,
+  },
+  headerParticipants: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
   },
   participantDot: {
     width: 8,

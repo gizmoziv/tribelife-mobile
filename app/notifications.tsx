@@ -100,7 +100,10 @@ export default function NotificationsScreen() {
         }
         break;
       case 'beacon_match':
-        router.push('/(app)/beacon');
+        router.push({
+          pathname: '/(app)/beacon',
+          params: { tab: 'matches' },
+        });
         break;
     }
   };
