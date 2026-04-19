@@ -37,6 +37,22 @@ export async function connectSocket(): Promise<Socket | null> {
       console.error('[socket] Connection error:', err.message);
     });
 
+    // HARDEN-02: backend rolling-deploy signal. Backend emits this during
+    // graceful shutdown (lib/shutdown.ts D-15) with payload
+    // { reason: 'rolling_deploy' }. We ignore the payload (D-15 reserves the
+    // reason field for future expansion without requiring a mobile release).
+    // Immediate disconnect + reconnect on the SAME socket instance `s`
+    // skips the 1.5s reconnectionDelay and lands on the new pod within
+    // ~500ms — inside the 5s drain window. Silent UX (D-18): no banner,
+    // no toast, no state change — sub-500ms reconnects are invisible to
+    // users. socket.io-client buffers outgoing events while disconnected
+    // and flushes them on reconnect, so in-flight sends are not lost.
+    s.on('server:shutdown', () => {
+      console.log('[socket] server:shutdown received — reconnecting');
+      s.disconnect();
+      s.connect();
+    });
+
     socket = s;
     return s;
   })().finally(() => {
