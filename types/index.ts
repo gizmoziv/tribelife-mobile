@@ -6,6 +6,8 @@ export interface User {
   avatarUrl: string | null;
   isPremium: boolean;
   timezone: string | null;
+  acceptedTermsAt: string | null;
+  handleUpdatedAt: string | null;
 }
 
 export interface ReactionGroup {
@@ -52,6 +54,7 @@ export interface Conversation {
   groupIconUrl?: string | null;
   inviteSlug?: string;
   memberCount?: number;
+  unreadCount: number;
 }
 
 export interface GroupMember {

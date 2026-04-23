@@ -7,12 +7,16 @@ import {
   SafeAreaView,
   ActivityIndicator,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useTheme } from '@/contexts/ThemeContext';
 import { newsApi, applyReactionToggle } from '@/services/api';
+import { onNewsAvailable } from '@/services/socket';
 import { useAuthStore } from '@/store/authStore';
+import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
-import { COLORS, FONTS, SPACING } from '@/constants';
+import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
 import { NewsTile } from '@/components/ui/news/NewsTile';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import type { NewsArticle } from '@/types';
@@ -32,6 +36,40 @@ export default function NewsScreen() {
   // ContextMenu state — one article selected at a time (T-03-03-06: boolean guard)
   const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+
+  // In-app banner shown when a news_breaking push arrives while this screen
+  // is mounted. The OS push for the same event is suppressed by the handler
+  // in services/pushNotifications.ts (foreground + ctx.type==='news').
+  const [hasNewArticles, setHasNewArticles] = useState(false);
+
+  // Tell the push-notification handler we're on the news tab so it suppresses
+  // OS banners for news_breaking pushes — we surface them in-app instead.
+  useEffect(() => {
+    const setContext = useForegroundContextStore.getState().setContext;
+    setContext({ type: 'news' });
+    return () => setContext({ type: 'none' });
+  }, []);
+
+  // Listen for foreground notifications and flip the in-app banner flag for
+  // news_breaking. Fires regardless of suppression decision in the handler.
+  // (Note: iOS Simulator doesn't receive remote pushes, so this branch only
+  // works on physical devices — the socket listener below covers the simulator.)
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notif) => {
+      const data = notif.request.content.data as Record<string, unknown> | undefined;
+      if (data?.type === 'news_breaking') {
+        setHasNewArticles(true);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Realtime socket fallback — fires on every device (including simulator)
+  // whenever the news ingester finishes a run that produced visible articles.
+  useEffect(() => {
+    const off = onNewsAvailable(() => setHasNewArticles(true));
+    return off;
+  }, []);
 
   // ── Feed loading ──────────────────────────────────────────────────────────
 
@@ -70,11 +108,21 @@ export default function NewsScreen() {
     setRefreshing(true);
     try {
       await load(null, 'refresh');
+      setHasNewArticles(false);
     } catch (err) {
       console.error('[news] refresh failed', err);
     } finally {
       setRefreshing(false);
     }
+  }, [load]);
+
+  const handleBannerTap = useCallback(async () => {
+    try {
+      await load(null, 'refresh');
+    } catch (err) {
+      console.error('[news] banner refresh failed', err);
+    }
+    setHasNewArticles(false);
   }, [load]);
 
   // ── Reaction handler (unified — used by both menu pick AND pill tap) ───────
@@ -148,6 +196,17 @@ export default function NewsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {hasNewArticles && (
+        <TouchableOpacity
+          onPress={handleBannerTap}
+          activeOpacity={0.85}
+          style={[styles.newArticlesBanner, { backgroundColor: COLORS.primary }]}
+        >
+          <Text style={styles.newArticlesBannerText}>
+            New articles available — tap to refresh
+          </Text>
+        </TouchableOpacity>
+      )}
       <FlatList
         data={articles}
         keyExtractor={a => String(a.id)}
@@ -203,4 +262,17 @@ const styles = StyleSheet.create({
   footerLoader: { marginVertical: SPACING.md },
   emptyTitle: { fontFamily: FONTS.bold, fontSize: 18, marginBottom: SPACING.sm },
   emptyBody: { fontFamily: FONTS.regular, fontSize: 14, textAlign: 'center', paddingHorizontal: SPACING.xl },
+  newArticlesBanner: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+  },
+  newArticlesBannerText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontFamily: FONTS.semiBold,
+  },
 });

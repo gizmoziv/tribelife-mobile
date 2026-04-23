@@ -35,15 +35,16 @@ function GlobeIcon() {
   );
 }
 
-type HandleStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
+type HandleResult = 'none' | 'invalid' | 'available' | 'taken';
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { updateUser } = useAuthStore();
+  const { completeOnboarding } = useAuthStore();
 
   const [handle, setHandle] = useState('');
-  const [handleStatus, setHandleStatus] = useState<HandleStatus>('idle');
+  const [handleResult, setHandleResult] = useState<HandleResult>('none');
+  const [isChecking, setIsChecking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,32 +61,34 @@ export default function OnboardingScreen() {
 
     if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
 
+    if (cleaned.length === 0) {
+      setHandleResult('none');
+      setIsChecking(false);
+      return;
+    }
+
     if (cleaned.length < 3) {
-      setHandleStatus(cleaned.length > 0 ? 'invalid' : 'idle');
+      setHandleResult('invalid');
+      setIsChecking(false);
       return;
     }
 
-    if (cleaned.length > 30) {
-      setHandleStatus('invalid');
-      return;
-    }
+    // Clear stale "too short" result when user reaches valid length; keep real results.
+    setHandleResult((prev) => (prev === 'invalid' ? 'none' : prev));
+    setIsChecking(true);
 
-    // Don't set 'checking' immediately — avoid re-render on every keystroke
     checkTimeoutRef.current = setTimeout(async () => {
       const current = latestHandleRef.current;
       if (current.length < 3) return;
-      setHandleStatus('checking');
       try {
         const { available } = await auth.checkHandle(current);
         if (latestHandleRef.current === current) {
-          setHandleStatus(available ? 'available' : 'taken');
-          // Re-focus input after status change (Android loses focus on layout shift)
-          setTimeout(() => handleInputRef.current?.focus(), 50);
+          setHandleResult(available ? 'available' : 'taken');
+          setIsChecking(false);
         }
       } catch {
         if (latestHandleRef.current === current) {
-          setHandleStatus('idle');
-          setTimeout(() => handleInputRef.current?.focus(), 50);
+          setIsChecking(false);
         }
       }
     }, 600);
@@ -96,7 +99,7 @@ export default function OnboardingScreen() {
       Alert.alert('Handle Required', 'Please choose a handle before continuing.');
       return;
     }
-    if (handleStatus !== 'available') {
+    if (handleResult !== 'available' || isChecking) {
       Alert.alert('Handle Unavailable', 'Please choose an available handle before continuing.');
       return;
     }
@@ -109,7 +112,11 @@ export default function OnboardingScreen() {
     try {
       const referralCode = await AsyncStorage.getItem('referralCode');
       await auth.onboarding(handle, detectedTimezone, true, referralCode ?? undefined);
-      updateUser({ handle, timezone: detectedTimezone });
+      completeOnboarding({
+        handle,
+        timezone: detectedTimezone,
+        acceptedTermsAt: new Date().toISOString(),
+      });
       await AsyncStorage.removeItem('referralCode');
       const ctaDismissed = await AsyncStorage.getItem('globe_cta_dismissed');
       if (ctaDismissed === 'true') {
@@ -138,27 +145,25 @@ export default function OnboardingScreen() {
     router.replace('/(app)/beacon');
   };
 
-  const statusColor = {
-    idle: colors.textMuted,
-    checking: colors.textMuted,
+  const resultColor = {
+    none: colors.textMuted,
     available: COLORS.success,
     taken: COLORS.error,
     invalid: COLORS.error,
-  }[handleStatus];
+  }[handleResult];
 
-  const statusText = {
-    idle: '',
-    checking: 'Checking...',
+  const resultText = {
+    none: '',
     available: 'Available',
     taken: 'Already taken',
-    invalid: handle.length < 3 && handle.length > 0
+    invalid: handle.length < 3
       ? 'At least 3 characters required'
       : 'Letters, numbers, and underscores only',
-  }[handleStatus];
+  }[handleResult];
 
-  const inputBorderColor = handleStatus === 'available'
+  const inputBorderColor = handleResult === 'available'
     ? COLORS.success
-    : handleStatus === 'taken' || handleStatus === 'invalid'
+    : handleResult === 'taken' || handleResult === 'invalid'
       ? COLORS.error
       : colors.border;
 
@@ -221,11 +226,6 @@ export default function OnboardingScreen() {
                     borderColor: inputBorderColor,
                     backgroundColor: colors.surfaceGlass,
                   },
-                  handleStatus === 'available' && {
-                    ...SHADOWS.sm,
-                    shadowColor: COLORS.success,
-                    shadowOpacity: 0.2,
-                  },
                 ]}>
                   <GlowBadge text="@" color={COLORS.accent} size="sm" />
                   <TextInput
@@ -239,18 +239,21 @@ export default function OnboardingScreen() {
                     autoCorrect={false}
                     maxLength={30}
                     autoFocus
+                    blurOnSubmit={false}
                   />
-                  {handleStatus === 'checking' && (
-                    <ActivityIndicator size="small" color={colors.textMuted} />
-                  )}
-                  {handleStatus === 'available' && (
-                    <GlowBadge text="Available" color={COLORS.success} glow size="sm" />
-                  )}
                 </View>
 
-                {statusText && handleStatus !== 'available' ? (
-                  <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
-                ) : null}
+                <View style={styles.statusRow}>
+                  <Text style={[styles.statusText, { color: resultColor }]}>
+                    {resultText || ' '}
+                  </Text>
+                  {isChecking && (
+                    <View style={styles.checkingInline}>
+                      <ActivityIndicator size="small" color={colors.textMuted} />
+                      <Text style={[styles.statusText, { color: colors.textMuted }]}>Checking…</Text>
+                    </View>
+                  )}
+                </View>
 
                 {/* Timezone card */}
                 <GlassCard>
@@ -365,10 +368,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     height: '100%',
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 16,
+    minHeight: 18,
+  },
+  checkingInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   statusText: {
     fontSize: 13,
     fontFamily: FONTS.medium,
-    paddingLeft: 16,
   },
   timezoneRow: {
     flexDirection: 'row',

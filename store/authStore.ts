@@ -11,6 +11,7 @@ interface AuthState {
 
   setAuth: (token: string, user: User, needsOnboarding?: boolean) => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
+  completeOnboarding: (updates: Partial<User>) => void;
   logout: () => Promise<void>;
   setLoading: (loading: boolean) => void;
 }
@@ -29,6 +30,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   updateUser: (updates) =>
     set((state) => ({ user: state.user ? { ...state.user, ...updates } : null })),
+
+  completeOnboarding: (updates) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, ...updates } : null,
+      needsOnboarding: false,
+    })),
 
   logout: async () => {
     await clearToken();

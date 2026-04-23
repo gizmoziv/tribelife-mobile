@@ -13,16 +13,20 @@ import {
   TouchableOpacity,
   Alert,
   Pressable,
+  AppState,
 } from 'react-native';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi, reactionsApi } from '@/services/api';
+import { useForegroundContextStore } from '@/store/foregroundContextStore';
+import { chat, moderationApi, reactionsApi, notificationsApi } from '@/services/api';
+import { useNotificationStore } from '@/store/notificationStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -38,6 +42,7 @@ import {
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
+  getSocket,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
@@ -46,6 +51,7 @@ import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
+import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import type { Message } from '@/types';
 import Svg, { Path } from 'react-native-svg';
@@ -82,12 +88,22 @@ export default function DMThreadScreen() {
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+
+  // Tell the push-notification handler which chat we're on so it can suppress
+  // foreground OS banners only for this conversation. Pushes for OTHER chats
+  // still surface normally.
+  useEffect(() => {
+    const setContext = useForegroundContextStore.getState().setContext;
+    setContext({ type: 'chat', conversationId });
+    return () => setContext({ type: 'none' });
+  }, [conversationId]);
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
+  const typingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
@@ -223,6 +239,22 @@ export default function DMThreadScreen() {
     });
   }, [messages, handle, user?.id, isGroup, conversationId]);
 
+  // Opening a chat directly (not via a notification tap) should still clear
+  // any bell notifications tied to this conversation — otherwise the badge
+  // keeps claiming the user has unread notifications for messages they've
+  // now seen. Server authoritatively marks them read; the local store
+  // update below keeps the bell count in sync without a refetch.
+  useEffect(() => {
+    if (Number.isNaN(conversationId)) return;
+    notificationsApi.readContext({ conversationId })
+      .then(({ markedRead }) => {
+        if (markedRead.length > 0) {
+          useNotificationStore.getState().markManyRead(markedRead);
+        }
+      })
+      .catch(() => { /* silent — bell will recover on next list refetch */ });
+  }, [conversationId]);
+
   useEffect(() => {
     chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {
       setMessages(msgs);
@@ -255,11 +287,32 @@ export default function DMThreadScreen() {
       flatListRef.current?.scrollToEnd({ animated: true });
     });
 
+    // Auto-clear the typing indicator 5s after the last typing:start — guards
+    // against a missed typing:stop (e.g. when the app was backgrounded and the
+    // socket dropped before the other user stopped typing).
+    const TYPING_TIMEOUT_MS = 5000;
+    const clearTypingLater = () => {
+      if (typingClearTimerRef.current) clearTimeout(typingClearTimerRef.current);
+      typingClearTimerRef.current = setTimeout(() => {
+        setIsTyping(false);
+        typingClearTimerRef.current = null;
+      }, TYPING_TIMEOUT_MS);
+    };
+
     const offTypingStart = onTypingStart(({ handle: h }) => {
-      if (h !== user?.handle) setIsTyping(true);
+      if (h !== user?.handle) {
+        setIsTyping(true);
+        clearTypingLater();
+      }
     });
 
-    const offTypingStop = onTypingStop(() => setIsTyping(false));
+    const offTypingStop = onTypingStop(() => {
+      setIsTyping(false);
+      if (typingClearTimerRef.current) {
+        clearTimeout(typingClearTimerRef.current);
+        typingClearTimerRef.current = null;
+      }
+    });
 
     const offRejected = onMessageRejected(({ reason }) => {
       Alert.alert(
@@ -289,6 +342,44 @@ export default function DMThreadScreen() {
       offRejected();
       offMediaRemoved();
       offMediaRejected();
+      if (typingClearTimerRef.current) {
+        clearTimeout(typingClearTimerRef.current);
+        typingClearTimerRef.current = null;
+      }
+    };
+  }, [conversationId]);
+
+  // Recover from socket drops and OS-killed sockets while backgrounded:
+  // on foreground + on socket reconnect, re-fetch the conversation's messages
+  // (any sent while we were offline would otherwise be invisible) and re-join
+  // the conversation room on the server.
+  useEffect(() => {
+    const refetchAndRejoin = async () => {
+      setIsTyping(false);
+      if (typingClearTimerRef.current) {
+        clearTimeout(typingClearTimerRef.current);
+        typingClearTimerRef.current = null;
+      }
+      try {
+        const { messages: fresh } = await chat.getConversationMessages(conversationId);
+        setMessages((prev) => {
+          const pending = prev.filter((m) => m.id < 0); // preserve optimistic
+          return [...fresh, ...pending];
+        });
+      } catch { /* silent — next user action will surface the error */ }
+      joinConversation(conversationId);
+    };
+
+    const appSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetchAndRejoin();
+    });
+    const socket = getSocket();
+    const onConnect = () => refetchAndRejoin();
+    socket?.on('connect', onConnect);
+
+    return () => {
+      appSub.remove();
+      socket?.off('connect', onConnect);
     };
   }, [conversationId]);
 
@@ -405,6 +496,13 @@ export default function DMThreadScreen() {
       senderHandle: selectedMessage.senderHandle ?? 'user',
       content: selectedMessage.content,
     });
+  }, [selectedMessage]);
+
+  const handleCopy = useCallback(() => {
+    if (!selectedMessage?.content) return;
+    Clipboard.setStringAsync(selectedMessage.content)
+      .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+      .catch(() => {});
   }, [selectedMessage]);
 
   const handleReport = useCallback(() => {
@@ -618,7 +716,7 @@ export default function DMThreadScreen() {
             <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
             {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
             <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-              <TextInput
+              <MentionTextInput
                 style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
                 placeholder="Message..."
                 placeholderTextColor={colors.textMuted}
@@ -649,6 +747,7 @@ export default function DMThreadScreen() {
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
           onReact={handleReact}
+          onCopy={selectedMessage?.content ? handleCopy : undefined}
           onReply={handleReply}
           onReport={handleReport}
           onTranslate={handleTranslate}

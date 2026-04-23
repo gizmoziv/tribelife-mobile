@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated, Easing } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgGradient, Stop, Path, Circle } from 'react-native-svg';
 
 interface GradientTabIconProps {
@@ -10,21 +10,92 @@ interface GradientTabIconProps {
 }
 
 export function GradientTabIcon({ focused, icon, color, size = 26 }: GradientTabIconProps) {
+  const inner = (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {focused && (
+        <Defs>
+          <SvgGradient id="grad" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#9333EA" />
+            <Stop offset="0.5" stopColor="#E879A0" />
+            <Stop offset="1" stopColor="#F59E0B" />
+          </SvgGradient>
+        </Defs>
+      )}
+      {renderPaths(icon, focused ? 'url(#grad)' : color)}
+    </Svg>
+  );
+
+  if (icon === 'beacon') {
+    return (
+      <View style={[styles.container, { width: size, height: size }]}>
+        <BeaconFlameWrapper size={size}>{inner}</BeaconFlameWrapper>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        {focused && (
-          <Defs>
-            <SvgGradient id="grad" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor="#9333EA" />
-              <Stop offset="0.5" stopColor="#E879A0" />
-              <Stop offset="1" stopColor="#F59E0B" />
-            </SvgGradient>
-          </Defs>
-        )}
-        {renderPaths(icon, focused ? 'url(#grad)' : color)}
-      </Svg>
-    </View>
+    <View style={[styles.container, { width: size, height: size }]}>{inner}</View>
+  );
+}
+
+// Drives the flame-like motion for the beacon tab icon. Same recipe as the
+// hero flame: fast scaleY flicker, slow translateY bob, slower rotate sway —
+// slightly smaller amplitudes so it reads at 26px without feeling jittery.
+function BeaconFlameWrapper({ size, children }: { size: number; children: React.ReactNode }) {
+  const scaleY = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const oscillate = (
+      val: Animated.Value,
+      min: number,
+      max: number,
+      duration: number,
+      delay = 0,
+    ) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(val, {
+            toValue: max,
+            duration,
+            delay,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: min,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
+    const anims = [
+      oscillate(scaleY, 0.95, 1.06, 300),
+      oscillate(translateY, 0, -1, 720, 140),
+      oscillate(rotate, -0.03, 0.03, 1100, 260),
+    ];
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+  }, [scaleY, translateY, rotate]);
+
+  const rotateStr = rotate.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-57.2958deg', '57.2958deg'],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        width: size,
+        height: size,
+        transform: [{ translateY }, { scaleY }, { rotate: rotateStr }],
+      }}
+    >
+      {children}
+    </Animated.View>
   );
 }
 

@@ -43,9 +43,11 @@ function OnlineDot() {
 // ── Room List Item ──────────────────────────────────────────────────────────
 function RoomListItem({
   room,
+  unreadCount,
   onPress,
 }: {
   room: GlobeRoom;
+  unreadCount: number;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
@@ -97,6 +99,13 @@ function RoomListItem({
                 {room.participantCount}
               </Text>
             </View>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </GlassCard>
@@ -111,9 +120,11 @@ export default function GlobeScreen() {
   const {
     rooms,
     isLoadingRooms,
+    unreadCounts,
     setRooms,
     setLoadingRooms,
     updateParticipantCount,
+    markRoomRead,
   } = useGlobeStore();
 
   useEffect(() => {
@@ -145,10 +156,16 @@ export default function GlobeScreen() {
     ({ item }: { item: GlobeRoom }) => (
       <RoomListItem
         room={item}
-        onPress={() => router.push(`/globe/${item.slug}`)}
+        unreadCount={unreadCounts[item.slug] ?? 0}
+        onPress={() => {
+          // Clear locally so the badge disappears before the room screen's
+          // markRoomRead call lands (which also clears server-side via read-pos).
+          if ((unreadCounts[item.slug] ?? 0) > 0) markRoomRead(item.slug);
+          router.push(`/globe/${item.slug}`);
+        }}
       />
     ),
-    [router],
+    [router, unreadCounts, markRoomRead],
   );
 
   if (isLoadingRooms) {
@@ -238,6 +255,7 @@ const styles = StyleSheet.create({
   roomMeta: {
     alignItems: 'flex-end',
     marginLeft: SPACING.sm,
+    gap: 6,
   },
   onlineRow: {
     flexDirection: 'row',
@@ -247,5 +265,19 @@ const styles = StyleSheet.create({
   onlineText: {
     fontSize: 12,
     fontFamily: FONTS.medium,
+  },
+  unreadBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.pill,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  unreadBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontFamily: FONTS.bold,
   },
 });

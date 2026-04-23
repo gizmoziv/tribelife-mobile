@@ -6,7 +6,7 @@ import * as Haptics from 'expo-haptics';
  * Hook for scroll-to-message and brief highlight in chat FlatLists.
  */
 export function useScrollToMessage<T extends { id: number }>(
-  flatListRef: React.RefObject<FlatList>,
+  flatListRef: React.RefObject<FlatList | null>,
   messages: T[],
 ) {
   const [highlightedId, setHighlightedId] = useState<number | null>(null);

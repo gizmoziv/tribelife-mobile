@@ -19,6 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams, useRouter, useNavigation, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
@@ -26,7 +27,8 @@ import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
-import { chat, globeApi, reactionsApi } from '@/services/api';
+import { chat, globeApi, notificationsApi, reactionsApi } from '@/services/api';
+import { useNotificationStore } from '@/store/notificationStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -52,6 +54,7 @@ import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
+import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { Message, GlobeMessage } from '@/types';
@@ -205,6 +208,17 @@ export default function GlobeRoomChat() {
     // Mark room as read on entry
     globeApi.markRead(roomSlug).catch(() => {});
     markRoomRead(roomSlug);
+
+    // Clear mention notifications scoped to this Globe room so the bell +
+    // summary don't keep counting an @-mention the user has now seen.
+    notificationsApi
+      .readContext({ roomId: `globe:${roomSlug}` })
+      .then(({ markedRead }) => {
+        if (markedRead.length > 0) {
+          useNotificationStore.getState().markManyRead(markedRead);
+        }
+      })
+      .catch(() => {});
 
     // Load initial messages (keep chronological order -- newest last for inverted FlatList)
     globeApi
@@ -414,6 +428,13 @@ export default function GlobeRoomChat() {
       senderHandle: selectedMessage.senderHandle ?? 'user',
       content: selectedMessage.content,
     });
+  }, [selectedMessage]);
+
+  const handleCopy = useCallback(() => {
+    if (!selectedMessage?.content) return;
+    Clipboard.setStringAsync(selectedMessage.content)
+      .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+      .catch(() => {});
   }, [selectedMessage]);
 
   const handleReport = useCallback(() => {
@@ -755,7 +776,7 @@ export default function GlobeRoomChat() {
                 },
               ]}
             >
-              <TextInput
+              <MentionTextInput
                 style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
                 placeholder={
                   isAgeGated
@@ -795,6 +816,7 @@ export default function GlobeRoomChat() {
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
           onReact={handleReact}
+          onCopy={selectedMessage?.content ? handleCopy : undefined}
           onReply={handleReply}
           onReport={handleReport}
           onTranslate={handleTranslate}

@@ -87,8 +87,14 @@ export const auth = {
   checkHandle: (handle: string) =>
     request<{ available: boolean; reason?: string }>(`/api/auth/handle-check/${handle}`),
 
+  updateHandle: (handle: string) =>
+    request<{ handle: string; handleUpdatedAt: string; nextChangeAt: string }>(
+      '/api/auth/handle',
+      { method: 'PUT', body: JSON.stringify({ handle }) }
+    ),
+
   me: (timezone?: string) =>
-    request<{ user: User }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
+    request<{ user: User; needsOnboarding: boolean }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
 
   updatePushToken: (expoPushToken: string) =>
     request('/api/auth/push-token', {
@@ -104,6 +110,9 @@ export const auth = {
 export const chat = {
   getConversations: () =>
     request<{ conversations: Conversation[] }>('/api/chat/conversations'),
+
+  markAllRead: () =>
+    request<{ ok: true }>('/api/chat/conversations/mark-all-read', { method: 'PUT' }),
 
   getOrCreateConversation: (otherUserId: number) =>
     request<{ conversationId: number; isNew: boolean }>('/api/chat/conversations', {
@@ -159,9 +168,25 @@ export const notificationsApi = {
   list: () =>
     request<{ notifications: Notification[]; unreadCount: number }>('/api/notifications'),
 
-  readAll: () => request('/api/notifications/read-all', { method: 'PUT' }),
+  summary: () =>
+    request<{ mentions: number; dmConversations: number; beaconMatches: number; system: number }>(
+      '/api/notifications/summary',
+    ),
+
+  readAll: (type?: 'mention' | 'new_dm' | 'beacon_match' | 'system') =>
+    request<{
+      clearedConversationIds: number[];
+      clearedGlobeSlugs: string[];
+      clearedTimezoneRooms: string[];
+    }>(`/api/notifications/read-all${type ? `?type=${type}` : ''}`, { method: 'PUT' }),
 
   read: (id: number) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
+
+  readContext: (ctx: { conversationId: number } | { roomId: string }) =>
+    request<{ markedRead: number[] }>('/api/notifications/read-context', {
+      method: 'PUT',
+      body: JSON.stringify(ctx),
+    }),
 
   getPreferences: () =>
     request<{
@@ -300,6 +325,9 @@ export const globeApi = {
 
   markRead: (slug: string) =>
     request<{ ok: true }>(`/api/globe/rooms/${slug}/read`, { method: 'PUT' }),
+
+  markAllRead: () =>
+    request<{ ok: true }>('/api/globe/rooms/mark-all-read', { method: 'PUT' }),
 };
 
 // ── News ────────────────────────────────────────────────────────────────────

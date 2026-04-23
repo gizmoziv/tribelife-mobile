@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,7 +23,8 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
-import Svg, { Path, Circle } from 'react-native-svg';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import Svg, { Path, Circle, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 
 function slugify(text: string): string {
   return text
@@ -120,6 +123,113 @@ const IconAleph = ({ color = COLORS.accent, size = 16 }: IconProps) => (
   </Svg>
 );
 
+// ---------- Hero illustration: three connected circles (animated) ----------
+// Represents a group/tribe: three overlapping avatar rings linked by a soft
+// gradient glow. Each person bobs on its own phase + amplitude to feel alive,
+// and the three sparkles twinkle out-of-phase to add life without distraction.
+const AnimatedG = Animated.createAnimatedComponent(G);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const GroupHeroIcon = ({ size = 88 }: { size?: number }) => {
+  const centerBob = useRef(new Animated.Value(0)).current;
+  const leftBob = useRef(new Animated.Value(0)).current;
+  const rightBob = useRef(new Animated.Value(0)).current;
+  const spark1 = useRef(new Animated.Value(1)).current;
+  const spark2 = useRef(new Animated.Value(0.5)).current;
+  const spark3 = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const bobLoop = (val: Animated.Value, amplitude: number, duration: number, delay = 0) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(val, {
+            toValue: -amplitude,
+            duration,
+            delay,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: false,
+          }),
+          Animated.timing(val, {
+            toValue: 0,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: false,
+          }),
+        ]),
+      );
+
+    const twinkleLoop = (val: Animated.Value, minOpacity: number, duration: number, delay = 0) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(val, {
+            toValue: minOpacity,
+            duration,
+            delay,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: false,
+          }),
+          Animated.timing(val, {
+            toValue: 1,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: false,
+          }),
+        ]),
+      );
+
+    const anims = [
+      bobLoop(centerBob, 4, 1600),
+      bobLoop(leftBob, 3, 1800, 220),
+      bobLoop(rightBob, 3, 1700, 440),
+      twinkleLoop(spark1, 0.2, 900),
+      twinkleLoop(spark2, 0.2, 1100, 300),
+      twinkleLoop(spark3, 0.25, 1000, 600),
+    ];
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+  }, [centerBob, leftBob, rightBob, spark1, spark2, spark3]);
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
+      <Defs>
+        <SvgLinearGradient id="hero-a" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={COLORS.primary} stopOpacity="0.18" />
+          <Stop offset="1" stopColor={COLORS.accent} stopOpacity="0.06" />
+        </SvgLinearGradient>
+        <SvgLinearGradient id="hero-stroke" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor={COLORS.primary} stopOpacity="0.9" />
+          <Stop offset="1" stopColor={COLORS.accent} stopOpacity="0.9" />
+        </SvgLinearGradient>
+      </Defs>
+      {/* Soft background halo */}
+      <Circle cx="60" cy="60" r="56" fill="url(#hero-a)" />
+
+      {/* Left person */}
+      <AnimatedG y={leftBob}>
+        <Circle cx="34" cy="52" r="13" stroke="url(#hero-stroke)" strokeWidth={2.4} fill="none" />
+        <Path d="M16 92c0-9 8-16 18-16s18 7 18 16" stroke="url(#hero-stroke)" strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      </AnimatedG>
+
+      {/* Right person */}
+      <AnimatedG y={rightBob}>
+        <Circle cx="86" cy="52" r="13" stroke="url(#hero-stroke)" strokeWidth={2.4} fill="none" />
+        <Path d="M68 92c0-9 8-16 18-16s18 7 18 16" stroke="url(#hero-stroke)" strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      </AnimatedG>
+
+      {/* Center (front) person — slightly larger, leads the group */}
+      <AnimatedG y={centerBob}>
+        <Circle cx="60" cy="42" r="15" stroke="url(#hero-stroke)" strokeWidth={2.6} fill={COLORS.accentSoft} />
+        <Path d="M38 96c0-12 10-22 22-22s22 10 22 22" stroke="url(#hero-stroke)" strokeWidth={2.6} strokeLinecap="round" fill={COLORS.accentSoft} />
+      </AnimatedG>
+
+      {/* Twinkling sparkles */}
+      <AnimatedCircle cx="22" cy="28" r="2" fill={COLORS.primary} opacity={spark1} />
+      <AnimatedCircle cx="100" cy="32" r="2" fill={COLORS.accent} opacity={spark2} />
+      <AnimatedCircle cx="96" cy="100" r="1.6" fill={COLORS.primary} opacity={spark3} />
+    </Svg>
+  );
+};
+
 // ---------- Bullet row ----------
 interface BulletRowProps {
   icon: React.ReactNode;
@@ -155,6 +265,7 @@ export default function CreateGroupScreen() {
   const { colors } = useTheme();
   const { user } = useAuthStore();
   const router = useRouter();
+  const tabBarSpace = useTabBarSpace();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
@@ -217,6 +328,12 @@ export default function CreateGroupScreen() {
   };
 
   // ---------- Shared marketing blocks (both premium + non-premium) ----------
+  const HeroBlock = (
+    <AnimatedEntry style={styles.heroWrap}>
+      <GroupHeroIcon size={96} />
+    </AnimatedEntry>
+  );
+
   const LeaderCard = (
     <AnimatedEntry>
       <GlassCard glowColor={COLORS.borderGlow}>
@@ -373,9 +490,10 @@ export default function CreateGroupScreen() {
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace + SPACING.lg }]}
           showsVerticalScrollIndicator={false}
         >
+          {HeroBlock}
           {LeaderCard}
           {DifferentSection}
           {TribeSection}
@@ -422,10 +540,11 @@ export default function CreateGroupScreen() {
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace + SPACING.lg }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {HeroBlock}
           {LeaderCard}
           {DifferentSection}
           {TribeSection}
@@ -508,6 +627,10 @@ const styles = StyleSheet.create({
     padding: SPACING.page,
     paddingTop: SPACING.lg,
     paddingBottom: SPACING['2xl'],
+  },
+  heroWrap: {
+    alignItems: 'center',
+    marginBottom: SPACING.md,
   },
   formInner: {
     gap: 4,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ import * as Notifications from 'expo-notifications';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, referralsApi, notificationsApi, groupsApi, newsPushApi } from '@/services/api';
+import { auth, referralsApi, notificationsApi, groupsApi, newsPushApi, ApiError } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
@@ -103,6 +103,122 @@ export default function ProfileScreen() {
       setIsSavingRename(false);
     }
   }, [renameTarget, renameInput]);
+
+  // ── Handle edit (30-day cooldown) ─────────────────────────────────────────
+  const HANDLE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+  const cooldownDate = user?.handleUpdatedAt
+    ? new Date(new Date(user.handleUpdatedAt).getTime() + HANDLE_COOLDOWN_MS)
+    : null;
+  const isInCooldown = cooldownDate ? cooldownDate.getTime() > Date.now() : false;
+  const cooldownDateText = cooldownDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const [editHandleVisible, setEditHandleVisible] = useState(false);
+  const [confirmHandleVisible, setConfirmHandleVisible] = useState(false);
+  const [cooldownNoticeVisible, setCooldownNoticeVisible] = useState(false);
+  const [handleInput, setHandleInput] = useState('');
+  const [handleResult, setHandleResult] = useState<'none' | 'invalid' | 'available' | 'taken'>('none');
+  const [isCheckingHandle, setIsCheckingHandle] = useState(false);
+  const [isSavingHandle, setIsSavingHandle] = useState(false);
+  const [handleSaveError, setHandleSaveError] = useState<string | null>(null);
+  const checkHandleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestHandleInputRef = useRef('');
+
+  const openHandleEditor = useCallback(() => {
+    if (isInCooldown) {
+      setCooldownNoticeVisible(true);
+      return;
+    }
+    setHandleInput('');
+    setHandleResult('none');
+    setIsCheckingHandle(false);
+    setHandleSaveError(null);
+    latestHandleInputRef.current = '';
+    setEditHandleVisible(true);
+  }, [isInCooldown]);
+
+  const handleHandleInputChange = useCallback((text: string) => {
+    const cleaned = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    setHandleInput(cleaned);
+    latestHandleInputRef.current = cleaned;
+    setHandleSaveError(null);
+
+    if (checkHandleTimeoutRef.current) clearTimeout(checkHandleTimeoutRef.current);
+
+    if (cleaned.length === 0 || cleaned === (user?.handle ?? '')) {
+      setHandleResult('none');
+      setIsCheckingHandle(false);
+      return;
+    }
+
+    if (cleaned.length < 3) {
+      setHandleResult('invalid');
+      setIsCheckingHandle(false);
+      return;
+    }
+
+    setHandleResult((prev) => (prev === 'invalid' ? 'none' : prev));
+    setIsCheckingHandle(true);
+
+    checkHandleTimeoutRef.current = setTimeout(async () => {
+      const current = latestHandleInputRef.current;
+      if (current.length < 3) return;
+      try {
+        const { available } = await auth.checkHandle(current);
+        if (latestHandleInputRef.current === current) {
+          setHandleResult(available ? 'available' : 'taken');
+          setIsCheckingHandle(false);
+        }
+      } catch {
+        if (latestHandleInputRef.current === current) {
+          setIsCheckingHandle(false);
+        }
+      }
+    }, 600);
+  }, [user?.handle]);
+
+  const handleRequestHandleSave = useCallback(() => {
+    if (handleResult !== 'available' || isCheckingHandle) return;
+    setConfirmHandleVisible(true);
+  }, [handleResult, isCheckingHandle]);
+
+  const handleConfirmHandleSave = useCallback(async () => {
+    setIsSavingHandle(true);
+    try {
+      const { handle, handleUpdatedAt } = await auth.updateHandle(handleInput);
+      updateUser({ handle, handleUpdatedAt });
+      setConfirmHandleVisible(false);
+      setEditHandleVisible(false);
+    } catch (err) {
+      setConfirmHandleVisible(false);
+      if (err instanceof ApiError && err.status === 429) {
+        const next = (err.data as { nextChangeAt?: string } | undefined)?.nextChangeAt;
+        if (next) {
+          const inferred = new Date(new Date(next).getTime() - HANDLE_COOLDOWN_MS);
+          updateUser({ handleUpdatedAt: inferred.toISOString() });
+        }
+        setEditHandleVisible(false);
+        setCooldownNoticeVisible(true);
+      } else {
+        setHandleSaveError(err instanceof Error ? err.message : 'Could not update handle.');
+      }
+    } finally {
+      setIsSavingHandle(false);
+    }
+  }, [handleInput, updateUser]);
+
+  const handleResultColor = {
+    none: colors.textMuted,
+    available: COLORS.success,
+    taken: COLORS.error,
+    invalid: COLORS.error,
+  }[handleResult];
+
+  const handleResultText = {
+    none: '',
+    available: 'Available',
+    taken: 'Already taken',
+    invalid: handleInput.length < 3 ? 'At least 3 characters required' : 'Letters, numbers, and underscores only',
+  }[handleResult];
 
   useEffect(() => {
     referralsApi.getStats()
@@ -369,7 +485,12 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.userName, { color: colors.text }]}>{user?.name}</Text>
-                <Text style={[styles.userHandle, { color: COLORS.primary }]}>@{user?.handle}</Text>
+                <TouchableOpacity onPress={openHandleEditor} activeOpacity={0.7} style={styles.handleRow}>
+                  <Text style={[styles.userHandle, { color: COLORS.primary }]}>@{user?.handle}</Text>
+                  <Text style={[styles.handleEditHint, { color: colors.textMuted }]}>
+                    {isInCooldown ? `Locked until ${cooldownDateText}` : 'Edit'}
+                  </Text>
+                </TouchableOpacity>
                 {user?.isPremium && (
                   <GlowBadge text="Premium" color={COLORS.accent} glow />
                 )}
@@ -745,9 +866,197 @@ export default function ProfileScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Handle edit / confirm — single Modal, two views to avoid nested-modal flakiness */}
+      <Modal
+        visible={editHandleVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (confirmHandleVisible) {
+            setConfirmHandleVisible(false);
+          } else {
+            setEditHandleVisible(false);
+          }
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={renameStyles.backdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => {
+              if (confirmHandleVisible) {
+                setConfirmHandleVisible(false);
+              } else if (!isSavingHandle) {
+                setEditHandleVisible(false);
+              }
+            }}
+          />
+          {confirmHandleVisible ? (
+            <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[renameStyles.title, { color: colors.text }]}>Confirm new handle</Text>
+              <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+                Change your handle to <Text style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}>@{handleInput}</Text>?
+                You won't be able to change it again until {' '}
+                <Text style={{ color: colors.text, fontFamily: FONTS.semiBold }}>
+                  {new Date(Date.now() + HANDLE_COOLDOWN_MS).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>.
+              </Text>
+              <View style={renameStyles.actions}>
+                <TouchableOpacity
+                  onPress={() => setConfirmHandleVisible(false)}
+                  style={[renameStyles.button, { borderColor: colors.border }]}
+                  disabled={isSavingHandle}
+                >
+                  <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleConfirmHandleSave}
+                  style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                  disabled={isSavingHandle}
+                >
+                  {isSavingHandle ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Confirm</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
+              <Text style={[renameStyles.title, { color: colors.text }]}>Change handle</Text>
+              <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+                You can change your handle once every 30 days.
+              </Text>
+              <View style={[handleEditStyles.inputRow, { borderColor: colors.border, backgroundColor: colors.surfaceGlass }]}>
+                <Text style={[handleEditStyles.atPrefix, { color: colors.textMuted }]}>@</Text>
+                <TextInput
+                  value={handleInput}
+                  onChangeText={handleHandleInputChange}
+                  placeholder={user?.handle ?? 'new_handle'}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  maxLength={30}
+                  style={[handleEditStyles.input, { color: colors.text }]}
+                />
+              </View>
+              <View style={handleEditStyles.statusRow}>
+                <Text style={[handleEditStyles.statusText, { color: handleResultColor }]}>
+                  {handleResultText || ' '}
+                </Text>
+                {isCheckingHandle && (
+                  <View style={handleEditStyles.checkingInline}>
+                    <ActivityIndicator size="small" color={colors.textMuted} />
+                    <Text style={[handleEditStyles.statusText, { color: colors.textMuted }]}>Checking…</Text>
+                  </View>
+                )}
+              </View>
+              {handleSaveError ? (
+                <Text style={[handleEditStyles.statusText, { color: COLORS.error, paddingLeft: 4 }]}>
+                  {handleSaveError}
+                </Text>
+              ) : null}
+              <View style={renameStyles.actions}>
+                <TouchableOpacity
+                  onPress={() => setEditHandleVisible(false)}
+                  style={[renameStyles.button, { borderColor: colors.border }]}
+                >
+                  <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleRequestHandleSave}
+                  style={[
+                    renameStyles.button,
+                    { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+                    (handleResult !== 'available' || isCheckingHandle) && { opacity: 0.5 },
+                  ]}
+                  disabled={handleResult !== 'available' || isCheckingHandle}
+                >
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Cooldown notice — separate, simpler modal */}
+      <Modal
+        visible={cooldownNoticeVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCooldownNoticeVisible(false)}
+      >
+        <View style={renameStyles.backdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setCooldownNoticeVisible(false)}
+          />
+          <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[renameStyles.title, { color: colors.text }]}>Handle change locked</Text>
+            <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+              You can change your handle again on{' '}
+              <Text style={{ color: colors.text, fontFamily: FONTS.semiBold }}>{cooldownDateText}</Text>.
+            </Text>
+            <View style={renameStyles.actions}>
+              <TouchableOpacity
+                onPress={() => setCooldownNoticeVisible(false)}
+                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+              >
+                <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Got it</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+const handleEditStyles = StyleSheet.create({
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  atPrefix: {
+    fontSize: 16,
+    fontFamily: FONTS.medium,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    padding: 0,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingLeft: 4,
+    minHeight: 18,
+  },
+  checkingInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 13,
+    fontFamily: FONTS.medium,
+  },
+});
 
 const renameStyles = StyleSheet.create({
   backdrop: {
@@ -817,7 +1126,9 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   userName: { fontSize: 20, fontFamily: FONTS.semiBold },
-  userHandle: { fontSize: 14, fontFamily: FONTS.medium, marginTop: 2 },
+  userHandle: { fontSize: 14, fontFamily: FONTS.medium },
+  handleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  handleEditHint: { fontSize: 11, fontFamily: FONTS.medium },
   section: { gap: 6, marginBottom: SPACING.md },
   sectionTitle: { fontSize: 11, fontFamily: FONTS.semiBold, letterSpacing: 1, paddingLeft: 4 },
   row: {

@@ -14,7 +14,11 @@ export default function Index() {
     );
   }
 
-  if (isAuthenticated && !needsOnboarding) {
+  if (isAuthenticated && needsOnboarding) {
+    return <Redirect href="/(auth)/onboarding" />;
+  }
+
+  if (isAuthenticated) {
     return <Redirect href="/(app)/beacon" />;
   }
 

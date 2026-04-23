@@ -125,6 +125,11 @@ export function onNotification(cb: (notif: unknown) => void): () => void {
   return () => socket?.off('notification:new', cb);
 }
 
+export function onNewsAvailable(cb: (data: { count: number }) => void): () => void {
+  socket?.on('news:new', cb);
+  return () => socket?.off('news:new', cb);
+}
+
 export function onMessageRejected(cb: (data: { reason?: string }) => void): () => void {
   socket?.on('message:rejected', cb);
   return () => socket?.off('message:rejected', cb);

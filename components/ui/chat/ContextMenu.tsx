@@ -26,6 +26,7 @@ interface ContextMenuProps {
   visible: boolean;
   onClose: () => void;
   onReact: (emoji: string) => void;
+  onCopy?: () => void;       // optional — omitted when there's no text content to copy
   onReply?: () => void;      // optional — news feed omits Reply row (news has no reply concept)
   onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
   onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
@@ -36,6 +37,7 @@ export function ContextMenu({
   visible,
   onClose,
   onReact,
+  onCopy,
   onReply,
   onReport,
   onTranslate,
@@ -73,6 +75,11 @@ export function ContextMenu({
     setShowFullPicker(false);
   };
 
+  const handleCopy = () => {
+    onCopy?.();
+    onClose();
+  };
+
   const handleReply = () => {
     onReply?.();
     onClose();
@@ -98,7 +105,7 @@ export function ContextMenu({
       >
         <Pressable style={styles.backdrop} onPress={onClose}>
           <Pressable
-            style={[styles.sheet, { backgroundColor: colors.surfaceElevated }]}
+            style={[styles.sheet, { backgroundColor: colors.background }]}
             onPress={() => {}}
           >
             {/* Quick emoji bar */}
@@ -126,6 +133,17 @@ export function ContextMenu({
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
             {/* Action items — rows hidden when their prop is undefined (e.g. news tiles omit all three) */}
+            {onCopy && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleCopy}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x1F4CB;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Copy text</Text>
+              </TouchableOpacity>
+            )}
+
             {onReply && (
               <TouchableOpacity
                 style={styles.actionRow}

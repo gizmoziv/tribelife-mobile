@@ -18,6 +18,10 @@ interface PillToggleProps {
   onSelect: (index: number) => void;
   activeColor?: string;
   style?: ViewStyle;
+  // Optional unread count per pill — aligns 1:1 with `options`. 0/undefined
+  // hides the badge. Used by ChatScreen to surface DM vs local unread counts
+  // on the per-panel pills so users see activity in the inactive tab.
+  badges?: (number | undefined)[];
 }
 
 export function PillToggle({
@@ -26,6 +30,7 @@ export function PillToggle({
   onSelect,
   activeColor = COLORS.primary,
   style,
+  badges,
 }: PillToggleProps) {
   const { colors } = useTheme();
   const translateX = useRef(new Animated.Value(0)).current;
@@ -72,25 +77,35 @@ export function PillToggle({
           },
         ]}
       />
-      {options.map((option, index) => (
-        <Pressable
-          key={option}
-          style={styles.option}
-          onPress={() => handleSelect(index)}
-        >
-          <Text
-            style={[
-              styles.optionText,
-              {
-                color: index === activeIndex ? '#FFFFFF' : colors.textMuted,
-                fontFamily: index === activeIndex ? FONTS.semiBold : FONTS.medium,
-              },
-            ]}
+      {options.map((option, index) => {
+        const badgeCount = badges?.[index] ?? 0;
+        return (
+          <Pressable
+            key={option}
+            style={styles.option}
+            onPress={() => handleSelect(index)}
           >
-            {option}
-          </Text>
-        </Pressable>
-      ))}
+            <Text
+              style={[
+                styles.optionText,
+                {
+                  color: index === activeIndex ? '#FFFFFF' : colors.textMuted,
+                  fontFamily: index === activeIndex ? FONTS.semiBold : FONTS.medium,
+                },
+              ]}
+            >
+              {option}
+            </Text>
+            {badgeCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -111,12 +126,28 @@ const styles = StyleSheet.create({
   option: {
     flex: 1,
     paddingVertical: 10,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
   optionText: {
     fontSize: 14,
+  },
+  badge: {
+    marginLeft: 6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9999,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: FONTS.bold,
   },
 });
 

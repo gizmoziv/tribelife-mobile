@@ -111,7 +111,7 @@ export function MentionAutocomplete({
   if (!visible) return null;
 
   return (
-    <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+    <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.border }]}>
       {loading && users.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator size="small" color={COLORS.primary} />

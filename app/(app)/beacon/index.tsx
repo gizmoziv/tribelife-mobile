@@ -29,20 +29,297 @@ import { PillToggle } from '@/components/ui/PillToggle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import type { Beacon, BeaconMatch } from '@/types';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, G, Circle, Ellipse, Defs, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
 
+// Animated flame — transforms drive a real-fire feel:
+//   scaleY flicker (fast, small)  = the tongue stretching
+//   translateY bob (slow)         = the whole flame rising and settling
+//   rotate sway (slower)          = wind drift
+// All use useNativeDriver=true so the loops run on the UI thread even while
+// the JS thread is busy rendering beacon lists.
 function FlameIcon({ size = 18 }: { size?: number }) {
+  const scaleY = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const oscillate = (
+      val: Animated.Value,
+      min: number,
+      max: number,
+      duration: number,
+      delay = 0,
+    ) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(val, {
+            toValue: max,
+            duration,
+            delay,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: min,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+
+    const anims = [
+      oscillate(scaleY, 0.94, 1.08, 280),
+      oscillate(translateY, 0, -1.5, 700, 120),
+      oscillate(rotate, -0.04, 0.04, 1100, 240),
+    ];
+    anims.forEach((a) => a.start());
+    return () => anims.forEach((a) => a.stop());
+  }, [scaleY, translateY, rotate]);
+
+  const rotateStr = rotate.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-57.2958deg', '57.2958deg'],
+  });
+
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 22c4.97 0 8-3.03 8-7 0-2-1-3.5-2-5-1.5 1-2 2-2 2s-1-2-2-4c-1.5 2-3 4-3 7 0 1-1 2-2 2s-2-1-2-2c0-2.5 2-5 3-6-2 0-4 2-5 4-1 2-1 3-1 4 0 3.97 3.03 7 8 7z"
-        stroke="#F59E0B"
-        strokeWidth={1.5}
-        fill="rgba(245,158,11,0.15)"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <Animated.View
+      style={{
+        width: size,
+        height: size,
+        transform: [{ translateY }, { scaleY }, { rotate: rotateStr }],
+      }}
+    >
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M12 22c4.97 0 8-3.03 8-7 0-2-1-3.5-2-5-1.5 1-2 2-2 2s-1-2-2-4c-1.5 2-3 4-3 7 0 1-1 2-2 2s-2-1-2-2c0-2.5 2-5 3-6-2 0-4 2-5 4-1 2-1 3-1 4 0 3.97 3.03 7 8 7z"
+          stroke="#F59E0B"
+          strokeWidth={1.5}
+          fill="rgba(245,158,11,0.15)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// ── Hero flame (used in the "What is a Beacon?" explainer card) ───────────
+// A *real* flame is layered. Outer cool-red tongue, inner orange body, hot
+// yellow core, white-hot hotspot near the base — each independently scaling
+// on slightly different timelines so the whole thing breathes asymmetrically
+// instead of pulsing in lockstep. Four rising embers spawn at the flame base,
+// drift upward, and fade — driven by looped translateY + opacity curves.
+const AnimatedG = Animated.createAnimatedComponent(G);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
+
+// Logo-inspired paths: asymmetric single-tongue flame with a crest curling
+// to the right (the signature "wave break" in the TribeLife mark) and a
+// detached wisp on the lower-left. Inner layers nest inside the outer and
+// shift slightly to the right so the highlight catches on one side — the
+// same directional lighting the logo has.
+const FLAME_OUTER =
+  'M 50 108 C 32 108 20 98 18 82 C 14 68 20 56 30 50 C 20 38 26 22 38 18 C 44 8 58 8 60 20 C 66 12 76 18 72 32 C 82 36 86 58 82 76 C 80 98 72 108 50 108 Z';
+const FLAME_MID =
+  'M 52 100 C 40 100 32 92 30 80 C 28 68 32 58 40 52 C 32 42 38 28 46 26 C 50 20 60 22 60 32 C 66 26 72 34 68 44 C 74 52 76 68 72 80 C 70 94 62 100 52 100 Z';
+const FLAME_INNER =
+  'M 54 92 C 46 92 42 84 42 76 C 42 66 46 58 50 52 C 46 44 50 34 56 32 C 60 30 64 34 62 42 C 66 46 68 58 66 68 C 64 84 62 92 54 92 Z';
+const FLAME_CORE =
+  'M 56 54 C 52 58 50 64 52 70 C 54 74 60 72 60 66 C 60 60 60 56 56 54 Z';
+// Detached curl on the lower-left — the distinctive flame wisp from the logo.
+const FLAME_WISP =
+  'M 22 82 C 12 78 10 68 16 64 C 22 68 24 76 22 82 Z';
+
+function useFlickerLoop(
+  val: Animated.Value,
+  min: number,
+  max: number,
+  duration: number,
+  delay = 0,
+) {
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(val, {
+          toValue: max,
+          duration,
+          delay,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(val, {
+          toValue: min,
+          duration,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [val, min, max, duration, delay]);
+}
+
+function HeroFlameIcon({ size = 56 }: { size?: number }) {
+  // Each flame layer gets its own Animated.Value so they don't synchronize.
+  const outerScale = useRef(new Animated.Value(1)).current;
+  const midScale = useRef(new Animated.Value(1)).current;
+  const innerScale = useRef(new Animated.Value(1)).current;
+  const coreScale = useRef(new Animated.Value(1)).current;
+  const wispScale = useRef(new Animated.Value(1)).current;
+  const sway = useRef(new Animated.Value(0)).current;
+  const haloPulse = useRef(new Animated.Value(0.7)).current;
+
+  // Four embers. Each has a Y (rises from base → above flame) and an opacity
+  // (fades in at the base, out as it rises). Staggered delays so they spawn
+  // asymmetrically like a real fire throwing off sparks.
+  const ember1Y = useRef(new Animated.Value(0)).current;
+  const ember2Y = useRef(new Animated.Value(0)).current;
+  const ember3Y = useRef(new Animated.Value(0)).current;
+  const ember4Y = useRef(new Animated.Value(0)).current;
+  const ember1Op = useRef(new Animated.Value(0)).current;
+  const ember2Op = useRef(new Animated.Value(0)).current;
+  const ember3Op = useRef(new Animated.Value(0)).current;
+  const ember4Op = useRef(new Animated.Value(0)).current;
+
+  // Flame layer flickers (fast → slow as you go outward mirrors real flame)
+  useFlickerLoop(coreScale, 0.88, 1.18, 220, 0);
+  useFlickerLoop(innerScale, 0.92, 1.12, 340, 120);
+  useFlickerLoop(midScale, 0.95, 1.08, 520, 260);
+  useFlickerLoop(outerScale, 0.97, 1.05, 780, 400);
+  useFlickerLoop(wispScale, 0.8, 1.2, 620, 180);
+  useFlickerLoop(sway, -0.06, 0.06, 1400, 0);
+  useFlickerLoop(haloPulse, 0.55, 0.95, 1600, 0);
+
+  // Embers: looped translateY from 0 → -50 with opacity curve
+  useEffect(() => {
+    const emberLoop = (yVal: Animated.Value, opVal: Animated.Value, duration: number, delay: number) =>
+      Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(yVal, { toValue: 0, duration: 0, useNativeDriver: true }),
+            Animated.timing(yVal, {
+              toValue: -58,
+              duration,
+              delay,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.timing(opVal, { toValue: 0, duration: 0, useNativeDriver: true }),
+            Animated.timing(opVal, {
+              toValue: 1,
+              duration: duration * 0.3,
+              delay,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(opVal, {
+              toValue: 0,
+              duration: duration * 0.7,
+              easing: Easing.in(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+      );
+
+    const loops = [
+      emberLoop(ember1Y, ember1Op, 1800, 0),
+      emberLoop(ember2Y, ember2Op, 2100, 500),
+      emberLoop(ember3Y, ember3Op, 1600, 900),
+      emberLoop(ember4Y, ember4Op, 2400, 1300),
+    ];
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, [ember1Y, ember2Y, ember3Y, ember4Y, ember1Op, ember2Op, ember3Op, ember4Op]);
+
+  const swayRotate = sway.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-57.2958deg', '57.2958deg'],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        width: size,
+        height: size * 1.3,
+        transform: [{ rotate: swayRotate }],
+      }}
+    >
+      <Svg width={size} height={size * 1.3} viewBox="0 0 100 130" fill="none">
+        <Defs>
+          <RadialGradient id="halo" cx="50%" cy="78%" r="55%">
+            <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.55" />
+            <Stop offset="0.6" stopColor="#F97316" stopOpacity="0.15" />
+            <Stop offset="1" stopColor="#F97316" stopOpacity="0" />
+          </RadialGradient>
+          <SvgLinearGradient id="flameOuter" x1="0.5" y1="0" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#F97316" stopOpacity="0.9" />
+            <Stop offset="0.6" stopColor="#EF4444" stopOpacity="0.95" />
+            <Stop offset="1" stopColor="#B91C1C" stopOpacity="0.85" />
+          </SvgLinearGradient>
+          <SvgLinearGradient id="flameMid" x1="0.5" y1="0.1" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#FDE68A" stopOpacity="0.9" />
+            <Stop offset="0.5" stopColor="#F59E0B" stopOpacity="0.98" />
+            <Stop offset="1" stopColor="#EA580C" stopOpacity="0.95" />
+          </SvgLinearGradient>
+          <SvgLinearGradient id="flameInner" x1="0.5" y1="0.2" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#FEF3C7" stopOpacity="1" />
+            <Stop offset="0.7" stopColor="#FBBF24" stopOpacity="1" />
+            <Stop offset="1" stopColor="#F59E0B" stopOpacity="0.95" />
+          </SvgLinearGradient>
+          <SvgLinearGradient id="flameCore" x1="0.5" y1="0.3" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
+            <Stop offset="0.6" stopColor="#FEF3C7" stopOpacity="1" />
+            <Stop offset="1" stopColor="#FDE68A" stopOpacity="1" />
+          </SvgLinearGradient>
+        </Defs>
+
+        {/* Soft radial halo that pulses behind the flame */}
+        <AnimatedEllipse cx="50" cy="92" rx="44" ry="30" fill="url(#halo)" opacity={haloPulse} />
+
+        {/* Detached wisp at the lower-left — the signature flame curl from
+            the TribeLife logo. Lives slightly behind the main body so the
+            outer flame partly overlaps it. Flickers on its own phase. */}
+        <AnimatedG originX="18" originY="80" scaleY={wispScale}>
+          <Path d={FLAME_WISP} fill="url(#flameMid)" opacity={0.9} />
+        </AnimatedG>
+
+        {/* Flame body — four layers, each flickering on its own phase.
+            scaleY origin is near the base so layers stretch upward like real fire. */}
+        <AnimatedG originX="50" originY="108" scaleY={outerScale}>
+          <Path d={FLAME_OUTER} fill="url(#flameOuter)" opacity={0.9} />
+        </AnimatedG>
+        <AnimatedG originX="52" originY="100" scaleY={midScale}>
+          <Path d={FLAME_MID} fill="url(#flameMid)" />
+        </AnimatedG>
+        <AnimatedG originX="54" originY="92" scaleY={innerScale}>
+          <Path d={FLAME_INNER} fill="url(#flameInner)" />
+        </AnimatedG>
+        <AnimatedG originX="56" originY="70" scaleY={coreScale}>
+          <Path d={FLAME_CORE} fill="url(#flameCore)" />
+        </AnimatedG>
+
+        {/* Embers — rise from within the fire body, fade as they climb.
+            Spawn points scatter across the flame body so they feel like
+            ash kicked up by a bonfire, not a single wick's smoke trail. */}
+        <AnimatedG transform={[{ translateY: ember1Y }]}>
+          <AnimatedCircle cx="36" cy="72" r="1.8" fill="#FDE68A" opacity={ember1Op} />
+        </AnimatedG>
+        <AnimatedG transform={[{ translateY: ember2Y }]}>
+          <AnimatedCircle cx="62" cy="66" r="2.2" fill="#F59E0B" opacity={ember2Op} />
+        </AnimatedG>
+        <AnimatedG transform={[{ translateY: ember3Y }]}>
+          <AnimatedCircle cx="50" cy="58" r="1.5" fill="#FFFFFF" opacity={ember3Op} />
+        </AnimatedG>
+        <AnimatedG transform={[{ translateY: ember4Y }]}>
+          <AnimatedCircle cx="44" cy="78" r="1.3" fill="#FDE68A" opacity={ember4Op} />
+        </AnimatedG>
+      </Svg>
+    </Animated.View>
   );
 }
 
@@ -213,7 +490,7 @@ function MyBeaconsPanel() {
         <GlassCard glowColor={COLORS.borderGlow}>
           <View style={styles.explainerInner}>
             <View style={styles.explainerIconWrap}>
-              <FlameIcon size={28} />
+              <HeroFlameIcon size={56} />
             </View>
             <Text style={[styles.explainerTitle, { color: colors.text }]}>
               What is a Beacon?
@@ -629,9 +906,9 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   explainerIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: COLORS.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',

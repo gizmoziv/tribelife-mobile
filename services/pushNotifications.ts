@@ -1,16 +1,57 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { auth } from './api';
+import { useForegroundContextStore, type ForegroundContext } from '@/store/foregroundContextStore';
 
-// Configure how notifications appear when app is in foreground
+// Decide whether an incoming push should be suppressed at the OS level.
+// Suppression rule: only when the user is currently looking at the exact
+// thing the push is about (e.g. viewing the same chat the message arrived
+// in, or on the news tab when a news push arrives). Anything else — including
+// pushes for other chats while inside a chat — should still surface.
+function isCurrentlyViewing(ctx: ForegroundContext, data: Record<string, unknown>): boolean {
+  const type = data.type;
+  if (ctx.type === 'chat' && type === 'new_dm') {
+    const dataConvId = Number(data.conversationId);
+    return !Number.isNaN(dataConvId) && dataConvId === ctx.conversationId;
+  }
+  if (ctx.type === 'news' && type === 'news_breaking') {
+    return true;
+  }
+  return false;
+}
+
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    const isActive = AppState.currentState === 'active';
+    const data = (notification.request.content.data ?? {}) as Record<string, unknown>;
+
+    // Background / inactive → always show the OS notification.
+    if (!isActive) {
+      return {
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      };
+    }
+
+    // Foreground → suppress only if the push is for the screen the user is
+    // already on. The in-app UI (chat list, news tab banner, etc.) handles
+    // the event in real time via the socket / received-listener instead.
+    const ctx = useForegroundContextStore.getState().context;
+    const suppress = isCurrentlyViewing(ctx, data);
+
+    return {
+      shouldShowAlert: !suppress,
+      shouldShowBanner: !suppress,
+      shouldShowList: true,
+      shouldPlaySound: !suppress,
+      shouldSetBadge: true,
+    };
+  },
 });
 
 export async function registerForPushNotifications(): Promise<string | null> {

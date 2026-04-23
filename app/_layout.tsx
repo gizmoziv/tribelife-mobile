@@ -100,8 +100,7 @@ function RootLayoutInner() {
         }
         if (token) {
           const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
-          const { user } = await auth.me(deviceTimezone);
-          const needsOnboarding = !user.handle;
+          const { user, needsOnboarding } = await auth.me(deviceTimezone);
           await setAuth(token, user, needsOnboarding);
 
           // Handle pending group invite from deep link (saved pre-auth)
@@ -114,10 +113,16 @@ function RootLayoutInner() {
           // Connect socket
           const socket = await connectSocket();
 
-          // Listen for real-time notifications
-          const cleanup = onNotification((notif) => {
+          // Listen for real-time notifications. Optimistically bump the raw
+          // unread count, then refetch the authoritative per-type summary so
+          // the bell badge (events, not messages) updates without waiting for
+          // the next foreground/reconnect poll.
+          const cleanup = onNotification(() => {
             incrementUnread();
-            // Could parse and add to store here
+            notificationsApi
+              .summary()
+              .then((s) => useNotificationStore.getState().setSummary(s))
+              .catch(() => {});
           });
 
           // Handle cold-start notification (app was killed, user tapped notification)
@@ -133,7 +138,12 @@ function RootLayoutInner() {
               notificationsApi.read(notifId).catch(() => {});
             }
             if (nData?.type === 'new_dm' && nData?.conversationId) {
-              setTimeout(() => router.push({
+              // navigate (not push) so that if the user was already viewing
+              // this conversation when the notification fired, we reuse that
+              // screen instance instead of stacking a duplicate — otherwise
+              // tapping "back" pops to the original and renders both the tab
+              // header and the stack header at once.
+              setTimeout(() => router.navigate({
                 pathname: '/(app)/chat/[conversationId]',
                 params: {
                   conversationId: String(nData.conversationId),
@@ -201,7 +211,10 @@ function RootLayoutInner() {
       if (data?.type === 'mention' && data?.roomId) {
         router.push('/(app)/chat');
       } else if (data?.type === 'new_dm' && data?.conversationId) {
-        router.push({
+        // See cold-start handler above: navigate reuses an existing chat
+        // instance in history if one is already open for this conversation,
+        // preventing duplicate header/keyboard glitches on back-tap.
+        router.navigate({
           pathname: '/(app)/chat/[conversationId]',
           params: {
             conversationId: String(data.conversationId),

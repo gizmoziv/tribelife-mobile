@@ -2,7 +2,7 @@
   "expo": {
     "name": "TribeLife App",
     "slug": "tribelife",
-    "version": "1.4.0",
+    "version": "1.4.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

@@ -15,16 +15,22 @@ import {
   Pressable,
   Animated,
   PanResponder,
+  AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi, reactionsApi, groupsApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi, groupsApi, notificationsApi } from '@/services/api';
+import { useNotificationStore } from '@/store/notificationStore';
+import { useChatUnreadStore } from '@/store/chatUnreadStore';
+import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
+import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -40,6 +46,7 @@ import {
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
+  getSocket,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
@@ -53,6 +60,7 @@ import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
+import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import type { Message, Conversation, ReactionGroup } from '@/types';
 import Svg, { Path } from 'react-native-svg';
@@ -79,6 +87,8 @@ export default function ChatScreen() {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('local');
   const tabIndex = activeTab === 'local' ? 0 : 1;
+  const localChatUnread = useLocalChatUnreadStore((s) => s.unread);
+  const dmUnread = useChatUnreadStore((s) => s.totalUnread);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -87,6 +97,7 @@ export default function ChatScreen() {
           options={['Local Chat', 'Direct Messages']}
           activeIndex={tabIndex}
           onSelect={(i) => setActiveTab(i === 0 ? 'local' : 'dms')}
+          badges={[localChatUnread, dmUnread]}
         />
       </View>
 
@@ -117,6 +128,7 @@ function LocalChatPanel() {
   const hasScrolledRef = useRef(false);
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
 
@@ -125,6 +137,36 @@ function LocalChatPanel() {
       if (lang) setPreferredLanguage(lang);
     });
   }, []);
+
+  // Clear bell notifications tied to this zone room when the user opens it
+  // directly — same rationale as the DM chat screen. Server marks read;
+  // local store update keeps the bell count in sync without a refetch.
+  useEffect(() => {
+    notificationsApi.readContext({ roomId })
+      .then(({ markedRead }) => {
+        if (markedRead.length > 0) {
+          useNotificationStore.getState().markManyRead(markedRead);
+        }
+      })
+      .catch(() => { /* silent */ });
+  }, [roomId]);
+
+  // Mark this panel as the active foreground context so the _layout.tsx
+  // `room:message` listener knows not to increment the Chat tab bubble while
+  // the user is actively reading here, and wipe any bubble that accumulated
+  // while they were on another tab.
+  useFocusEffect(
+    useCallback(() => {
+      useForegroundContextStore.getState().setContext({ type: 'localChat' });
+      useLocalChatUnreadStore.getState().reset();
+      return () => {
+        const ctx = useForegroundContextStore.getState().context;
+        if (ctx.type === 'localChat') {
+          useForegroundContextStore.getState().setContext({ type: 'none' });
+        }
+      };
+    }, [])
+  );
 
   useEffect(() => {
     chat.getRoomMessages(roomId).then(({ messages: msgs }) => {
@@ -143,13 +185,35 @@ function LocalChatPanel() {
         flatListRef.current?.scrollToEnd({ animated: true });
       });
 
+      // Auto-clear each user's typing indicator 5s after their last typing:start
+      // so a missed typing:stop (e.g. socket dropped while backgrounded) can't
+      // leave someone permanently "typing...".
+      const TYPING_TIMEOUT_MS = 5000;
+      const clearTypingLater = (handle: string) => {
+        const existing = typingClearTimersRef.current.get(handle);
+        if (existing) clearTimeout(existing);
+        typingClearTimersRef.current.set(
+          handle,
+          setTimeout(() => {
+            setTypingUsers((prev) => prev.filter((h) => h !== handle));
+            typingClearTimersRef.current.delete(handle);
+          }, TYPING_TIMEOUT_MS),
+        );
+      };
+
       const offTypingStart = onTypingStart(({ handle }) => {
         if (handle === user?.handle) return;
         setTypingUsers((prev) => prev.includes(handle) ? prev : [...prev, handle]);
+        clearTypingLater(handle);
       });
 
       const offTypingStop = onTypingStop(({ handle }) => {
         setTypingUsers((prev) => prev.filter((h) => h !== handle));
+        const existing = typingClearTimersRef.current.get(handle);
+        if (existing) {
+          clearTimeout(existing);
+          typingClearTimersRef.current.delete(handle);
+        }
       });
 
       const offRejected = onMessageRejected(({ reason }) => {
@@ -175,7 +239,41 @@ function LocalChatPanel() {
       cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offMediaRemoved, offMediaRejected);
     });
 
-    return () => { cleanups.forEach(fn => fn()); };
+    return () => {
+      cleanups.forEach(fn => fn());
+      // Clear any outstanding typing auto-clear timers
+      typingClearTimersRef.current.forEach((t) => clearTimeout(t));
+      typingClearTimersRef.current.clear();
+    };
+  }, [roomId]);
+
+  // Recover after socket drops / backgrounding: refetch the room's messages
+  // on foreground and on socket reconnect, and reset any stale typing state.
+  useEffect(() => {
+    const refetchRoom = async () => {
+      setTypingUsers([]);
+      typingClearTimersRef.current.forEach((t) => clearTimeout(t));
+      typingClearTimersRef.current.clear();
+      try {
+        const { messages: fresh } = await chat.getRoomMessages(roomId);
+        setMessages((prev) => {
+          const pending = prev.filter((m) => m.id < 0); // preserve optimistic
+          return [...fresh, ...pending];
+        });
+      } catch { /* silent */ }
+    };
+
+    const appSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refetchRoom();
+    });
+    const socket = getSocket();
+    const onConnect = () => refetchRoom();
+    socket?.on('connect', onConnect);
+
+    return () => {
+      appSub.remove();
+      socket?.off('connect', onConnect);
+    };
   }, [roomId]);
 
   // ── Real-time reaction updates ──────────────────────────────────────────
@@ -291,6 +389,13 @@ function LocalChatPanel() {
       senderHandle: selectedMessage.senderHandle ?? 'user',
       content: selectedMessage.content,
     });
+  }, [selectedMessage]);
+
+  const handleCopy = useCallback(() => {
+    if (!selectedMessage?.content) return;
+    Clipboard.setStringAsync(selectedMessage.content)
+      .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
+      .catch(() => {});
   }, [selectedMessage]);
 
   const handleReport = useCallback(() => {
@@ -482,6 +587,7 @@ function LocalChatPanel() {
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onReact={handleReact}
+        onCopy={selectedMessage?.content ? handleCopy : undefined}
         onReply={handleReply}
         onReport={handleReport}
         onTranslate={handleTranslate}
@@ -642,6 +748,12 @@ function DMListPanel() {
     return () => { offDm(); };
   }, []);
 
+  // Keep the Chat-tab aggregate badge in sync with the per-row unread counts.
+  useEffect(() => {
+    const total = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
+    useChatUnreadStore.getState().setTotalUnread(total);
+  }, [conversations]);
+
   const handleHideConversation = useCallback(async (conversationId: number) => {
     // Optimistic UI: remove from list immediately
     setConversations((prev) => prev.filter((c) => c.conversationId !== conversationId));
@@ -722,14 +834,23 @@ function DMListPanel() {
             >
               <TouchableOpacity
                 style={[styles.dmRow, { backgroundColor: colors.surfaceGlass }]}
-                onPress={() => router.push({
-                  pathname: '/(app)/chat/[conversationId]',
-                  params: {
-                    conversationId: item.conversationId.toString(),
-                    handle: item.participantHandle,
-                    ...(isGroup ? { isGroup: 'true', groupName: item.groupName ?? '', inviteSlug: item.inviteSlug ?? '' } : {}),
-                  },
-                })}
+                onPress={() => {
+                  // Clear the unread badge locally so the UI updates before
+                  // the server round-trip on return refreshes from /conversations.
+                  if (item.unreadCount > 0) {
+                    setConversations((prev) => prev.map((c) =>
+                      c.conversationId === item.conversationId ? { ...c, unreadCount: 0 } : c,
+                    ));
+                  }
+                  router.push({
+                    pathname: '/(app)/chat/[conversationId]',
+                    params: {
+                      conversationId: item.conversationId.toString(),
+                      handle: item.participantHandle,
+                      ...(isGroup ? { isGroup: 'true', groupName: item.groupName ?? '', inviteSlug: item.inviteSlug ?? '' } : {}),
+                    },
+                  });
+                }}
                 activeOpacity={0.7}
               >
                 <AvatarCircle name={avatarName} size={44} imageUrl={avatarUrl} />
@@ -752,11 +873,20 @@ function DMListPanel() {
                         </View>
                       )}
                     </View>
-                    {item.lastMessage && (
-                      <Text style={[styles.dmTime, { color: colors.textMuted }]}>
-                        {formatTime(item.lastMessage.createdAt)}
-                      </Text>
-                    )}
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      {item.lastMessage && (
+                        <Text style={[styles.dmTime, { color: colors.textMuted }]}>
+                          {formatTime(item.lastMessage.createdAt)}
+                        </Text>
+                      )}
+                      {item.unreadCount > 0 && (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadBadgeText}>
+                            {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                   <Text style={[styles.dmPreview, { color: colors.textMuted }]} numberOfLines={1}>
                     {subtitle}
@@ -879,7 +1009,7 @@ function ChatInput({
         )}
         {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
         <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-          <TextInput
+          <MentionTextInput
             style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
             placeholder="Message..."
             placeholderTextColor={colors.textMuted}
@@ -1002,6 +1132,20 @@ const styles = StyleSheet.create({
   dmRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dmName: { fontSize: 15, fontFamily: FONTS.semiBold },
   dmTime: { fontSize: 12, fontFamily: FONTS.regular },
+  unreadBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.pill,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  unreadBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontFamily: FONTS.bold,
+  },
   dmPreview: { fontSize: 14, fontFamily: FONTS.regular, marginTop: 2 },
   emptyState: { flex: 1, padding: SPACING.xl, justifyContent: 'center' },
   emptyInner: { alignItems: 'center', gap: 12 },

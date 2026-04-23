@@ -1,23 +1,26 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useNotificationStore } from '@/store/notificationStore';
-import { notificationsApi } from '@/services/api';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { useNotificationStore, selectBellCount } from '@/store/notificationStore';
+import { useChatUnreadStore } from '@/store/chatUnreadStore';
+import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
+import { useGlobeStore } from '@/store/globeStore';
+import { chat, globeApi, notificationsApi } from '@/services/api';
+import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import type { Notification } from '@/types';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 function MentionIcon() {
   return (
@@ -66,24 +69,92 @@ const ICON_COLORS: Record<string, string> = {
   system: '#7A8BA8',
 };
 
+type TabKey = 'mention' | 'new_dm' | 'beacon_match' | 'system';
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'mention', label: 'Mentions' },
+  { key: 'new_dm', label: 'DMs' },
+  { key: 'beacon_match', label: 'Matches' },
+  { key: 'system', label: 'System' },
+];
+
+const EMPTY_COPY: Record<TabKey, { title: string; subtitle: string }> = {
+  mention: { title: 'No mentions yet', subtitle: 'When someone @mentions you in a room, it’ll show up here.' },
+  new_dm: { title: 'No new messages', subtitle: 'New direct messages land here when you’re offline.' },
+  beacon_match: { title: 'No matches yet', subtitle: 'Daily beacon matches will appear here once the matcher runs.' },
+  system: { title: 'All quiet', subtitle: 'System announcements and product updates appear here.' },
+};
+
 export default function NotificationsScreen() {
   const { colors } = useTheme();
-  const { notifications, unreadCount, setNotifications, markAllRead } = useNotificationStore();
+  const { notifications, summary, setNotifications, setSummary, markTypeRead, markOneRead } = useNotificationStore();
+  const bellCount = useNotificationStore(selectBellCount);
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabKey>('mention');
 
   useEffect(() => {
     notificationsApi.list().then(({ notifications: notifs, unreadCount: count }) => {
       setNotifications(notifs, count);
-    });
+    }).catch(() => {});
+    notificationsApi.summary().then(setSummary).catch(() => {});
   }, []);
 
-  const handleMarkAllRead = async () => {
-    await notificationsApi.readAll();
-    markAllRead();
+  // DMs: collapse to one row per conversation. Mentions/matches/system keep
+  // one row per event (that's the right granularity for those types).
+  const visibleNotifications = useMemo(() => {
+    const ofType = notifications.filter((n) => n.type === activeTab);
+    if (activeTab !== 'new_dm') return ofType;
+    const seen = new Set<string>();
+    const collapsed: Notification[] = [];
+    for (const n of ofType) {
+      const convoId = (n.data as Record<string, unknown>)?.conversationId;
+      const key = convoId != null ? `c:${String(convoId)}` : `n:${n.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      collapsed.push(n);
+    }
+    return collapsed;
+  }, [notifications, activeTab]);
+
+  // Clearing a bell tab cascades to the sources those events came from:
+  // conversations get marked read, globe rooms get their read position
+  // advanced, and the timezone (local chat) counter resets. Cross-type:
+  // clearing DMs on a group chat also clears pending mentions for that same
+  // group, and vice versa — the backend returns the exact source IDs touched.
+  const handleMarkTabRead = async () => {
+    const prev = summary;
+    markTypeRead(activeTab);
+    try {
+      const resp = await notificationsApi.readAll(activeTab);
+
+      if (resp.clearedConversationIds.length > 0) {
+        chat.getConversations()
+          .then(({ conversations }) => {
+            const total = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
+            useChatUnreadStore.getState().setTotalUnread(total);
+          })
+          .catch(() => {});
+      }
+      if (resp.clearedGlobeSlugs.length > 0) {
+        globeApi.unread()
+          .then(({ unread }) => useGlobeStore.getState().setUnreadCounts(unread))
+          .catch(() => {});
+      }
+      if (resp.clearedTimezoneRooms.length > 0) {
+        useLocalChatUnreadStore.getState().reset();
+      }
+
+      // Authoritative refresh of per-tab summary (picks up any cross-type
+      // notifications the backend cascade cleared).
+      notificationsApi.summary().then(setSummary).catch(() => {});
+    } catch {
+      setSummary(prev);
+    }
   };
 
   const handleNotificationPress = (notification: Notification) => {
-    notificationsApi.read(notification.id);
+    markOneRead(notification.id);
+    notificationsApi.read(notification.id).catch(() => {});
 
     const data = notification.data as Record<string, number>;
 
@@ -108,9 +179,15 @@ export default function NotificationsScreen() {
     }
   };
 
+  const summaryByTab: Record<TabKey, number> = {
+    mention: summary.mentions,
+    new_dm: summary.dmConversations,
+    beacon_match: summary.beaconMatches,
+    system: summary.system,
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
@@ -124,25 +201,60 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
         </View>
-        {unreadCount > 0 && (
+        {summaryByTab[activeTab] > 0 && (
           <PillButton
-            title="Mark all read"
-            onPress={handleMarkAllRead}
+            title="Mark read"
+            onPress={handleMarkTabRead}
             variant="outline"
             size="sm"
           />
         )}
       </View>
 
-      {notifications.length === 0 ? (
+      {/* Segmented tabs */}
+      <View style={styles.tabsRow}>
+        {TABS.map((t) => {
+          const isActive = t.key === activeTab;
+          const count = summaryByTab[t.key];
+          return (
+            <Pressable
+              key={t.key}
+              onPress={() => setActiveTab(t.key)}
+              style={[
+                styles.tab,
+                {
+                  backgroundColor: isActive ? COLORS.primary : colors.surfaceGlass,
+                  borderColor: isActive ? COLORS.primary : colors.border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: isActive ? '#FFF' : colors.text },
+                ]}
+              >
+                {t.label}
+              </Text>
+              {count > 0 && (
+                <View style={[styles.tabDot, { backgroundColor: isActive ? '#FFF' : COLORS.accent }]} />
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {visibleNotifications.length === 0 ? (
         <View style={styles.empty}>
           <AnimatedEntry>
             <GlassCard>
               <View style={styles.emptyInner}>
                 <BellIcon />
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>All caught up!</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                  {EMPTY_COPY[activeTab].title}
+                </Text>
                 <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                  Notifications for mentions and beacon matches will appear here.
+                  {EMPTY_COPY[activeTab].subtitle}
                 </Text>
               </View>
             </GlassCard>
@@ -150,7 +262,7 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
-          data={notifications}
+          data={visibleNotifications}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ paddingVertical: SPACING.sm, paddingHorizontal: SPACING.page }}
           renderItem={({ item, index }) => (
@@ -225,6 +337,30 @@ const styles = StyleSheet.create({
     marginLeft: -4,
   },
   title: { fontSize: 22, fontFamily: FONTS.bold },
+  tabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: SPACING.page,
+    paddingBottom: SPACING.sm,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontFamily: FONTS.semiBold,
+  },
+  tabDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
   empty: { flex: 1, padding: SPACING.xl, justifyContent: 'center' },
   emptyInner: { alignItems: 'center', gap: 12 },
   emptyTitle: { fontSize: 20, fontFamily: FONTS.semiBold },

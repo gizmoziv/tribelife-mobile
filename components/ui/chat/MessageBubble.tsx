@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -12,22 +12,55 @@ import { ImageGrid } from '@/components/ui/chat/ImageGrid';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import type { Message, GlobeMessage } from '@/types';
 
-// Parse message content into plain text and @mention fragments.
-// Returns an array of { text, isMention, handle } parts.
-function parseContent(content: string): Array<{ text: string; isMention: boolean; handle?: string }> {
-  const regex = /@([a-zA-Z0-9_]+)/g;
-  const parts: Array<{ text: string; isMention: boolean; handle?: string }> = [];
+// Parse message content into plain text, @mention, and URL fragments.
+// URLs are matched first (so a URL containing an @ won't be split into a
+// false mention); within non-URL segments we then split on @mention.
+type ContentPart =
+  | { kind: 'text'; text: string }
+  | { kind: 'mention'; text: string; handle: string }
+  | { kind: 'url'; text: string; url: string };
+
+const URL_REGEX = /(https?:\/\/[^\s<>]+)/gi;
+const MENTION_REGEX = /@([a-zA-Z0-9_]+)/g;
+
+function parseMentions(text: string): ContentPart[] {
+  const parts: ContentPart[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(content)) !== null) {
+  MENTION_REGEX.lastIndex = 0;
+  while ((match = MENTION_REGEX.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ text: content.slice(lastIndex, match.index), isMention: false });
+      parts.push({ kind: 'text', text: text.slice(lastIndex, match.index) });
     }
-    parts.push({ text: match[0], isMention: true, handle: match[1].toLowerCase() });
+    parts.push({ kind: 'mention', text: match[0], handle: match[1].toLowerCase() });
     lastIndex = match.index + match[0].length;
   }
+  if (lastIndex < text.length) {
+    parts.push({ kind: 'text', text: text.slice(lastIndex) });
+  }
+  return parts;
+}
+
+function parseContent(content: string): ContentPart[] {
+  const parts: ContentPart[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(...parseMentions(content.slice(lastIndex, match.index)));
+    }
+    // Trim trailing punctuation that's almost never part of the URL.
+    let url = match[0];
+    const trailingMatch = url.match(/[.,;:!?)\]}'"]+$/);
+    if (trailingMatch) {
+      url = url.slice(0, -trailingMatch[0].length);
+    }
+    parts.push({ kind: 'url', text: url, url });
+    lastIndex = match.index + url.length;
+  }
   if (lastIndex < content.length) {
-    parts.push({ text: content.slice(lastIndex), isMention: false });
+    parts.push(...parseMentions(content.slice(lastIndex)));
   }
   return parts;
 }
@@ -82,24 +115,40 @@ export function MessageBubble({
     router.push(`/user/${handle}`);
   }, [router]);
 
-  const renderContent = (baseColor: string, mentionColor: string) => {
+  const handleUrlPress = useCallback((url: string) => {
+    Linking.openURL(url).catch(() => {});
+  }, []);
+
+  const renderContent = (baseColor: string, mentionColor: string, linkColor: string) => {
     if (!displayContent) return null;
     const parts = parseContent(displayContent);
     return (
       <Text style={[styles.bubbleText, { color: baseColor, writingDirection: textDirection }]}>
-        {parts.map((p, i) =>
-          p.isMention && p.handle ? (
-            <Text
-              key={i}
-              style={{ color: mentionColor, fontFamily: FONTS.semiBold }}
-              onPress={() => handleMentionPress(p.handle!)}
-            >
-              {p.text}
-            </Text>
-          ) : (
-            <Text key={i}>{p.text}</Text>
-          ),
-        )}
+        {parts.map((p, i) => {
+          if (p.kind === 'mention') {
+            return (
+              <Text
+                key={i}
+                style={{ color: mentionColor, fontFamily: FONTS.semiBold }}
+                onPress={() => handleMentionPress(p.handle)}
+              >
+                {p.text}
+              </Text>
+            );
+          }
+          if (p.kind === 'url') {
+            return (
+              <Text
+                key={i}
+                style={{ color: linkColor, textDecorationLine: 'underline' }}
+                onPress={() => handleUrlPress(p.url)}
+              >
+                {p.text}
+              </Text>
+            );
+          }
+          return <Text key={i}>{p.text}</Text>;
+        })}
       </Text>
     );
   };
@@ -189,7 +238,7 @@ export function MessageBubble({
                   />
                 </View>
               )}
-              {renderContent('#FFF', '#FFE9A8')}
+              {renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -212,6 +261,12 @@ export function MessageBubble({
               { backgroundColor: colors.surfaceGlass },
               mentionsMe && styles.bubbleMentionsMe,
             ]}>
+              {/* Left accent bar when this bubble @mentions me. Absolute-
+                  positioned so the surrounding content still readable — any
+                  background tint kills contrast on Android light mode. */}
+              {mentionsMe && (
+                <View style={[styles.mentionAccent, { backgroundColor: COLORS.primary }]} />
+              )}
               {/* Reply preview inside bubble */}
               {replyTo && (
                 <Pressable onPress={() => onReplyPress?.(replyTo.id)} style={[styles.replyPreview, { backgroundColor: colors.surface }]}>
@@ -239,7 +294,7 @@ export function MessageBubble({
                   />
                 </View>
               )}
-              {renderContent(colors.text, COLORS.primary)}
+              {renderContent(colors.text, COLORS.primary, COLORS.primary)}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -319,10 +374,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     ...SHADOWS.sm,
   },
+  // Bubble-level offset so the left accent bar has room without overlapping
+  // the text. No background tint — Android light mode doesn't composite rgba
+  // cleanly over surfaceGlass and the result is unreadable.
   bubbleMentionsMe: {
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    backgroundColor: 'rgba(139, 69, 214, 0.12)',
+    paddingLeft: 18,
+  },
+  mentionAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18,
   },
   bubbleText: {
     fontSize: 15,
