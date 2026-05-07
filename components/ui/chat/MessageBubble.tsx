@@ -20,7 +20,11 @@ type ContentPart =
   | { kind: 'mention'; text: string; handle: string }
   | { kind: 'url'; text: string; url: string };
 
-const URL_REGEX = /(https?:\/\/[^\s<>]+)/gi;
+// Matches: full URLs (http/https), www-prefixed URLs, and bare domains with a
+// recognised TLD (e.g. tribelife.app, example.com/path). The TLD list is
+// curated to keep false positives ("Dr.Smith", "version2.0") low while
+// covering the common cases users actually paste.
+const URL_REGEX = /\b(?:https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:[a-zA-Z0-9][a-zA-Z0-9-]*\.)+(?:com|net|org|edu|gov|mil|io|app|co|ai|dev|me|tv|info|biz|us|uk|de|fr|jp|au|nz|il|eu|ca|in|br|cn|ru|tech|online|store|site|xyz|ly|so|fm|to|cc|gg|club|news|blog)(?:\/[^\s<>]*)?)/gi;
 const MENTION_REGEX = /@([a-zA-Z0-9_]+)/g;
 
 function parseMentions(text: string): ContentPart[] {
@@ -47,6 +51,10 @@ function parseContent(content: string): ContentPart[] {
   let match: RegExpExecArray | null;
   URL_REGEX.lastIndex = 0;
   while ((match = URL_REGEX.exec(content)) !== null) {
+    // Skip bare domains that are actually the host part of an email address.
+    if (match.index > 0 && content[match.index - 1] === '@') {
+      continue;
+    }
     if (match.index > lastIndex) {
       parts.push(...parseMentions(content.slice(lastIndex, match.index)));
     }
@@ -56,7 +64,8 @@ function parseContent(content: string): ContentPart[] {
     if (trailingMatch) {
       url = url.slice(0, -trailingMatch[0].length);
     }
-    parts.push({ kind: 'url', text: url, url });
+    const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    parts.push({ kind: 'url', text: url, url: target });
     lastIndex = match.index + url.length;
   }
   if (lastIndex < content.length) {
@@ -177,6 +186,45 @@ export function MessageBubble({
 
   const replyTo = message.replyTo;
   const reactions = message.reactions ?? [];
+
+  // System messages (e.g. "@handle joined the chat") render as a centered
+  // pill with no avatar, bubble, timestamp, or reactions — WhatsApp/Slack
+  // pattern. The @handle inside the body stays tappable via the shared
+  // mention parser so users can still open the new member's profile.
+  if (message.kind === 'system') {
+    const parts = parseContent(message.content);
+    return (
+      <View style={styles.systemRow}>
+        <Text style={[styles.systemText, { color: colors.textMuted }]}>
+          {parts.map((p, i) => {
+            if (p.kind === 'mention') {
+              return (
+                <Text
+                  key={i}
+                  style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}
+                  onPress={() => handleMentionPress(p.handle)}
+                >
+                  {p.text}
+                </Text>
+              );
+            }
+            if (p.kind === 'url') {
+              return (
+                <Text
+                  key={i}
+                  style={{ color: COLORS.primary, textDecorationLine: 'underline' }}
+                  onPress={() => handleUrlPress(p.url)}
+                >
+                  {p.text}
+                </Text>
+              );
+            }
+            return <Text key={i}>{p.text}</Text>;
+          })}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, isMe && styles.containerMe, highlighted && styles.highlighted]}>
@@ -441,5 +489,18 @@ const styles = StyleSheet.create({
   translationToggleText: {
     fontSize: 12,
     fontFamily: FONTS.medium,
+  },
+  systemRow: {
+    alignSelf: 'center',
+    marginVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    maxWidth: '85%',
+  },
+  systemText: {
+    fontSize: 13,
+    fontFamily: FONTS.medium,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

@@ -24,6 +24,7 @@ import { PillButton } from '@/components/ui/PillButton';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useCapability } from '@/hooks/useCapability';
 import Svg, { Path, Circle, G, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 
 function slugify(text: string): string {
@@ -316,7 +317,11 @@ export default function CreateGroupScreen() {
     }
   };
 
-  const isPremium = !!user?.isPremium;
+  // Phase 1 (AUTHZ-09): server-driven via capabilities. The local name
+  // stays `isPremium` so downstream call sites (lines 323/346/477) read
+  // unchanged. Phase 4 (TIER-03/05) will remove this alias and rename
+  // sites to `canCreate` semantics directly.
+  const isPremium = useCapability('canCreatePrivateGroup');
   const scrollRef = React.useRef<ScrollView>(null);
 
   const scrollToForm = () => {

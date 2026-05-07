@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
-import { Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ExpoLinking from 'expo-linking';
@@ -100,8 +100,8 @@ function RootLayoutInner() {
         }
         if (token) {
           const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
-          const { user, needsOnboarding } = await auth.me(deviceTimezone);
-          await setAuth(token, user, needsOnboarding);
+          const { user, needsOnboarding, capabilities } = await auth.me(deviceTimezone);
+          await setAuth(token, user, capabilities, needsOnboarding);
 
           // Handle pending group invite from deep link (saved pre-auth)
           const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
@@ -241,6 +241,24 @@ function RootLayoutInner() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  useEffect(() => {
+    // Background → foreground: refresh the full session (user + capabilities)
+    // so tier rule changes made server-side (RevenueCat upgrade, admin role
+    // grant, premium expiry) take effect. We refresh user too because legacy
+    // consumers still read `user.isPremium` directly until Phase 4 migrates
+    // them to useCapability.
+    //
+    // Note: AppState.addEventListener('change') does NOT fire a synthetic
+    // 'active' on registration — only on real transitions.
+    const handleChange = (next: AppStateStatus) => {
+      if (next !== 'active') return;
+      if (!useAuthStore.getState().isAuthenticated) return;
+      useAuthStore.getState().refreshSession();
+    };
+    const sub = AppState.addEventListener('change', handleChange);
+    return () => sub.remove();
+  }, []);
 
   if (!fontsLoaded) return null;
 

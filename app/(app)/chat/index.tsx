@@ -31,6 +31,7 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useChatUnreadStore } from '@/store/chatUnreadStore';
 import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
+import { useChatTabStore } from '@/store/chatTabStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -81,11 +82,10 @@ function GlobeIcon() {
   );
 }
 
-type Tab = 'local' | 'dms';
-
 export default function ChatScreen() {
   const { colors } = useTheme();
-  const [activeTab, setActiveTab] = useState<Tab>('local');
+  const activeTab = useChatTabStore((s) => s.activeTab);
+  const setActiveTab = useChatTabStore((s) => s.setActiveTab);
   const tabIndex = activeTab === 'local' ? 0 : 1;
   const localChatUnread = useLocalChatUnreadStore((s) => s.unread);
   const dmUnread = useChatUnreadStore((s) => s.totalUnread);

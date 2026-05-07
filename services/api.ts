@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { API_URL } from '@/constants';
 import type {
   User,
+  Capabilities,
   Conversation,
   Message,
   Beacon,
@@ -31,7 +32,8 @@ export async function clearToken(): Promise<void> {
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retried: boolean = false,
 ): Promise<T> {
   const token = await getToken();
 
@@ -44,7 +46,15 @@ async function request<T>(
     },
   });
 
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
+
+  if (res.status === 403 && data && data.capabilityViolation === true && !retried) {
+    // Stale capabilities — refresh once and retry the original request.
+    // Lazy require to avoid circular import (authStore imports api).
+    const { useAuthStore } = await import('@/store/authStore');
+    await useAuthStore.getState().refreshCapabilities();
+    return request<T>(path, options, true);
+  }
 
   if (!res.ok) {
     throw new ApiError(data.error ?? 'Request failed', res.status, data);
@@ -67,13 +77,13 @@ export class ApiError extends Error {
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const auth = {
   googleSignIn: (idToken: string) =>
-    request<{ token: string; user: User; needsOnboarding: boolean; isNewUser: boolean }>(
+    request<{ token: string; user: User; needsOnboarding: boolean; isNewUser: boolean; capabilities: Capabilities }>(
       '/api/auth/google',
       { method: 'POST', body: JSON.stringify({ idToken }) }
     ),
 
   appleSignIn: (identityToken: string, fullName?: { givenName?: string | null; familyName?: string | null } | null, email?: string | null) =>
-    request<{ token: string; user: User; needsOnboarding: boolean; isNewUser: boolean }>(
+    request<{ token: string; user: User; needsOnboarding: boolean; isNewUser: boolean; capabilities: Capabilities }>(
       '/api/auth/apple',
       { method: 'POST', body: JSON.stringify({ identityToken, fullName, email }) }
     ),
@@ -94,7 +104,10 @@ export const auth = {
     ),
 
   me: (timezone?: string) =>
-    request<{ user: User; needsOnboarding: boolean }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
+    request<{ user: User; needsOnboarding: boolean; capabilities: Capabilities }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
+
+  capabilities: () =>
+    request<{ capabilities: Capabilities }>('/api/auth/capabilities'),
 
   updatePushToken: (expoPushToken: string) =>
     request('/api/auth/push-token', {

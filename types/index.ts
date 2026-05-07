@@ -1,3 +1,5 @@
+export * from './capabilities';
+
 export interface User {
   id: number;
   email: string;
@@ -38,6 +40,7 @@ export interface Message {
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
   mediaUrls?: string[] | null;
+  kind?: 'user' | 'system';
 }
 
 export interface Conversation {
@@ -143,6 +146,7 @@ export interface GlobeMessage {
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
   mediaUrls?: string[] | null;
+  kind?: 'user' | 'system';
 }
 
 // ── News ─────────────────────────────────────────────────────────────────────

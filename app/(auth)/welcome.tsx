@@ -80,8 +80,8 @@ export default function WelcomeScreen() {
         throw new Error('No ID token received from Google');
       }
 
-      const { token, user, needsOnboarding } = await auth.googleSignIn(idToken);
-      await setAuth(token, user, needsOnboarding);
+      const { token, user, needsOnboarding, capabilities } = await auth.googleSignIn(idToken);
+      await setAuth(token, user, capabilities, needsOnboarding);
 
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding');
@@ -116,12 +116,12 @@ export default function WelcomeScreen() {
         throw new Error('No identity token received from Apple');
       }
 
-      const { token, user, needsOnboarding } = await auth.appleSignIn(
+      const { token, user, needsOnboarding, capabilities } = await auth.appleSignIn(
         credential.identityToken,
         credential.fullName,
         credential.email,
       );
-      await setAuth(token, user, needsOnboarding);
+      await setAuth(token, user, capabilities, needsOnboarding);
 
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding');

@@ -16,6 +16,7 @@ import { useGlobeStore } from '@/store/globeStore';
 import { useChatUnreadStore } from '@/store/chatUnreadStore';
 import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
+import { useChatTabStore } from '@/store/chatTabStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi, globeApi, chat } from '@/services/api';
 import { getSocket, connectSocket } from '@/services/socket';
@@ -333,6 +334,17 @@ export default function AppLayout() {
           tabBarBadgeStyle: dotBadgeStyle,
           headerTitle: 'Chat',
         }}
+        listeners={({ navigation }) => ({
+          // Amazon-style: re-tapping the Chat bottom-nav icon while the
+          // screen is already focused snaps the inner sub-tab back to Local.
+          // First entry (or coming from another bottom tab) preserves whatever
+          // sub-tab the user last had open.
+          tabPress: () => {
+            if (navigation.isFocused() && useChatTabStore.getState().activeTab === 'dms') {
+              useChatTabStore.getState().setActiveTab('local');
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="globe"
