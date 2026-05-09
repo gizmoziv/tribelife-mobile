@@ -15,3 +15,19 @@ import type { CapabilityFeatures } from '@/types';
 export function useCapability<K extends keyof CapabilityFeatures>(feature: K): boolean {
   return useAuthStore((s) => s.capabilities?.features[feature] ?? false);
 }
+
+/**
+ * Returns whether the authenticated user has an active premium subscription.
+ * Reads from `capabilities.isPremium` (server-derived, expiry-aware).
+ * Falls back to `false` when capabilities are not yet loaded.
+ *
+ * UI HINT ONLY — server-side enforcement is authoritative.
+ * Mirrors useCapability() selector pattern; returns a primitive (boolean)
+ * so selector identity is stable and never causes extra rerenders.
+ *
+ * Example:
+ *   const isPremium = useIsPremium();
+ */
+export function useIsPremium(): boolean {
+  return useAuthStore((s) => s.capabilities?.isPremium ?? false);
+}

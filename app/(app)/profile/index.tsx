@@ -28,8 +28,9 @@ import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
 import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE, PREMIUM_BEACON_LIMIT } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useIsPremium } from '@/hooks/useCapability';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
@@ -57,6 +58,8 @@ function CameraIcon() {
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, logout, updateUser } = useAuthStore();
+  const isPremium = useIsPremium();
+  const limits = useAuthStore((s) => s.capabilities?.limits);
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -66,11 +69,11 @@ export default function ProfileScreen() {
   const [myGroups, setMyGroups] = useState<{ id: number; groupName: string; inviteSlug: string; memberCount: number; role: string }[]>([]);
 
   const loadMyGroups = useCallback(() => {
-    if (!user?.isPremium) return;
+    if (!isPremium) return;
     groupsApi.myGroups()
       .then(({ groups }) => setMyGroups(groups))
       .catch(() => {});
-  }, [user?.isPremium]);
+  }, [isPremium]);
 
   useEffect(() => {
     loadMyGroups();
@@ -429,9 +432,10 @@ export default function ProfileScreen() {
 
       if (isPremium) {
         updateUser({ isPremium: true });
+        const maxBeacons = useAuthStore.getState().capabilities?.limits.maxBeacons ?? 3;
         Alert.alert(
           'Welcome to Premium!',
-          `You can now run up to ${PREMIUM_BEACON_LIMIT} beacons at a time. Thank you for supporting TribeLife!`,
+          `You can now run up to ${maxBeacons} beacons at a time. Thank you for supporting TribeLife!`,
           [{ text: 'Awesome!' }]
         );
       }
@@ -491,7 +495,7 @@ export default function ProfileScreen() {
                     {isInCooldown ? `Locked until ${cooldownDateText}` : 'Edit'}
                   </Text>
                 </TouchableOpacity>
-                {user?.isPremium && (
+                {isPremium && (
                   <GlowBadge text="Premium" color={COLORS.accent} glow />
                 )}
               </View>
@@ -596,7 +600,7 @@ export default function ProfileScreen() {
         </AnimatedEntry>
 
         {/* Private Groups (Premium) */}
-        {user?.isPremium && (
+        {isPremium && (
           <AnimatedEntry delay={120}>
             <GlassCard>
               <View style={styles.premiumInner}>
@@ -669,7 +673,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Premium */}
-        {!user?.isPremium && (
+        {!isPremium && (
           <AnimatedEntry delay={120}>
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PREMIUM</Text>
@@ -679,7 +683,7 @@ export default function ProfileScreen() {
                     Upgrade to Premium
                   </Text>
                   <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
-                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
+                    {`\u2022 Run up to ${limits?.maxBeacons ?? 3} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
                   </Text>
                   <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
                     TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period.

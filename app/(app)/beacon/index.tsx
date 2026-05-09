@@ -23,6 +23,7 @@ import { useAuthStore } from '@/store/authStore';
 import { beacons as beaconsApi, chat } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { useIsPremium } from '@/hooks/useCapability';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { PillToggle } from '@/components/ui/PillToggle';
@@ -379,7 +380,8 @@ export default function BeaconScreen() {
 function MyBeaconsPanel() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
-  const { user } = useAuthStore();
+  const limits = useAuthStore((s) => s.capabilities?.limits);
+  const isPremium = useIsPremium();
   const router = useRouter();
   const [myBeacons, setMyBeacons] = useState<Beacon[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -387,9 +389,8 @@ function MyBeaconsPanel() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
 
-  const isPremium = user?.isPremium ?? false;
   const activeBeacons = myBeacons.filter((b) => b.isActive);
-  const limit = isPremium ? 3 : 1;
+  const limit = limits?.maxBeacons ?? 1;
   const canAddMore = activeBeacons.length < limit;
 
   const { BEACON_EXAMPLES } = require('@/constants');
@@ -594,8 +595,8 @@ function MyBeaconsPanel() {
               style={[styles.limitReachedText, { color: colors.textMuted }]}
             >
               {isPremium
-                ? 'You have 3 active beacons (maximum for premium).'
-                : 'You have 1 active beacon. Upgrade to Premium to run up to 3.'}
+                ? `You have ${limit} active beacons (maximum for premium).`
+                : `You have 1 active beacon. Upgrade to Premium to run up to ${limit}.`}
             </Text>
           </GlassCard>
         </AnimatedEntry>
