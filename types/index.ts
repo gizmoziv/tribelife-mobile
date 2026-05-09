@@ -6,7 +6,7 @@ export interface User {
   name: string;
   handle: string | null;
   avatarUrl: string | null;
-  isPremium: boolean;
+  // isPremium removed (TIER-03) — consumers read capabilities.isPremium via useIsPremium()
   timezone: string | null;
   acceptedTermsAt: string | null;
   handleUpdatedAt: string | null;
