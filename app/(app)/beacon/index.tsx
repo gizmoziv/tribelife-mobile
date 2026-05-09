@@ -427,7 +427,7 @@ function MyBeaconsPanel() {
         [{ text: 'Great!' }],
       );
     } catch (err: any) {
-      if (err.data?.upgradeRequired) {
+      if (err.data?.capabilityViolation && !isPremium) {
         Alert.alert(
           'Upgrade to Premium',
           `Free accounts can run 1 beacon at a time. Premium unlocks 3 beacons for $4.99/month.`,
