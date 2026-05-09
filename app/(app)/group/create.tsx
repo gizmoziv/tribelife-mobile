@@ -317,15 +317,12 @@ export default function CreateGroupScreen() {
     }
   };
 
-  // Phase 1 (AUTHZ-09): server-driven via capabilities. The local name
-  // stays `isPremium` so downstream call sites (lines 323/346/477) read
-  // unchanged. Phase 4 (TIER-03/05) will remove this alias and rename
-  // sites to `canCreate` semantics directly.
-  const isPremium = useCapability('canCreatePrivateGroup');
+  // Server-driven; UI hint only — server enforcement is authoritative.
+  const canCreateGroup = useCapability('canCreatePrivateGroup');
   const scrollRef = React.useRef<ScrollView>(null);
 
   const scrollToForm = () => {
-    if (!isPremium) {
+    if (!canCreateGroup) {
       router.push('/(app)/profile');
       return;
     }
@@ -348,7 +345,7 @@ export default function CreateGroupScreen() {
             Running a kabbalah study group, volunteer meetup or commercial network? The connections that used to happen organically are now happening digitally in TribeLife.
           </Text>
           <PillButton
-            title={isPremium ? 'Create a Group' : 'Upgrade to Create a Group'}
+            title={canCreateGroup ? 'Create a Group' : 'Upgrade to Create a Group'}
             onPress={scrollToForm}
             variant="primary"
             size="md"
@@ -479,7 +476,7 @@ export default function CreateGroupScreen() {
   );
 
   // ---------- Non-premium view ----------
-  if (!isPremium) {
+  if (!canCreateGroup) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.header}>
