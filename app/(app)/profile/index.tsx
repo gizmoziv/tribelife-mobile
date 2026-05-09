@@ -57,7 +57,7 @@ function CameraIcon() {
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
-  const { user, logout, updateUser } = useAuthStore();
+  const { user, logout, updateUser, refreshSession } = useAuthStore();
   const isPremium = useIsPremium();
   const limits = useAuthStore((s) => s.capabilities?.limits);
   const router = useRouter();
@@ -428,10 +428,10 @@ export default function ProfileScreen() {
       }
 
       const { customerInfo } = await Purchases.purchasePackage(monthly);
-      const isPremium = customerInfo.entitlements.active['premium'] !== undefined;
+      const isPremiumEntitlement = customerInfo.entitlements.active['premium'] !== undefined;
 
-      if (isPremium) {
-        updateUser({ isPremium: true });
+      if (isPremiumEntitlement) {
+        await refreshSession();
         const maxBeacons = useAuthStore.getState().capabilities?.limits.maxBeacons ?? 3;
         Alert.alert(
           'Welcome to Premium!',
@@ -451,9 +451,9 @@ export default function ProfileScreen() {
   const handleRestorePurchase = async () => {
     try {
       const customerInfo = await Purchases.restorePurchases();
-      const isPremium = customerInfo.entitlements.active['premium'] !== undefined;
-      if (isPremium) {
-        updateUser({ isPremium: true });
+      const isPremiumEntitlement = customerInfo.entitlements.active['premium'] !== undefined;
+      if (isPremiumEntitlement) {
+        await refreshSession();
         Alert.alert('Restored!', 'Your premium subscription has been restored.');
       } else {
         Alert.alert('No Subscription Found', 'No active premium subscription was found for your account.');
