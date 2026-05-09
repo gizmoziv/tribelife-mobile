@@ -39,6 +39,7 @@ const summaryKeyForType: Record<string, keyof NotificationSummary | null> = {
   new_dm: 'dmConversations',
   beacon_match: 'beaconMatches',
   system: 'system',
+  org_invite: null, // explicit no-bucket — invites surface only in raw notification list + bell unreadCount
 };
 
 export const useNotificationStore = create<NotificationState>((set) => ({
