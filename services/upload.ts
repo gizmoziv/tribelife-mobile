@@ -118,6 +118,53 @@ export async function confirmGroupIconUpload(
   return res.json();
 }
 
+// ── Org Icon Upload Flow (admin only) ─────────────────────────────────────
+
+export async function requestOrgIconUploadUrl(orgId: number): Promise<{
+  uploadUrl: string;
+  key: string;
+  cdnUrl: string;
+}> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/org-icon-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ orgId }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 403) throw new Error('Only org admins can upload an org icon.');
+    if (res.status === 429) throw new Error('Upload rate limit exceeded. Try again later.');
+    throw new Error(`Failed to get upload URL: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+export async function confirmOrgIconUpload(
+  orgId: number,
+  key: string,
+): Promise<{ iconUrl: string }> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/org-icon-confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ orgId, key }),
+  });
+
+  if (!res.ok) throw new Error(`Org icon confirmation failed: ${res.statusText}`);
+
+  return res.json();
+}
+
 // ── Media Upload Flow ──────────────────────────────────────────────────────
 
 /** Request N pre-signed upload URLs for media images */

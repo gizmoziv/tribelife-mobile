@@ -343,6 +343,69 @@ export const globeApi = {
     request<{ ok: true }>('/api/globe/rooms/mark-all-read', { method: 'PUT' }),
 };
 
+// ── Organizations ──────────────────────────────────────────────────────────
+export const orgsApi = {
+  // GET /api/orgs/:slug — public org info (works auth + anon)
+  getBySlug: (slug: string) =>
+    request<{ org: { id: number; slug: string; name: string; description: string | null; type: string; iconUrl: string | null; memberCount: number; isMember: boolean; role: 'admin' | 'moderator' | 'member' | null } }>(
+      `/api/orgs/${slug}`,
+    ),
+
+  // POST /api/orgs — create (gated by canCreateOrg = false in v1.5)
+  create: (body: { slug: string; name: string; type: 'jcc' | 'non_profit' | 'creator' | 'community' | 'business'; description?: string; iconUrl?: string }) =>
+    request<{ org: { id: number; slug: string; name: string; type: string; description: string | null; iconUrl: string | null } }>(
+      '/api/orgs',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  // PUT /api/orgs/:id — admin edit (D-07: name + description + iconUrl)
+  update: (id: number, body: { name?: string; description?: string; iconUrl?: string }) =>
+    request<{ org: { id: number; name: string; description: string | null; iconUrl: string | null } }>(
+      `/api/orgs/${id}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+
+  // POST /api/orgs/:id/invite — handle (Path A) or empty body for link (Path B)
+  invite: (id: number, opts?: { invitedHandle?: string }) =>
+    request<{ invite: { id: number; token: string; invitedUserId: number | null; role: string; expiresAt: string } }>(
+      `/api/orgs/${id}/invite`,
+      { method: 'POST', body: JSON.stringify(opts ?? {}) },
+    ),
+
+  // GET /api/orgs/invites/:token — preview without accepting
+  previewInvite: (token: string) =>
+    request<{ invite: { state: 'pending' | 'expired' | 'already_used' | 'already_member'; org: { slug: string; name: string; type: string; iconUrl: string | null; description: string | null }; inviter: { handle: string; name: string } | null; expiresAt: string } }>(
+      `/api/orgs/invites/${token}`,
+    ),
+
+  // POST /api/orgs/invites/:token/accept
+  acceptInvite: (token: string) =>
+    request<{ membership: { id: number; orgId: number; userId: number; role: string; joinedAt: string } }>(
+      `/api/orgs/invites/${token}/accept`,
+      { method: 'POST' },
+    ),
+
+  // GET /api/orgs/:id/members — admin-only
+  members: (id: number) =>
+    request<{ members: { userId: number; handle: string; name: string; avatarUrl: string | null; role: 'admin' | 'moderator' | 'member'; joinedAt: string }[] }>(
+      `/api/orgs/${id}/members`,
+    ),
+
+  // PUT /api/orgs/:id/members/:userId — admin-only role change
+  updateMemberRole: (id: number, userId: number, role: 'moderator' | 'member') =>
+    request<{ membership: { userId: number; role: string } }>(
+      `/api/orgs/${id}/members/${userId}`,
+      { method: 'PUT', body: JSON.stringify({ role }) },
+    ),
+
+  // DELETE /api/orgs/:id/members/:userId — admin-only remove (or self-leave when caller===subject)
+  removeMember: (id: number, userId: number) =>
+    request<{ ok: true }>(
+      `/api/orgs/${id}/members/${userId}`,
+      { method: 'DELETE' },
+    ),
+};
+
 // ── News ────────────────────────────────────────────────────────────────────
 export const newsApi = {
   feed: (before?: string) =>
