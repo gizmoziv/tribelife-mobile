@@ -245,9 +245,8 @@ function RootLayoutInner() {
   useEffect(() => {
     // Background → foreground: refresh the full session (user + capabilities)
     // so tier rule changes made server-side (RevenueCat upgrade, admin role
-    // grant, premium expiry) take effect. We refresh user too because legacy
-    // consumers still read `user.isPremium` directly until Phase 4 migrates
-    // them to useCapability.
+    // grant, premium expiry) take effect. Capabilities-driven gating — see
+    // hooks/useCapability.ts and useIsPremium.
     //
     // Note: AppState.addEventListener('change') does NOT fire a synthetic
     // 'active' on registration — only on real transitions.

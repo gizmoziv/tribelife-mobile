@@ -48,10 +48,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   // Foreground refresh of the whole session (user + capabilities). Used
-  // when the app comes back from background — keeps legacy `user.isPremium`
-  // consumers in sync until they migrate to `useCapability` in Phase 4.
-  // The 403-retry path in services/api.ts uses refreshCapabilities (above),
-  // which hits the cheaper capabilities-only endpoint.
+  // when the app comes back from background and after RevenueCat
+  // purchase/restore, ensuring both the user shape and capability grants
+  // are current. The 403-retry path in services/api.ts uses
+  // refreshCapabilities (above), which hits the cheaper capabilities-only
+  // endpoint.
   refreshSession: async () => {
     try {
       const { user, capabilities } = await auth.me();
