@@ -1,5 +1,5 @@
 import { useAuthStore } from '@/store/authStore';
-import type { CapabilityFeatures } from '@/types';
+import type { CapabilityFeatures, OrgRole } from '@/types';
 
 /**
  * Returns the boolean value of a capability feature for the authenticated
@@ -30,4 +30,17 @@ export function useCapability<K extends keyof CapabilityFeatures>(feature: K): b
  */
 export function useIsPremium(): boolean {
   return useAuthStore((s) => s.capabilities?.isPremium ?? false);
+}
+
+/**
+ * Returns the authenticated user's role in a specific org, or null if not a member.
+ * Reads from caps.orgs[]; falls back to null when capabilities are not yet loaded.
+ *
+ * UI HINT ONLY — server-side enforcement of admin-only mutations is authoritative.
+ *
+ * Example:
+ *   const role = useOrgRole(orgId);  // 'admin' | 'moderator' | 'member' | null
+ */
+export function useOrgRole(orgId: number): OrgRole | null {
+  return useAuthStore((s) => s.capabilities?.orgs.find((o) => o.orgId === orgId)?.role ?? null);
 }
