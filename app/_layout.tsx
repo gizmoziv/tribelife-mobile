@@ -160,6 +160,11 @@ function RootLayoutInner() {
                 pathname: '/(app)/news',
                 params: nData?.articleId ? { highlightArticleId: String(nData.articleId) } : {},
               }), 500);
+            } else if (nData?.type === 'org_invite' && nData?.token) {
+              setTimeout(() => router.push({
+                pathname: '/org/invite/[token]',
+                params: { token: String(nData.token) },
+              }), 500);
             }
           }
 
@@ -228,6 +233,11 @@ function RootLayoutInner() {
         router.push({
           pathname: '/(app)/news',
           params: data?.articleId ? { highlightArticleId: String(data.articleId) } : {},
+        });
+      } else if (data?.type === 'org_invite' && data?.token) {
+        router.push({
+          pathname: '/org/invite/[token]',
+          params: { token: String(data.token) },
         });
       }
     }

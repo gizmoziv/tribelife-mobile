@@ -36,6 +36,7 @@ import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
+import { OrgCard } from '@/components/ui/OrgCard';
 import Svg, { Path, Circle } from 'react-native-svg';
 
 function ChevronIcon({ color }: { color: string }) {
@@ -60,6 +61,7 @@ export default function ProfileScreen() {
   const { user, logout, updateUser, refreshSession } = useAuthStore();
   const isPremium = useIsPremium();
   const limits = useAuthStore((s) => s.capabilities?.limits);
+  const orgs = useAuthStore((s) => s.capabilities?.orgs ?? []);
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -669,6 +671,30 @@ export default function ProfileScreen() {
                 />
               </View>
             </GlassCard>
+          </AnimatedEntry>
+        )}
+
+        {/* Your Organizations (D-02) — visible only when user has ≥1 membership */}
+        {orgs.length > 0 && (
+          <AnimatedEntry delay={135}>
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>YOUR ORGANIZATIONS</Text>
+              <GlassCard borderRadius={RADIUS.lg}>
+                <View style={{ gap: SPACING.sm }}>
+                  {orgs.map((o) => (
+                    <OrgCard
+                      key={o.orgId}
+                      orgId={o.orgId}
+                      slug={o.slug}
+                      name={o.name}
+                      iconUrl={o.iconUrl}
+                      role={o.role}
+                      onPress={() => router.push(`/org/${o.slug}`)}
+                    />
+                  ))}
+                </View>
+              </GlassCard>
+            </View>
           </AnimatedEntry>
         )}
 

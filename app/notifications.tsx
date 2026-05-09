@@ -156,7 +156,7 @@ export default function NotificationsScreen() {
     markOneRead(notification.id);
     notificationsApi.read(notification.id).catch(() => {});
 
-    const data = notification.data as Record<string, number>;
+    const data = notification.data as Record<string, unknown>;
 
     switch (notification.type) {
       case 'mention':
@@ -166,7 +166,7 @@ export default function NotificationsScreen() {
         if (data.conversationId) {
           router.push({
             pathname: '/(app)/chat/[conversationId]',
-            params: { conversationId: data.conversationId.toString() },
+            params: { conversationId: String(data.conversationId) },
           });
         }
         break;
@@ -175,6 +175,14 @@ export default function NotificationsScreen() {
           pathname: '/(app)/beacon',
           params: { tab: 'matches' },
         });
+        break;
+      case 'org_invite':
+        if (data.token) {
+          router.push({
+            pathname: '/org/invite/[token]',
+            params: { token: String(data.token) },
+          });
+        }
         break;
     }
   };
