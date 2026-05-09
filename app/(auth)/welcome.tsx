@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
@@ -48,9 +48,30 @@ function ConnectIcon() {
   );
 }
 
+/**
+ * Sanitize the redirect query param so it can only point to in-app paths.
+ * Accepts: leading-slash internal paths only ('/org/...').
+ * Rejects: empty, undefined, absolute URLs, schemes, whitespace.
+ * Returns null when the input is unsafe; caller falls back to default route.
+ */
+function sanitizeRedirect(raw: string | string[] | undefined): string | null {
+  if (!raw) return null;
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof v !== 'string') return null;
+  // Only allow in-app paths — single leading slash, no double-slash, no scheme, no whitespace.
+  if (!v.startsWith('/')) return null;
+  if (v.startsWith('//')) return null; // protocol-relative
+  if (/[\s]/.test(v)) return null;
+  // Only allow paths under /org for v1.5 — narrowest possible accept-list.
+  if (!v.startsWith('/org/')) return null;
+  return v;
+}
+
 export default function WelcomeScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const params = useLocalSearchParams<{ redirect?: string }>();
+  const redirectTarget = sanitizeRedirect(params.redirect);
   const { setAuth } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
@@ -84,7 +105,9 @@ export default function WelcomeScreen() {
       await setAuth(token, user, capabilities, needsOnboarding);
 
       if (needsOnboarding) {
-        router.replace('/(auth)/onboarding');
+        router.replace('/(auth)/onboarding'); // onboarding always wins
+      } else if (redirectTarget) {
+        router.replace(redirectTarget as any); // type cast — Expo Router typed routes don't know about runtime strings
       } else {
         router.replace('/(app)/beacon');
       }
@@ -124,7 +147,9 @@ export default function WelcomeScreen() {
       await setAuth(token, user, capabilities, needsOnboarding);
 
       if (needsOnboarding) {
-        router.replace('/(auth)/onboarding');
+        router.replace('/(auth)/onboarding'); // onboarding always wins
+      } else if (redirectTarget) {
+        router.replace(redirectTarget as any); // type cast — Expo Router typed routes don't know about runtime strings
       } else {
         router.replace('/(app)/beacon');
       }
