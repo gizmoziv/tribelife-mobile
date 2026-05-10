@@ -6,8 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ActionSheetIOS,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +19,8 @@ import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { RoleBadge } from '@/components/ui/RoleBadge';
 import { LighthouseIcon } from '@/components/ui/LighthouseIcon';
+import { ActionSheetModal } from '@/components/ui/ActionSheetModal';
+import type { ActionSheetItem } from '@/components/ui/ActionSheetModal';
 import { FONTS, SPACING, COLORS, RADIUS } from '@/constants';
 import type { OrgRole } from '@/types/capabilities';
 
@@ -42,49 +42,6 @@ type OrgData = {
 };
 
 type ActionInProgress = { userId: number } | null;
-
-// ── Action sheet helper ───────────────────────────────────────────────────────
-
-interface ActionItem {
-  label: string;
-  destructive?: boolean;
-  onPress: () => void;
-}
-
-function showActionSheet(options: { title?: string; actions: ActionItem[] }) {
-  const labels = options.actions.map((a) => a.label).concat(['Cancel']);
-  const destructiveIndex = options.actions.findIndex((a) => a.destructive);
-  const cancelIndex = labels.length - 1;
-
-  if (Platform.OS === 'ios') {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: labels,
-        cancelButtonIndex: cancelIndex,
-        destructiveButtonIndex: destructiveIndex >= 0 ? destructiveIndex : undefined,
-        title: options.title,
-      },
-      (idx) => {
-        if (idx >= 0 && idx < options.actions.length) {
-          options.actions[idx].onPress();
-        }
-      },
-    );
-  } else {
-    Alert.alert(
-      options.title ?? 'Actions',
-      undefined,
-      [
-        ...options.actions.map((a) => ({
-          text: a.label,
-          style: a.destructive ? ('destructive' as const) : undefined,
-          onPress: a.onPress,
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    );
-  }
-}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -128,6 +85,9 @@ export default function MembersScreen() {
       fetchMembers(org.id);
     }
   }, [org, fetchMembers]);
+
+  // ── Action sheet state ────────────────────────────────────────────────────────
+  const [sheet, setSheet] = useState<{ title: string; actions: ActionSheetItem[] } | null>(null);
 
   // ── Action tracking ───────────────────────────────────────────────────────────
   const [actionInProgress, setActionInProgress] = useState<ActionInProgress>(null);
@@ -233,20 +193,37 @@ export default function MembersScreen() {
   // ── Action sheet ──────────────────────────────────────────────────────────────
   const handleMemberAction = useCallback((member: Member) => {
     if (!org) return;
-    const actions: ActionItem[] = [];
+    const actions: ActionSheetItem[] = [];
 
     if (member.role === 'member') {
-      actions.push({ label: 'Promote to moderator', onPress: () => handlePromote(member) });
-      actions.push({ label: `Remove from ${org.name}`, destructive: true, onPress: () => handleRemove(member) });
+      actions.push({
+        label: 'Promote to moderator',
+        onPress: () => { setSheet(null); handlePromote(member); },
+      });
+      actions.push({
+        label: `Remove from ${org.name}`,
+        destructive: true,
+        onPress: () => { setSheet(null); handleRemove(member); },
+      });
     } else if (member.role === 'moderator') {
-      actions.push({ label: 'Demote to member', onPress: () => handleDemote(member) });
-      actions.push({ label: `Remove from ${org.name}`, destructive: true, onPress: () => handleRemove(member) });
+      actions.push({
+        label: 'Demote to member',
+        onPress: () => { setSheet(null); handleDemote(member); },
+      });
+      actions.push({
+        label: `Remove from ${org.name}`,
+        destructive: true,
+        onPress: () => { setSheet(null); handleRemove(member); },
+      });
     } else if (member.role === 'admin') {
       // Other admin: demote only (no remove per D-05)
-      actions.push({ label: 'Demote to member', onPress: () => handleDemote(member) });
+      actions.push({
+        label: 'Demote to member',
+        onPress: () => { setSheet(null); handleDemote(member); },
+      });
     }
 
-    showActionSheet({ title: `@${member.handle}`, actions });
+    setSheet({ title: `@${member.handle}`, actions });
   }, [org, handlePromote, handleDemote, handleRemove]);
 
   // ── Render guards ─────────────────────────────────────────────────────────────
@@ -423,6 +400,13 @@ export default function MembersScreen() {
           )}
         />
       )}
+
+      <ActionSheetModal
+        visible={!!sheet}
+        onClose={() => setSheet(null)}
+        title={sheet?.title}
+        actions={sheet?.actions ?? []}
+      />
     </SafeAreaView>
   );
 }
