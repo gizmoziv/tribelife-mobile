@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -159,17 +160,17 @@ export default function AcceptInviteScreen() {
   // ── Loading ────────────────────────────────────────────
   if (view.kind === 'loading') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         {closeButton}
         <ActivityIndicator color={COLORS.primary} size="large" />
-      </View>
+      </SafeAreaView>
     );
   }
 
   // ── State 4: not_found ─────────────────────────────────
   if (view.kind === 'not_found') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         {closeButton}
         <AnimatedEntry style={{ width: '100%', paddingHorizontal: SPACING.page }}>
           <View accessibilityViewIsModal>
@@ -194,7 +195,7 @@ export default function AcceptInviteScreen() {
             </GlassCard>
           </View>
         </AnimatedEntry>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -234,8 +235,9 @@ export default function AcceptInviteScreen() {
   // ── State 2: already_member ────────────────────────────
   if (view.kind === 'already_member') {
     return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
       >
         {closeButton}
@@ -268,6 +270,7 @@ export default function AcceptInviteScreen() {
           </View>
         </AnimatedEntry>
       </ScrollView>
+      </SafeAreaView>
     );
   }
 
@@ -278,8 +281,9 @@ export default function AcceptInviteScreen() {
       : 'Ask an admin for a new invite.';
 
     return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
       >
         {closeButton}
@@ -312,13 +316,15 @@ export default function AcceptInviteScreen() {
           </View>
         </AnimatedEntry>
       </ScrollView>
+      </SafeAreaView>
     );
   }
 
   // ── State 1: pending (happy path) ─────────────────────
   return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1 }}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: SPACING['2xl'] }]}
     >
       {closeButton}
@@ -385,6 +391,7 @@ export default function AcceptInviteScreen() {
         </View>
       </AnimatedEntry>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 

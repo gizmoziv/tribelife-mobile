@@ -10,6 +10,7 @@ import {
   Pressable,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -50,7 +51,7 @@ function UnavailableFallback() {
   const { colors } = useTheme();
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable
@@ -84,7 +85,7 @@ function UnavailableFallback() {
           </GlassCard>
         </AnimatedEntry>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -188,8 +189,9 @@ function ActiveForm() {
   const typeLabels = TYPE_OPTIONS.map((o) => o.label);
 
   return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -323,6 +325,7 @@ function ActiveForm() {
         </AnimatedEntry>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

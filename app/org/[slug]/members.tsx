@@ -10,6 +10,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -251,38 +252,38 @@ export default function MembersScreen() {
   // ── Render guards ─────────────────────────────────────────────────────────────
   if (orgLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={COLORS.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (orgError === 'not_found') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorTitle, { color: colors.text }]}>Organization not found.</Text>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <Text style={[styles.backLink, { color: COLORS.primary }]}>Go back</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (orgError === 'error') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorTitle, { color: colors.text }]}>Something went wrong.</Text>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <Text style={[styles.backLink, { color: COLORS.primary }]}>Go back</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // 403 fallback — non-admin arrived via deep link
   if (!org || org.role !== 'admin') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <GlassCard style={styles.forbiddenCard}>
           <Text style={[styles.forbiddenText, { color: colors.text }]}>
             Only admins can manage members.
@@ -295,7 +296,7 @@ export default function MembersScreen() {
             style={{ marginTop: SPACING.md }}
           />
         </GlassCard>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -312,7 +313,7 @@ export default function MembersScreen() {
 
   if (isSoloAdmin) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.header, { color: colors.text }]}>
           Members of {org.name}
         </Text>
@@ -330,7 +331,7 @@ export default function MembersScreen() {
             style={{ marginTop: SPACING.lg }}
           />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -381,7 +382,7 @@ export default function MembersScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={{ paddingHorizontal: SPACING.page }}>
         <Text style={[styles.header, { color: colors.text }]}>
           Members of {org.name}
@@ -410,7 +411,7 @@ export default function MembersScreen() {
           )}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

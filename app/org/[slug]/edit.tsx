@@ -11,6 +11,7 @@ import {
   Image,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -80,30 +81,30 @@ export default function EditOrgScreen() {
   // ── Admin gate ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={colors.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!org) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorText, { color: colors.textMuted }]}>Organization not found.</Text>
         <PillButton title="Go back" variant="outline" size="sm" onPress={() => router.back()} style={{ marginTop: SPACING.md }} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (org.role !== 'admin') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Edit organization</Text>
         <Text style={[styles.errorText, { color: colors.textMuted, marginTop: SPACING.md }]}>
           Only admins can edit this organization.
         </Text>
         <PillButton title="Go back" variant="outline" size="sm" onPress={() => router.back()} style={{ marginTop: SPACING.md }} />
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -194,8 +195,9 @@ function EditForm({ org }: { org: OrgData }) {
   const displayIcon = iconPreview ?? iconUrl;
 
   return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -339,6 +341,7 @@ function EditForm({ org }: { org: OrgData }) {
         </AnimatedEntry>
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

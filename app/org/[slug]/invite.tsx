@@ -10,6 +10,7 @@ import {
   Pressable,
   StyleSheet,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -172,38 +173,38 @@ export default function InviteScreen() {
   // ── Render guards ─────────────────────────────────────────────────────────────
   if (orgLoading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={COLORS.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (orgError === 'not_found') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorTitle, { color: colors.text }]}>Organization not found.</Text>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <Text style={[styles.backLink, { color: COLORS.primary }]}>Go back</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (orgError === 'error') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorTitle, { color: colors.text }]}>Something went wrong.</Text>
         <Pressable onPress={() => router.back()} hitSlop={8}>
           <Text style={[styles.backLink, { color: COLORS.primary }]}>Go back</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // 403 fallback — non-admin arrived via deep link
   if (!org || org.role !== 'admin') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <GlassCard style={styles.forbiddenCard}>
           <Text style={[styles.forbiddenText, { color: colors.text }]}>
             Only admins can invite to this organization.
@@ -216,15 +217,16 @@ export default function InviteScreen() {
             style={{ marginTop: SPACING.md }}
           />
         </GlassCard>
-      </View>
+      </SafeAreaView>
     );
   }
 
   const shareMessage = `${currentHandle ?? 'Someone'} invited you to join ${org.name} on TribeLife`;
 
   return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
@@ -364,6 +366,7 @@ export default function InviteScreen() {
         <View style={{ height: SPACING['2xl'] }} />
       </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

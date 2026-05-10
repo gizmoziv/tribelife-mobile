@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -165,16 +166,16 @@ export default function OrgScreen() {
   // ── Loading ────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <ActivityIndicator color={COLORS.primary} size="large" />
-      </View>
+      </SafeAreaView>
     );
   }
 
   // ── Error: network ─────────────────────────────────────
   if (error === 'network') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <GlassCard>
           <View style={styles.errorInner}>
             <Text style={[styles.errorTitle, { color: colors.text }]}>Could not load</Text>
@@ -184,14 +185,14 @@ export default function OrgScreen() {
             <PillButton title="Retry" onPress={() => { setLoading(true); fetchOrg().finally(() => setLoading(false)); }} variant="outline" size="sm" />
           </View>
         </GlassCard>
-      </View>
+      </SafeAreaView>
     );
   }
 
   // ── Error: 404 ─────────────────────────────────────────
   if (error === 'not_found' || !org) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.centered, { backgroundColor: colors.background }]}>
         <Pressable
           onPress={() => router.back()}
           style={[styles.backButton, { backgroundColor: colors.surfaceGlass }]}
@@ -211,7 +212,7 @@ export default function OrgScreen() {
             </View>
           </GlassCard>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -242,8 +243,9 @@ export default function OrgScreen() {
   // ── State A: Anonymous ─────────────────────────────────
   if (!isAuthenticated) {
     return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
       >
@@ -277,14 +279,16 @@ export default function OrgScreen() {
           </GlassCard>
         </AnimatedEntry>
       </ScrollView>
+      </SafeAreaView>
     );
   }
 
   // ── State B: Authenticated, non-member ─────────────────
   if (!org.isMember) {
     return (
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
       >
@@ -312,6 +316,7 @@ export default function OrgScreen() {
           </GlassCard>
         </AnimatedEntry>
       </ScrollView>
+      </SafeAreaView>
     );
   }
 
@@ -319,8 +324,9 @@ export default function OrgScreen() {
   const isAdmin = org.role === 'admin';
 
   return (
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
+      style={{ flex: 1 }}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: SPACING['2xl'] }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
     >
@@ -401,6 +407,7 @@ export default function OrgScreen() {
         />
       </AnimatedEntry>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
