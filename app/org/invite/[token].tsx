@@ -65,10 +65,20 @@ export default function AcceptInviteScreen() {
   // ── Auth gate ──────────────────────────────────────────
   useEffect(() => {
     if (!isAuthenticated) {
+      // Validate token format before embedding in redirect param to prevent
+      // path traversal attacks (e.g. token='../../some-path') from escaping
+      // the /org/invite/ subtree even though sanitizeRedirect checks the prefix.
+      const safeToken = /^[A-Za-z0-9_-]{32,}$/.test(String(token)) ? String(token) : null;
       router.replace({
         pathname: '/(auth)/welcome',
-        params: { redirect: `/org/invite/${token}` },
+        params: safeToken ? { redirect: `/org/invite/${safeToken}` } : {},
       });
+      return;
+    }
+
+    // Validate token format before network preview — skip fetch for invalid tokens.
+    if (!/^[A-Za-z0-9_-]{32,}$/.test(String(token))) {
+      setView({ kind: 'not_found' });
       return;
     }
 
