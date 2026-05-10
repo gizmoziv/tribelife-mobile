@@ -229,15 +229,25 @@ export default function InviteScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <View style={[styles.headerBar, { borderBottomColor: colors.border }]}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.headerBack}
+          accessibilityLabel="Go back"
+          hitSlop={8}
+        >
+          <Text style={[styles.headerBackText, { color: colors.primary }]}>‹</Text>
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Invite to {org.name}</Text>
+        <View style={styles.headerBack} />
+      </View>
+
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[styles.scroll, { paddingHorizontal: SPACING.page }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header */}
-        <Text style={[styles.header, { color: colors.text }]}>
-          Invite to {org.name}
-        </Text>
 
         {/* Toast */}
         {toastMsg && (
@@ -377,13 +387,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: SPACING.page,
   },
-  scroll: {
-    paddingTop: SPACING.lg,
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.page,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  header: {
+  headerBack: {
+    width: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  headerBackText: {
+    fontSize: 28,
+    fontFamily: FONTS.regular,
+    lineHeight: 32,
+  },
+  headerTitle: {
     fontSize: 18,
     fontFamily: FONTS.semiBold,
-    marginBottom: SPACING.lg,
+    flex: 1,
+    textAlign: 'center',
+  },
+  scroll: {
+    paddingTop: SPACING.lg,
   },
   toast: {
     borderRadius: SPACING.sm,
@@ -405,6 +434,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.bold,
     letterSpacing: -0.2,
+    marginBottom: SPACING.sm,
   },
   cardBody: {
     fontSize: 14,

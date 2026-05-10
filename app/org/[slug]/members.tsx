@@ -300,6 +300,22 @@ export default function MembersScreen() {
     );
   }
 
+  // ── Shared header bar ─────────────────────────────────────────────────────────
+  const headerBar = (
+    <View style={[styles.headerBar, { borderBottomColor: colors.border }]}>
+      <Pressable
+        onPress={() => router.back()}
+        style={styles.headerBack}
+        accessibilityLabel="Go back"
+        hitSlop={8}
+      >
+        <Text style={[styles.headerBackText, { color: colors.primary }]}>‹</Text>
+      </Pressable>
+      <Text style={[styles.headerTitle, { color: colors.text }]}>Members of {org.name}</Text>
+      <View style={{ width: 44 }} />
+    </View>
+  );
+
   // ── Empty state (solo admin) ──────────────────────────────────────────────────
   // Tightened: require list fully loaded, exactly 1 member, that member is an
   // admin, and that member is the current user — avoids flash during initial
@@ -314,9 +330,7 @@ export default function MembersScreen() {
   if (isSoloAdmin) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.header, { color: colors.text }]}>
-          Members of {org.name}
-        </Text>
+        {headerBar}
         <View style={styles.centered}>
           <LighthouseIcon color={colors.textMuted} size={48} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
@@ -383,10 +397,8 @@ export default function MembersScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={{ paddingHorizontal: SPACING.page }}>
-        <Text style={[styles.header, { color: colors.text }]}>
-          Members of {org.name}
-        </Text>
+      {headerBar}
+      <View style={{ paddingHorizontal: SPACING.page, paddingTop: SPACING.sm }}>
         <Text style={[styles.subtitle, { color: colors.textMuted }]}>
           {members.length} members
         </Text>
@@ -418,7 +430,6 @@ export default function MembersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: SPACING.lg,
   },
   centered: {
     flex: 1,
@@ -426,10 +437,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: SPACING.page,
   },
-  header: {
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.page,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerBack: {
+    width: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  headerBackText: {
+    fontSize: 28,
+    fontFamily: FONTS.regular,
+    lineHeight: 32,
+  },
+  headerTitle: {
     fontSize: 18,
     fontFamily: FONTS.semiBold,
-    marginBottom: SPACING.xs,
+    flex: 1,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 13,
