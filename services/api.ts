@@ -392,7 +392,7 @@ export const orgsApi = {
     ),
 
   // PUT /api/orgs/:id/members/:userId — admin-only role change
-  updateMemberRole: (id: number, userId: number, role: 'moderator' | 'member') =>
+  updateMemberRole: (id: number, userId: number, role: 'admin' | 'moderator' | 'member') =>
     request<{ membership: { userId: number; role: string } }>(
       `/api/orgs/${id}/members/${userId}`,
       { method: 'PUT', body: JSON.stringify({ role }) },

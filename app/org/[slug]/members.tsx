@@ -21,6 +21,7 @@ import { RoleBadge } from '@/components/ui/RoleBadge';
 import { LighthouseIcon } from '@/components/ui/LighthouseIcon';
 import { ActionSheetModal } from '@/components/ui/ActionSheetModal';
 import type { ActionSheetItem } from '@/components/ui/ActionSheetModal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { FONTS, SPACING, COLORS, RADIUS } from '@/constants';
 import type { OrgRole } from '@/types/capabilities';
 
@@ -42,6 +43,14 @@ type OrgData = {
 };
 
 type ActionInProgress = { userId: number } | null;
+
+type ConfirmState = {
+  title: string;
+  message?: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+} | null;
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -89,10 +98,16 @@ export default function MembersScreen() {
   // ── Action sheet state ────────────────────────────────────────────────────────
   const [sheet, setSheet] = useState<{ title: string; actions: ActionSheetItem[] } | null>(null);
 
+  // ── Confirm modal state ───────────────────────────────────────────────────────
+  // onConfirm is called by ConfirmModal after onClose — no need to also clear
+  // confirm inside onConfirm callbacks; ConfirmModal calls onClose first which
+  // sets confirm to null via the visible={!!confirm} / onClose={() => setConfirm(null)} binding.
+  const [confirm, setConfirm] = useState<ConfirmState>(null);
+
   // ── Action tracking ───────────────────────────────────────────────────────────
   const [actionInProgress, setActionInProgress] = useState<ActionInProgress>(null);
 
-  // ── Promote ───────────────────────────────────────────────────────────────────
+  // ── Promote to moderator ──────────────────────────────────────────────────────
   const handlePromote = useCallback(async (member: Member) => {
     if (!org) return;
     const prevRole = member.role;
@@ -102,8 +117,27 @@ export default function MembersScreen() {
     try {
       await orgsApi.updateMemberRole(org.id, member.userId, 'moderator');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Show toast inline via Alert (simpler)
       Alert.alert(`Promoted @${member.handle} to moderator`);
+    } catch {
+      // Rollback
+      setMembers((list) => list.map((m) => m.userId === member.userId ? { ...m, role: prevRole } : m));
+      Alert.alert("Couldn't update role. Please try again.");
+    } finally {
+      setActionInProgress(null);
+    }
+  }, [org]);
+
+  // ── Promote to admin ──────────────────────────────────────────────────────────
+  const handlePromoteToAdmin = useCallback(async (member: Member) => {
+    if (!org) return;
+    const prevRole = member.role;
+    // Optimistic update
+    setMembers((list) => list.map((m) => m.userId === member.userId ? { ...m, role: 'admin' as OrgRole } : m));
+    setActionInProgress({ userId: member.userId });
+    try {
+      await orgsApi.updateMemberRole(org.id, member.userId, 'admin');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(`Promoted @${member.handle} to admin`);
     } catch {
       // Rollback
       setMembers((list) => list.map((m) => m.userId === member.userId ? { ...m, role: prevRole } : m));
@@ -141,14 +175,16 @@ export default function MembersScreen() {
   }, [org]);
 
   const handleDemote = useCallback((member: Member) => {
-    Alert.alert(
-      `Demote @${member.handle}?`,
-      "They'll no longer have the moderator label.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Demote', style: 'destructive', onPress: () => handleDemoteConfirm(member) },
-      ],
-    );
+    const isAdmin = member.role === 'admin';
+    setConfirm({
+      title: `Demote @${member.handle}?`,
+      message: isAdmin
+        ? "They'll lose admin privileges and become a member."
+        : "They'll lose moderator privileges.",
+      confirmLabel: 'Demote',
+      destructive: false,
+      onConfirm: () => handleDemoteConfirm(member),
+    });
   }, [handleDemoteConfirm]);
 
   // ── Remove ────────────────────────────────────────────────────────────────────
@@ -167,7 +203,7 @@ export default function MembersScreen() {
       const errMsg = err?.data?.error ?? '';
       if (err?.status === 422 || errMsg.toLowerCase().includes('last admin')) {
         Alert.alert(
-          "Can't demote",
+          "Can't remove",
           `${org.name} needs at least one admin. Promote another member to admin first.`,
         );
       } else {
@@ -180,14 +216,13 @@ export default function MembersScreen() {
 
   const handleRemove = useCallback((member: Member) => {
     if (!org) return;
-    Alert.alert(
-      `Remove @${member.handle}?`,
-      `They'll lose access to ${org.name}. They can be invited again later.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => handleRemoveConfirm(member) },
-      ],
-    );
+    setConfirm({
+      title: `Remove @${member.handle}?`,
+      message: `They'll lose access to ${org.name}. They can be invited again later.`,
+      confirmLabel: 'Remove',
+      destructive: true,
+      onConfirm: () => handleRemoveConfirm(member),
+    });
   }, [org, handleRemoveConfirm]);
 
   // ── Action sheet ──────────────────────────────────────────────────────────────
@@ -196,6 +231,19 @@ export default function MembersScreen() {
     const actions: ActionSheetItem[] = [];
 
     if (member.role === 'member') {
+      actions.push({
+        label: 'Promote to admin',
+        onPress: () => {
+          setSheet(null);
+          setConfirm({
+            title: `Promote @${member.handle} to admin?`,
+            message: "Admins can invite, edit the org, and manage all members.",
+            confirmLabel: 'Promote',
+            destructive: false,
+            onConfirm: () => handlePromoteToAdmin(member),
+          });
+        },
+      });
       actions.push({
         label: 'Promote to moderator',
         onPress: () => { setSheet(null); handlePromote(member); },
@@ -206,6 +254,19 @@ export default function MembersScreen() {
         onPress: () => { setSheet(null); handleRemove(member); },
       });
     } else if (member.role === 'moderator') {
+      actions.push({
+        label: 'Promote to admin',
+        onPress: () => {
+          setSheet(null);
+          setConfirm({
+            title: `Promote @${member.handle} to admin?`,
+            message: "Admins can invite, edit the org, and manage all members.",
+            confirmLabel: 'Promote',
+            destructive: false,
+            onConfirm: () => handlePromoteToAdmin(member),
+          });
+        },
+      });
       actions.push({
         label: 'Demote to member',
         onPress: () => { setSheet(null); handleDemote(member); },
@@ -224,7 +285,7 @@ export default function MembersScreen() {
     }
 
     setSheet({ title: `@${member.handle}`, actions });
-  }, [org, handlePromote, handleDemote, handleRemove]);
+  }, [org, handlePromote, handlePromoteToAdmin, handleDemote, handleRemove]);
 
   // ── Render guards ─────────────────────────────────────────────────────────────
   if (orgLoading) {
@@ -406,6 +467,16 @@ export default function MembersScreen() {
         onClose={() => setSheet(null)}
         title={sheet?.title}
         actions={sheet?.actions ?? []}
+      />
+
+      <ConfirmModal
+        visible={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={confirm?.title ?? ''}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel ?? 'Confirm'}
+        destructive={confirm?.destructive}
+        onConfirm={confirm?.onConfirm ?? (() => {})}
       />
     </SafeAreaView>
   );
