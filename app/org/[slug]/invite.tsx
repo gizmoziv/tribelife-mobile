@@ -68,9 +68,9 @@ export default function InviteScreen() {
   // ── Path A state ─────────────────────────────────────────────────────────────
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [result, setResult] = useState<PublicProfile | null>(null);
+  const [results, setResults] = useState<PublicProfile[]>([]);
   const [notFound, setNotFound] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [sendingUserId, setSendingUserId] = useState<number | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,23 +90,18 @@ export default function InviteScreen() {
 
   const runSearch = useCallback((q: string) => {
     if (q.length < 3) {
-      setResult(null);
+      setResults([]);
       setNotFound(false);
       return;
     }
     setSearching(true);
     usersApi.searchByHandle(q)
       .then(({ users }) => {
-        if (users.length > 0) {
-          setResult(users[0]);
-          setNotFound(false);
-        } else {
-          setResult(null);
-          setNotFound(true);
-        }
+        setResults(users);
+        setNotFound(users.length === 0);
       })
       .catch(() => {
-        setResult(null);
+        setResults([]);
         setNotFound(true);
       })
       .finally(() => setSearching(false));
@@ -114,24 +109,21 @@ export default function InviteScreen() {
 
   const handleQueryChange = (text: string) => {
     setQuery(text);
-    setResult(null);
+    setResults([]);
     setNotFound(false);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => runSearch(text), 600);
   };
 
-  const handleSendInvite = async () => {
-    if (!result || !org) return;
+  const handleSendInvite = async (target: PublicProfile) => {
+    if (!org) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSending(true);
+    setSendingUserId(target.id);
     try {
-      await orgsApi.invite(org.id, { invitedHandle: result.handle });
+      await orgsApi.invite(org.id, { invitedHandle: target.handle });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const sentHandle = result.handle;
-      setQuery('');
-      setResult(null);
-      setNotFound(false);
-      showToast(`Invite sent to @${sentHandle}`);
+      showToast(`Invite sent to @${target.handle}`);
+      setResults((prev) => prev.filter((u) => u.id !== target.id));
     } catch (err: any) {
       const status = err?.status;
       const errMsg = err?.data?.error ?? '';
@@ -143,7 +135,7 @@ export default function InviteScreen() {
         Alert.alert("Couldn't send invite. Please try again.");
       }
     } finally {
-      setSending(false);
+      setSendingUserId(null);
     }
   };
 
@@ -301,34 +293,38 @@ export default function InviteScreen() {
               </Text>
             )}
 
-            {notFound && !searching && (
+            {query.length >= 3 && !searching && results.length === 0 && notFound && (
               <Text style={[styles.helperText, { color: colors.textMuted }]}>
                 No user with that handle
               </Text>
             )}
 
-            {result && !searching && (
-              <View style={styles.resultRow}>
-                <AvatarCircle
-                  name={result.name || result.handle}
-                  imageUrl={result.avatarUrl ?? undefined}
-                  size={36}
-                  showRing={false}
-                />
-                <View style={styles.resultInfo}>
-                  <Text style={[styles.resultHandle, { color: colors.text }]}>
-                    @{result.handle}
-                  </Text>
-                  <Text style={[styles.resultName, { color: colors.textMuted }]}>
-                    {result.name}
-                  </Text>
-                </View>
-                <PillButton
-                  title="Send invite"
-                  size="sm"
-                  loading={sending}
-                  onPress={handleSendInvite}
-                />
+            {!searching && results.length > 0 && (
+              <View style={styles.resultsList}>
+                {results.map((u) => (
+                  <View key={u.id} style={styles.resultRow}>
+                    <AvatarCircle
+                      name={u.name || u.handle}
+                      imageUrl={u.avatarUrl ?? undefined}
+                      size={36}
+                      showRing={false}
+                    />
+                    <View style={styles.resultInfo}>
+                      <Text style={[styles.resultHandle, { color: colors.text }]}>
+                        @{u.handle}
+                      </Text>
+                      <Text style={[styles.resultName, { color: colors.textMuted }]}>
+                        {u.name}
+                      </Text>
+                    </View>
+                    <PillButton
+                      title="Send invite"
+                      size="sm"
+                      loading={sendingUserId === u.id}
+                      onPress={() => handleSendInvite(u)}
+                    />
+                  </View>
+                ))}
               </View>
             )}
           </GlassCard>
@@ -455,11 +451,14 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     marginTop: SPACING.xs,
   },
+  resultsList: {
+    marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    marginTop: SPACING.xs,
   },
   resultInfo: {
     flex: 1,
