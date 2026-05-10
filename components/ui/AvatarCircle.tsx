@@ -67,7 +67,11 @@ export function AvatarCircle({
   const { colors } = useTheme();
   const ringWidth = 2;
   const outerSize = showRing ? size + ringWidth * 2 + 4 : size;
-  const letter = name.charAt(0).toUpperCase();
+  // Guard against undefined/null/empty name — prevents "Cannot read property
+  // 'length' of undefined" crash when callers pass a member row before the
+  // users join returns a real name.
+  const safeName = name && name.length > 0 ? name : '?';
+  const letter = safeName.charAt(0).toUpperCase();
 
   const avatar = imageUrl ? (
     <Image
@@ -84,7 +88,7 @@ export function AvatarCircle({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: getAvatarColor(name),
+        backgroundColor: getAvatarColor(safeName),
         alignItems: 'center',
         justifyContent: 'center',
       }}
