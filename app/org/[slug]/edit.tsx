@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: FONTS.semiBold,
     letterSpacing: 0.4,
-    marginBottom: 2,
+    marginBottom: SPACING.sm,
   },
   fieldSpacer: {
     height: SPACING.md,
