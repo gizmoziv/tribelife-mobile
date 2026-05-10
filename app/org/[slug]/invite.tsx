@@ -33,6 +33,8 @@ type OrgData = {
   role: 'admin' | 'moderator' | 'member' | null;
 };
 
+type SearchResult = PublicProfile & { alreadyMember?: boolean };
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function InviteScreen() {
@@ -68,7 +70,7 @@ export default function InviteScreen() {
   // ── Path A state ─────────────────────────────────────────────────────────────
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<PublicProfile[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [sendingUserId, setSendingUserId] = useState<number | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -95,7 +97,7 @@ export default function InviteScreen() {
       return;
     }
     setSearching(true);
-    usersApi.searchByHandle(q)
+    usersApi.searchByHandle(q, org?.id)
       .then(({ users }) => {
         setResults(users);
         setNotFound(users.length === 0);
@@ -105,7 +107,7 @@ export default function InviteScreen() {
         setNotFound(true);
       })
       .finally(() => setSearching(false));
-  }, []);
+  }, [org?.id]);
 
   const handleQueryChange = (text: string) => {
     setQuery(text);
@@ -115,7 +117,7 @@ export default function InviteScreen() {
     debounceTimer.current = setTimeout(() => runSearch(text), 600);
   };
 
-  const handleSendInvite = async (target: PublicProfile) => {
+  const handleSendInvite = async (target: SearchResult) => {
     if (!org) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSendingUserId(target.id);
@@ -317,12 +319,20 @@ export default function InviteScreen() {
                         {u.name}
                       </Text>
                     </View>
-                    <PillButton
-                      title="Send invite"
-                      size="sm"
-                      loading={sendingUserId === u.id}
-                      onPress={() => handleSendInvite(u)}
-                    />
+                    {u.alreadyMember ? (
+                      <View style={[styles.memberBadge, { backgroundColor: colors.border }]}>
+                        <Text style={[styles.memberBadgeText, { color: colors.textMuted }]}>
+                          Member
+                        </Text>
+                      </View>
+                    ) : (
+                      <PillButton
+                        title="Send invite"
+                        size="sm"
+                        loading={sendingUserId === u.id}
+                        onPress={() => handleSendInvite(u)}
+                      />
+                    )}
                   </View>
                 ))}
               </View>
@@ -496,6 +506,15 @@ const styles = StyleSheet.create({
   },
   backLink: {
     fontSize: 15,
+    fontFamily: FONTS.medium,
+  },
+  memberBadge: {
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  memberBadgeText: {
+    fontSize: 12,
     fontFamily: FONTS.medium,
   },
 });

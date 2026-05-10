@@ -265,8 +265,10 @@ export const usersApi = {
   getProfile: (handle: string) =>
     request<{ user: PublicProfile }>(`/api/users/${handle}`),
 
-  searchByHandle: (q: string) =>
-    request<{ users: PublicProfile[] }>(`/api/users/search/handle?q=${encodeURIComponent(q)}`),
+  searchByHandle: (q: string, orgId?: number) =>
+    request<{ users: (PublicProfile & { alreadyMember?: boolean })[] }>(
+      `/api/users/search/handle?q=${encodeURIComponent(q)}${orgId ? `&orgId=${orgId}` : ''}`,
+    ),
 
   suggest: (
     q: string,
