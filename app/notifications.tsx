@@ -60,6 +60,7 @@ const ICON_MAP: Record<string, () => React.ReactNode> = {
   beacon_match: () => <SparkleIcon />,
   new_dm: () => <EnvelopeIcon />,
   system: () => <BellIcon />,
+  org_invite: () => <BellIcon />,
 };
 
 const ICON_COLORS: Record<string, string> = {
@@ -67,6 +68,7 @@ const ICON_COLORS: Record<string, string> = {
   beacon_match: COLORS.accent,
   new_dm: COLORS.secondary,
   system: '#7A8BA8',
+  org_invite: COLORS.primary,
 };
 
 type TabKey = 'mention' | 'new_dm' | 'beacon_match' | 'system';
@@ -101,8 +103,13 @@ export default function NotificationsScreen() {
 
   // DMs: collapse to one row per conversation. Mentions/matches/system keep
   // one row per event (that's the right granularity for those types).
+  // org_invite notifications are surfaced in the system tab (WR-03).
   const visibleNotifications = useMemo(() => {
-    const ofType = notifications.filter((n) => n.type === activeTab);
+    const ofType = notifications.filter((n) =>
+      activeTab === 'system'
+        ? n.type === 'system' || n.type === 'org_invite'
+        : n.type === activeTab,
+    );
     if (activeTab !== 'new_dm') return ofType;
     const seen = new Set<string>();
     const collapsed: Notification[] = [];
