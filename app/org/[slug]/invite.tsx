@@ -451,6 +451,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
+    marginTop: SPACING.md,
   },
   inputSpinner: {
     position: 'absolute',
