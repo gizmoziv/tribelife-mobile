@@ -300,9 +300,17 @@ export default function MembersScreen() {
   }
 
   // ── Empty state (solo admin) ──────────────────────────────────────────────────
-  const isSoloAdmin = members.length <= 1 && !membersLoading;
+  // Tightened: require list fully loaded, exactly 1 member, that member is an
+  // admin, and that member is the current user — avoids flash during initial
+  // load (members=[], membersLoading=false before fetchMembers fires) and
+  // avoids incorrect empty-state for non-admin viewing as the only member.
+  const isSoloAdmin =
+    !membersLoading &&
+    members.length === 1 &&
+    members[0]?.role === 'admin' &&
+    members[0]?.userId === currentUserId;
 
-  if (isSoloAdmin && !membersLoading) {
+  if (isSoloAdmin) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Text style={[styles.header, { color: colors.text }]}>
