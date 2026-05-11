@@ -367,8 +367,8 @@ export const orgsApi = {
       { method: 'PUT', body: JSON.stringify(body) },
     ),
 
-  // POST /api/orgs/:id/invite — handle (Path A) or empty body for link (Path B)
-  invite: (id: number, opts?: { invitedHandle?: string }) =>
+  // POST /api/orgs/:id/invite — handle (Path A) or empty body/rotate for link (Path B)
+  invite: (id: number, opts?: { invitedHandle?: string; rotate?: boolean }) =>
     request<{ invite: { id: number; token: string; invitedUserId: number | null; role: string; expiresAt: string } }>(
       `/api/orgs/${id}/invite`,
       { method: 'POST', body: JSON.stringify(opts ?? {}) },
