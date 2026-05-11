@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -93,6 +93,10 @@ function RootLayoutInner() {
   // ── Version check state ──────────────────────────────────────────────
   // null = not yet resolved; 'ok' | 'force_update' | 'unreachable' after check.
   const [versionResult, setVersionResult] = useState<VersionCheckResult | null>(null);
+  // In-flight guard: prevents concurrent checkVersion() calls from AppState
+  // transitions (rapid background→foreground) from overwriting each other's
+  // results with stale data (CR-01).
+  const versionCheckInFlight = useRef(false);
 
   // Cold-start version check — fires once after fonts load (D-09).
   // checkVersion() resolves to 'unreachable' on any network failure (never
@@ -266,11 +270,15 @@ function RootLayoutInner() {
     return () => subscription.remove();
   }, []);
 
+  // Keep splash visible until BOTH fonts are loaded AND the version check has
+  // resolved. Hiding on fontsLoaded alone would expose a blank screen while
+  // the network call is still in flight (the render gate at versionResult===null
+  // returns null, so there's nothing to show until both conditions are met).
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded && versionResult !== null) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, versionResult]);
 
   useEffect(() => {
     // Background → foreground: refresh the full session (user + capabilities)
@@ -291,8 +299,17 @@ function RootLayoutInner() {
       // Phase 6 / D-09 — re-run version check on every foreground transition.
       // If the operator bumped the floor while the app was backgrounded, the
       // user gets the modal on the next render.
-      const result = await checkVersion();
-      setVersionResult(result);
+      // Guard against concurrent calls (CR-01): rapid background→foreground
+      // toggles on a slow connection could queue multiple checkVersion() calls;
+      // without this lock the last-to-resolve (not the latest) wins.
+      if (versionCheckInFlight.current) return;
+      versionCheckInFlight.current = true;
+      try {
+        const result = await checkVersion();
+        setVersionResult(result);
+      } finally {
+        versionCheckInFlight.current = false;
+      }
     };
     const sub = AppState.addEventListener('change', handleChange);
     return () => sub.remove();
@@ -302,8 +319,9 @@ function RootLayoutInner() {
 
   // Per D-09: wait for the first version-check result before rendering.
   // The check is fast (single HTTP request with a 5s timeout, or instant
-  // when __DEV__ via D-05). Returning null here keeps the splash screen
-  // visible — same UX as fontsLoaded=false.
+  // when __DEV__ via D-05). The splash screen is held open by the combined
+  // fontsLoaded + versionResult gate above, so returning null here is a
+  // safety net — the splash should still be visible at this point.
   if (versionResult === null) return null;
 
   // Per D-08: when force_update, render ONLY the modal. The Stack does

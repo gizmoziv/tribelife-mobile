@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   Modal,
   View,
   Text,
@@ -48,6 +49,13 @@ export function ForceUpdateModal({ message }: ForceUpdateModalProps): React.Reac
       await Linking.openURL(target);
     } catch (err) {
       console.warn('[ForceUpdateModal] openURL failed', err);
+      // Surface to user — on a non-dismissible modal with one action button,
+      // a silently-broken tap is a hard lock. Give the user a manual fallback.
+      Alert.alert(
+        "Couldn't open the store",
+        'Please search for "TribeLife" in the App Store or Play Store to update.',
+        [{ text: 'OK' }],
+      );
     }
   };
 
