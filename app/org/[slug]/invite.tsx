@@ -117,6 +117,14 @@ export default function InviteScreen() {
     debounceTimer.current = setTimeout(() => runSearch(text), 600);
   };
 
+  const handle403 = () => {
+    Alert.alert(
+      'Access removed',
+      "You're no longer an admin of this organization. Returning to the org page.",
+      [{ text: 'OK', onPress: () => router.replace(`/org/${slug}`) }],
+    );
+  };
+
   const handleSendInvite = async (target: SearchResult) => {
     if (!org) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -129,7 +137,9 @@ export default function InviteScreen() {
     } catch (err: any) {
       const status = err?.status;
       const errMsg = err?.data?.error ?? '';
-      if (status === 422 && errMsg.toLowerCase().includes('yourself')) {
+      if (status === 403) {
+        handle403();
+      } else if (status === 422 && errMsg.toLowerCase().includes('yourself')) {
         Alert.alert("You can't invite yourself.");
       } else if (status === 404) {
         Alert.alert('No user with that handle.');
@@ -145,16 +155,20 @@ export default function InviteScreen() {
   const [generating, setGenerating] = useState(false);
   const [tokenUrl, setTokenUrl] = useState<string | null>(null);
 
-  const handleGenerateLink = async () => {
+  const handleGenerateLink = async (rotate = false) => {
     if (!org) return;
     setGenerating(true);
     try {
-      const { invite } = await orgsApi.invite(org.id);
+      const { invite } = await orgsApi.invite(org.id, rotate ? { rotate: true } : undefined);
       const url = `https://tribelife.app/org/invite/${invite.token}`;
       setTokenUrl(url);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      Alert.alert("Couldn't generate invite link. Please try again.");
+    } catch (err: any) {
+      if (err?.status === 403) {
+        handle403();
+      } else {
+        Alert.alert("Couldn't generate invite link. Please try again.");
+      }
     } finally {
       setGenerating(false);
     }
@@ -162,6 +176,7 @@ export default function InviteScreen() {
 
   const handleRegenerateLink = () => {
     setTokenUrl(null);
+    handleGenerateLink(true);
   };
 
   // ── Render guards ─────────────────────────────────────────────────────────────
@@ -354,7 +369,7 @@ export default function InviteScreen() {
               <PillButton
                 title="Generate invite link"
                 loading={generating}
-                onPress={handleGenerateLink}
+                onPress={() => handleGenerateLink()}
                 style={{ marginTop: SPACING.sm }}
               />
             ) : (
@@ -366,6 +381,9 @@ export default function InviteScreen() {
                 />
                 <Text style={[styles.expiryText, { color: colors.textMuted }]}>
                   Expires in 30 days
+                </Text>
+                <Text style={[styles.reuseHint, { color: colors.textMuted }]}>
+                  This link stays the same until you regenerate it.
                 </Text>
                 <PillButton
                   title="Generate a new link"
@@ -490,6 +508,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: FONTS.regular,
     textAlign: 'center',
+  },
+  reuseHint: {
+    fontSize: 11,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    opacity: 0.7,
   },
   forbiddenCard: {
     alignItems: 'center',
