@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -25,6 +25,8 @@ import { connectSocket } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification } from '@/services/socket';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
+import { checkVersion, type VersionCheckResult } from '@/services/version';
+import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -87,6 +89,24 @@ function RootLayoutInner() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
+
+  // ── Version check state ──────────────────────────────────────────────
+  // null = not yet resolved; 'ok' | 'force_update' | 'unreachable' after check.
+  const [versionResult, setVersionResult] = useState<VersionCheckResult | null>(null);
+
+  // Cold-start version check — fires once after fonts load (D-09).
+  // checkVersion() resolves to 'unreachable' on any network failure (never
+  // throws), so no catch branch is needed here. Per D-02, 'unreachable'
+  // is treated as 'ok' by the render gate below.
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    let cancelled = false;
+    (async () => {
+      const result = await checkVersion();
+      if (!cancelled) setVersionResult(result);
+    })();
+    return () => { cancelled = true; };
+  }, [fontsLoaded]);
 
   // Restore session on app launch
   useEffect(() => {
@@ -260,16 +280,44 @@ function RootLayoutInner() {
     //
     // Note: AppState.addEventListener('change') does NOT fire a synthetic
     // 'active' on registration — only on real transitions.
-    const handleChange = (next: AppStateStatus) => {
+    const handleChange = async (next: AppStateStatus) => {
       if (next !== 'active') return;
-      if (!useAuthStore.getState().isAuthenticated) return;
-      useAuthStore.getState().refreshSession();
+      // Existing Phase 1 behavior — capabilities refresh on foreground.
+      // refreshSession is fire-and-forget (not awaited); version check runs
+      // independently so neither blocks the other.
+      if (useAuthStore.getState().isAuthenticated) {
+        useAuthStore.getState().refreshSession();
+      }
+      // Phase 6 / D-09 — re-run version check on every foreground transition.
+      // If the operator bumped the floor while the app was backgrounded, the
+      // user gets the modal on the next render.
+      const result = await checkVersion();
+      setVersionResult(result);
     };
     const sub = AppState.addEventListener('change', handleChange);
     return () => sub.remove();
   }, []);
 
   if (!fontsLoaded) return null;
+
+  // Per D-09: wait for the first version-check result before rendering.
+  // The check is fast (single HTTP request with a 5s timeout, or instant
+  // when __DEV__ via D-05). Returning null here keeps the splash screen
+  // visible — same UX as fontsLoaded=false.
+  if (versionResult === null) return null;
+
+  // Per D-08: when force_update, render ONLY the modal. The Stack does
+  // NOT mount — the rest of the app shell is unreachable. Per D-02:
+  // 'unreachable' is treated as 'ok' (fail-open) — the user proceeds
+  // into the app and the downstream error UI takes over if needed.
+  if (versionResult.status === 'force_update') {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <ForceUpdateModal message={versionResult.message} />
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
