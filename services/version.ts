@@ -55,13 +55,23 @@ async function attemptCheck(): Promise<VersionCheckResult> {
     if (!res.ok) throw new Error(`[version] non-2xx: ${res.status}`);
     const body = await res.json();
     if (body?.ok === true) return { status: 'ok' };
-    if (body?.ok === false && body?.reason === 'force_update' && typeof body?.minVersion === 'string') {
+    if (
+      body?.ok === false &&
+      body?.reason === 'force_update' &&
+      typeof body?.minVersion === 'string'
+    ) {
       const result: VersionCheckResult = {
         status: 'force_update',
         minVersion: body.minVersion,
       };
       if (typeof body.message === 'string' && body.message.length > 0) {
-        (result as { status: 'force_update'; minVersion: string; message?: string }).message = body.message;
+        (
+          result as {
+            status: 'force_update';
+            minVersion: string;
+            message?: string;
+          }
+        ).message = body.message;
       }
       return result;
     }
@@ -87,7 +97,10 @@ export async function checkVersion(): Promise<VersionCheckResult> {
     try {
       return await attemptCheck();
     } catch (err2) {
-      console.warn('[version] check failed twice, falling back to unreachable', err2);
+      console.warn(
+        '[version] check failed twice, falling back to unreachable',
+        err2,
+      );
       return { status: 'unreachable' };
     }
   }
