@@ -9,8 +9,9 @@ import {
   Linking,
   Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
-import { FONTS, SPACING, RADIUS } from '@/constants';
+import { COLORS, FONTS, SPACING, RADIUS } from '@/constants';
 import {
   IOS_STORE_URL,
   ANDROID_STORE_URL,
@@ -77,12 +78,19 @@ export function ForceUpdateModal({ message }: ForceUpdateModalProps): React.Reac
 
           <TouchableOpacity
             onPress={handleUpdate}
-            style={[styles.button, { backgroundColor: colors.primary }]}
+            style={styles.button}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel="Update Now"
           >
-            <Text style={[styles.buttonText, { color: colors.background }]}>Update Now</Text>
+            <LinearGradient
+              colors={COLORS.gradientAccent}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buttonGradient}
+            >
+              <Text style={styles.buttonText}>Update Now</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -122,15 +130,19 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   button: {
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    minWidth: 200,
+  },
+  buttonGradient: {
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.xl,
-    borderRadius: RADIUS.lg,
-    minWidth: 200,
     alignItems: 'center',
   },
   buttonText: {
     fontFamily: FONTS.semiBold,
     fontSize: 16,
+    color: '#FFFFFF',
   },
 });
 
