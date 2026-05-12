@@ -164,3 +164,16 @@ export interface NewsArticle {
   importance: 'breaking' | 'major'; // 'routine' is server-filtered
   reactions: ReactionGroup[];       // reuse v1.1 type
 }
+
+// ── Phase 8: caps:invalidated socket event reason union ────────────────────
+// Loose mirror of `tribelife-backend/src/types/capabilities.ts CapsInvalidatedReason`.
+// No shared types package — keep manually in sync (per CONTEXT.md D-01 canonical_refs).
+// The mobile client does NOT validate `reason` at runtime; this type exists for
+// Metro-log grep and IDE autocomplete only.
+export type CapsInvalidatedReason =
+  | 'revenuecat_grant'
+  | 'revenuecat_revoke'
+  | 'org_create'
+  | 'org_invite_accept'
+  | 'org_role_change'
+  | 'org_soft_delete';

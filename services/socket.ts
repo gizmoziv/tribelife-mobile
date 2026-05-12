@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { API_URL } from '@/constants';
 import { getToken } from './api';
 import type { Message } from '@/types';
+import { useAuthStore } from '@/store/authStore';
 
 let socket: Socket | null = null;
 let connecting: Promise<Socket | null> | null = null;
@@ -51,6 +52,18 @@ export async function connectSocket(): Promise<Socket | null> {
       console.log('[socket] server:shutdown received — reconnecting');
       s.disconnect();
       s.connect();
+    });
+
+    // Phase 8 D-02: backend emits caps:invalidated when the user's tier or
+    // org membership changes server-side (RevenueCat grant/revoke, org create,
+    // role change, member remove, invite accept). The empty body is
+    // intentional — mobile re-fetches /api/auth/capabilities via
+    // refreshCapabilities(), which is idempotent and cheap. No debounce or
+    // dedup state (per D-06) — back-to-back events fire back-to-back
+    // refetches; the second response wins.
+    s.on('caps:invalidated', (data: { reason?: string }) => {
+      console.log('[caps:invalidated] received', data);
+      useAuthStore.getState().refreshCapabilities();
     });
 
     socket = s;
