@@ -23,6 +23,28 @@ export default function ChatLayout() {
           presentation: 'card',
         }}
       />
+      <Stack.Screen
+        name="local"
+        options={{
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontFamily: FONTS.semiBold },
+          headerBackTitle: 'Chats',
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen
+        name="town-square"
+        options={{
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.surface },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontFamily: FONTS.semiBold },
+          headerBackTitle: 'Chats',
+          presentation: 'card',
+        }}
+      />
     </Stack>
   );
 }

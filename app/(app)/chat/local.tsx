@@ -499,9 +499,8 @@ export default function LocalChatScreen() {
         behavior={keyboardBehavior}
         keyboardVerticalOffset={90}
       >
-        <View style={styles.roomHeader}>
-          <GlowBadge text={`${user?.timezone ?? 'UTC'} room`} color="#7A8BA8" size="sm" />
-        </View>
+        {/* Redundant timezone GlowBadge removed in Phase 9 hotfix 2 —
+            the Stack.Screen headerTitle (zoneName) already shows the room name. */}
 
         <FlatList
           ref={flatListRef}
