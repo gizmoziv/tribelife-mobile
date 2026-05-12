@@ -31,7 +31,6 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useChatUnreadStore } from '@/store/chatUnreadStore';
 import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
-import { useChatTabStore } from '@/store/chatTabStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -52,7 +51,9 @@ import {
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import { PillToggle } from '@/components/ui/PillToggle';
+import type { ChatsRow } from '@/types';
+import { chats } from '@/services/api';
+import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
@@ -82,27 +83,236 @@ function GlobeIcon() {
   );
 }
 
-export default function ChatScreen() {
+export default function ChatsScreen() {
   const { colors } = useTheme();
-  const activeTab = useChatTabStore((s) => s.activeTab);
-  const setActiveTab = useChatTabStore((s) => s.setActiveTab);
-  const tabIndex = activeTab === 'local' ? 0 : 1;
-  const localChatUnread = useLocalChatUnreadStore((s) => s.unread);
-  const dmUnread = useChatUnreadStore((s) => s.totalUnread);
+  const [rows, setRows] = useState<ChatsRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const flatListRef = useRef<FlatList<ChatsRow>>(null);
+
+  // Initial fetch + refetch on focus (so reads from inside a DM/group/room
+  // pop the user back here with fresh unreadCount=0 on that row).
+  useFocusEffect(
+    useCallback(() => {
+      chats.list()
+        .then(({ rows: r }) => {
+          setRows(r);
+          setIsLoading(false);
+        })
+        .catch(() => setIsLoading(false));
+    }, []),
+  );
+
+  // Filtered view by title — search logic stub (Plan 09-04 adds the
+  // debounce + empty-state). For now the filter is no-op (no search
+  // input is rendered yet).
+  const filteredRows = rows;
+
+  if (isLoading) return <LoadingState />;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.toggleContainer}>
-        <PillToggle
-          options={['Local Chat', 'Direct Messages']}
-          activeIndex={tabIndex}
-          onSelect={(i) => setActiveTab(i === 0 ? 'local' : 'dms')}
-          badges={[localChatUnread, dmUnread]}
-        />
-      </View>
-
-      {activeTab === 'local' ? <LocalChatPanel /> : <DMListPanel />}
+      {/* Search input row stub — Plan 09-04 fleshes out the debounced TextInput */}
+      <View style={styles.searchStub} />
+      <ChatsList
+        data={filteredRows}
+        flatListRef={flatListRef}
+      />
     </SafeAreaView>
+  );
+}
+
+// ── Unified Chats List ────────────────────────────────────────────────────
+function ChatsList({
+  data,
+  flatListRef,
+}: {
+  data: ChatsRow[];
+  flatListRef: React.RefObject<FlatList<ChatsRow> | null>;
+}) {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const tabBarSpace = useTabBarSpace();
+
+  const renderRow = useCallback(({ item }: { item: ChatsRow }) => {
+    return <ChatsListRow row={item} colors={colors} router={router} />;
+  }, [colors, router]);
+
+  return (
+    <FlatList
+      ref={flatListRef}
+      data={data}
+      keyExtractor={(item) => chatsRowKey(item)}
+      renderItem={renderRow}
+      contentContainerStyle={{ paddingVertical: SPACING.sm }}
+      keyboardDismissMode="on-drag"
+      ListFooterComponent={<View style={{ height: tabBarSpace }} />}
+    />
+  );
+}
+
+// Stable key per row. The backend never recycles `conversationId` between
+// DM and Group, but the discriminator prefix removes ambiguity.
+function chatsRowKey(row: ChatsRow): string {
+  switch (row.type) {
+    case 'local_chat': return 'local_chat';
+    case 'town_square': return 'town_square';
+    case 'dm': return 'dm-' + row.conversationId;
+    case 'group': return 'group-' + row.conversationId;
+  }
+}
+
+function ChatsListRow({
+  row,
+  colors,
+  router,
+}: {
+  row: ChatsRow;
+  colors: ReturnType<typeof useTheme>['colors'];
+  router: ReturnType<typeof useRouter>;
+}) {
+  const onPress = useCallback(() => {
+    Keyboard.dismiss();
+    if (row.type === 'local_chat') {
+      // Local Chat opens the existing LocalChatPanel via a dedicated route.
+      // For v1.7 we route through /(app)/chat/local — Plan 09-04 may revisit
+      // if a dedicated screen is needed. The user's timezone room is the
+      // existing LocalChatPanel inside this file; we keep the route stub.
+      router.push('/(app)/chat/local' as never);
+      return;
+    }
+    if (row.type === 'town_square') {
+      // Town Square opens the existing Globe room screen for the town-square slug.
+      router.push('/(app)/globe/town-square' as never);
+      return;
+    }
+    // DM and Group rows route to the existing conversation screen.
+    router.push({
+      pathname: '/(app)/chat/[conversationId]',
+      params: {
+        conversationId: row.conversationId.toString(),
+        ...(row.type === 'dm'
+          ? { handle: row.partner.handle }
+          : { isGroup: 'true', groupName: row.name }),
+      },
+    });
+  }, [row, router]);
+
+  // ── Icon container + tint ─────────────────────────────────────────────
+  let leadingIcon: React.ReactNode;
+  let title: string;
+  let subtitle: string;
+  let showLock = false;
+
+  if (row.type === 'local_chat') {
+    leadingIcon = (
+      <View style={[styles.roomIconContainer, { backgroundColor: COLORS.success }]}>
+        <LocationPinIcon color="#FFF" />
+      </View>
+    );
+    title = timezoneToZoneName(row.timezoneIana);
+    subtitle = row.lastMessage?.preview ?? 'Local timezone room';
+  } else if (row.type === 'town_square') {
+    leadingIcon = (
+      <View style={[styles.roomIconContainer, { backgroundColor: COLORS.accent }]}>
+        <GlobeIconLarge color="#FFF" />
+      </View>
+    );
+    title = 'Town Square';
+    subtitle = row.lastMessage?.preview ?? 'A global space';
+  } else if (row.type === 'dm') {
+    leadingIcon = (
+      <AvatarCircle
+        name={row.partner.handle ?? '?'}
+        size={44}
+        imageUrl={row.partner.avatarUrl ?? undefined}
+        showRing={false}
+      />
+    );
+    title = '@' + row.partner.handle;
+    subtitle = row.lastMessage?.preview ?? 'Start a conversation';
+  } else {
+    // group
+    leadingIcon = (
+      <AvatarCircle
+        name={row.name}
+        size={44}
+        imageUrl={row.iconUrl ?? undefined}
+        showRing={false}
+      />
+    );
+    title = row.name;
+    subtitle = row.lastMessage?.preview ?? (row.memberCount + ' members');
+    showLock = true;
+  }
+
+  return (
+    <TouchableOpacity
+      style={[styles.chatsRow, { backgroundColor: colors.surfaceGlass }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {leadingIcon}
+      <View style={{ flex: 1 }}>
+        <View style={styles.chatsRowTop}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={[styles.chatsRowTitle, { color: colors.text }]} numberOfLines={1}>
+              {title}
+            </Text>
+            {showLock && <ClosedLockIcon color={colors.textMuted} />}
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+            {row.lastMessage && (
+              <Text style={[styles.chatsRowTime, { color: colors.textMuted }]}>
+                {formatTime(row.lastMessage.at)}
+              </Text>
+            )}
+            {row.unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>
+                  {row.unreadCount > 99 ? '99+' : row.unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <Text style={[styles.chatsRowPreview, { color: colors.textMuted }]} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── Inline SVGs for Phase 9 row icons ─────────────────────────────────────
+function LocationPinIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function GlobeIconLarge({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" stroke={color} strokeWidth={1.5} />
+      <Path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z" stroke={color} strokeWidth={1.5} />
+    </Svg>
+  );
+}
+
+function ClosedLockIcon({ color }: { color: string }) {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 10V8a6 6 0 0112 0v2" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+    </Svg>
   );
 }
 
@@ -1152,4 +1362,30 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontFamily: FONTS.semiBold },
   emptySubtitle: { fontSize: 15, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  searchStub: {
+    // Plan 09-04 replaces this with a real search input (44px tall).
+    height: 0,
+  },
+  roomIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SPACING.page,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
+    borderRadius: RADIUS.md,
+    ...SHADOWS.sm,
+  },
+  chatsRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  chatsRowTitle: { fontSize: 15, fontFamily: FONTS.semiBold },
+  chatsRowTime: { fontSize: 12, fontFamily: FONTS.regular },
+  chatsRowPreview: { fontSize: 14, fontFamily: FONTS.regular, marginTop: 2 },
 });

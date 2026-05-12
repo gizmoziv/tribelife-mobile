@@ -16,7 +16,6 @@ import { useGlobeStore } from '@/store/globeStore';
 import { useChatUnreadStore } from '@/store/chatUnreadStore';
 import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
-import { useChatTabStore } from '@/store/chatTabStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi, globeApi, chat } from '@/services/api';
 import { getSocket, connectSocket } from '@/services/socket';
@@ -326,22 +325,20 @@ export default function AppLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'Chat',
+          title: 'Chats',
           tabBarIcon: ({ color, focused }) => (
             <GradientTabIcon icon="chat" color={color} focused={focused} />
           ),
           tabBarBadge: chatTabBadge > 0 ? '' : undefined,
           tabBarBadgeStyle: dotBadgeStyle,
-          headerTitle: 'Chat',
+          headerTitle: 'Chats',
         }}
         listeners={({ navigation }) => ({
-          // Amazon-style: re-tapping the Chat bottom-nav icon while the
-          // screen is already focused snaps the inner sub-tab back to Local.
-          // First entry (or coming from another bottom tab) preserves whatever
-          // sub-tab the user last had open.
+          // D-07: re-tapping the Chats bottom-nav while focused scrolls to top
+          // and clears the search filter. Logic wired in Plan 09-04.
           tabPress: () => {
-            if (navigation.isFocused() && useChatTabStore.getState().activeTab === 'dms') {
-              useChatTabStore.getState().setActiveTab('local');
+            if (navigation.isFocused()) {
+              // Plan 09-04 fills in: clearSearchAndScrollToTop()
             }
           },
         })}

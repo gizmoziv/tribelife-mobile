@@ -14,6 +14,7 @@ import type {
   GroupMember,
   NewsArticle,
   ReactionGroup,
+  ChatsListResponse,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -151,6 +152,18 @@ export const chat = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetLanguage }),
+    }),
+};
+
+// ── Chats (Phase 9 unified list) ───────────────────────────────────────────
+export const chats = {
+  list: () =>
+    request<ChatsListResponse>('/api/chats'),
+
+  markRoomRead: (roomSlug: string) =>
+    request<{ ok: true }>('/api/chats/room-read', {
+      method: 'POST',
+      body: JSON.stringify({ roomSlug }),
     }),
 };
 

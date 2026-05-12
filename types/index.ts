@@ -177,3 +177,47 @@ export type CapsInvalidatedReason =
   | 'org_invite_accept'
   | 'org_role_change'
   | 'org_soft_delete';
+
+// ── Phase 9: Chats Tab Restructure ─────────────────────────────────────────
+// Loose mirror of tribelife-backend/src/types/chats.ts (no shared types
+// package — keep in sync manually per CONTEXT.md canonical_refs convention,
+// mirroring the Phase 8 CapsInvalidatedReason pattern).
+export interface ChatsRowLastMessage {
+  preview: string;
+  at: string;
+}
+
+export type ChatsRow =
+  | {
+      type: 'local_chat';
+      roomSlug: 'local';
+      timezoneIana: string;
+      unreadCount: number;
+      lastMessage: ChatsRowLastMessage | null;
+    }
+  | {
+      type: 'town_square';
+      roomSlug: 'town-square';
+      unreadCount: number;
+      lastMessage: ChatsRowLastMessage | null;
+    }
+  | {
+      type: 'dm';
+      conversationId: number;
+      partner: { handle: string; avatarUrl: string | null };
+      unreadCount: number;
+      lastMessage: ChatsRowLastMessage | null;
+    }
+  | {
+      type: 'group';
+      conversationId: number;
+      name: string;
+      iconUrl: string | null;
+      memberCount: number;
+      unreadCount: number;
+      lastMessage: ChatsRowLastMessage | null;
+    };
+
+export interface ChatsListResponse {
+  rows: ChatsRow[];
+}
