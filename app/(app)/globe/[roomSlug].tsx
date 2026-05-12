@@ -109,8 +109,15 @@ const TYPING_DEBOUNCE_MS = 2000;
 const TYPING_TIMEOUT_MS = 5000;
 const AGE_GATE_HOURS = 24;
 
+// Default export — reads roomSlug from Expo Router params (Globe tab stack).
 export default function GlobeRoomChat() {
   const { roomSlug } = useLocalSearchParams<{ roomSlug: string }>();
+  return <GlobeRoomScreen slug={roomSlug!} />;
+}
+
+// Named export — accepts slug as a prop so other tab stacks (e.g. Chats)
+// can render a Globe room without crossing tab boundaries.
+export function GlobeRoomScreen({ slug: roomSlug }: { slug: string }) {
   const router = useRouter();
   const keyboardBehavior = useKeyboardBehavior();
   const tabBarSpace = useTabBarSpace();

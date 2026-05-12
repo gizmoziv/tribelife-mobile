@@ -150,7 +150,8 @@ export default function GlobeScreen() {
   }, []);
 
   const tabBarSpace = useTabBarSpace();
-  const sortedRooms = [...rooms].sort((a, b) => a.sortOrder - b.sortOrder);
+  // Town Square moved to the Chats tab in Phase 9; do not render it here (filtered out to avoid duplication)
+  const sortedRooms = [...rooms].filter((r) => r.slug !== 'town-square').sort((a, b) => a.sortOrder - b.sortOrder);
 
   const renderItem = useCallback(
     ({ item }: { item: GlobeRoom }) => (

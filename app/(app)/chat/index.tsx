@@ -239,16 +239,14 @@ function ChatsListRow({
   const onPress = useCallback(() => {
     Keyboard.dismiss();
     if (row.type === 'local_chat') {
-      // Local Chat opens the existing LocalChatPanel via a dedicated route.
-      // For v1.7 we route through /(app)/chat/local — Plan 09-04 may revisit
-      // if a dedicated screen is needed. The user's timezone room is the
-      // existing LocalChatPanel inside this file; we keep the route stub.
-      router.push('/(app)/chat/local' as never);
+      // Local Chat opens the dedicated timezone-room screen in the Chats stack.
+      router.push('/(app)/chat/local');
       return;
     }
     if (row.type === 'town_square') {
-      // Town Square opens the existing Globe room screen for the town-square slug.
-      router.push('/(app)/globe/town-square' as never);
+      // Town Square lives in the Chats stack so back-navigation returns here,
+      // not to the Globe tab. See chat/town-square.tsx.
+      router.push('/(app)/chat/town-square');
       return;
     }
     // DM and Group rows route to the existing conversation screen.
