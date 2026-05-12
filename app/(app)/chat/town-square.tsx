@@ -10,5 +10,5 @@ import React from 'react';
 import { GlobeRoomScreen } from '@/app/(app)/globe/[roomSlug]';
 
 export default function TownSquareChatScreen() {
-  return <GlobeRoomScreen slug="town-square" />;
+  return <GlobeRoomScreen slug="town-square" backLabel="Chats" />;
 }

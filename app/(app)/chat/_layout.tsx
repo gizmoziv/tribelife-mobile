@@ -23,28 +23,9 @@ export default function ChatLayout() {
           presentation: 'card',
         }}
       />
-      <Stack.Screen
-        name="local"
-        options={{
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.text,
-          headerTitleStyle: { fontFamily: FONTS.semiBold },
-          headerBackTitle: 'Chats',
-          presentation: 'card',
-        }}
-      />
-      <Stack.Screen
-        name="town-square"
-        options={{
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.text,
-          headerTitleStyle: { fontFamily: FONTS.semiBold },
-          headerBackTitle: 'Chats',
-          presentation: 'card',
-        }}
-      />
+      {/* local and town-square render their own inline custom headers
+          (same pattern as globe/[roomSlug].tsx — CustomHeader). They
+          inherit headerShown: false from the default screenOptions above. */}
     </Stack>
   );
 }

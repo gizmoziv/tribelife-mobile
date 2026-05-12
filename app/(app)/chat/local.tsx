@@ -20,7 +20,7 @@ import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
-import { useRouter, useFocusEffect, Stack } from 'expo-router';
+import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi, notificationsApi, chats } from '@/services/api';
@@ -65,6 +65,42 @@ function SendIcon() {
   );
 }
 
+// ── Inline header (back pill + title) ────────────────────────────────────────
+// Mirrors globe/[roomSlug].tsx CustomHeader. Lives inside SafeAreaView so the
+// safe-area top inset is handled by RN; no Stack header used (chat/_layout.tsx
+// keeps headerShown:false for this route).
+function LocalChatHeader({
+  title,
+  onBack,
+  colors,
+}: {
+  title: string;
+  onBack: () => void;
+  colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
+}) {
+  return (
+    <View style={[styles.headerRow, { backgroundColor: colors.background }]}>
+      <Pressable
+        onPress={onBack}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.headerBackPill,
+          { backgroundColor: colors.surfaceGlass, opacity: pressed ? 0.8 : 1 },
+          SHADOWS.sm,
+        ]}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+          <Path d="M15 18l-6-6 6-6" stroke={colors.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+        <Text style={[styles.headerBackText, { color: colors.text }]}>Chats</Text>
+      </Pressable>
+      <View style={styles.headerTitleWrap} pointerEvents="none">
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ── Local (Timezone Room) Chat Screen ────────────────────────────────────────
 // Dedicated screen for the timezone room, living in the Chats tab stack.
 // Extracted from the pre-09-03 LocalChatPanel in chat/index.tsx so that
@@ -75,6 +111,18 @@ export default function LocalChatScreen() {
   const { user } = useAuthStore();
   const keyboardBehavior = useKeyboardBehavior();
   const router = useRouter();
+  const navigation = useNavigation();
+
+  // Hide the parent Tabs header while this screen is mounted so we only show
+  // the Stack header (mirrors [conversationId].tsx and globe/[roomSlug].tsx).
+  useEffect(() => {
+    const parent = navigation.getParent();
+    parent?.setOptions({ headerShown: false });
+    return () => {
+      parent?.setOptions({ headerShown: true });
+    };
+  }, [navigation]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
@@ -483,7 +531,7 @@ export default function LocalChatScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: zoneName }} />
+        <LocalChatHeader title={zoneName} onBack={() => router.back()} colors={colors} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
         </View>
@@ -493,7 +541,7 @@ export default function LocalChatScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ title: zoneName }} />
+      <LocalChatHeader title={zoneName} onBack={() => router.back()} colors={colors} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
@@ -744,6 +792,36 @@ function showReportBlockMenu(
 // ── Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  headerRow: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.page,
+    paddingBottom: 10,
+    paddingTop: 6,
+  },
+  headerBackPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+  },
+  headerBackText: {
+    fontSize: 15,
+    fontFamily: FONTS.semiBold,
+  },
+  headerTitleWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontFamily: FONTS.semiBold,
+  },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   roomHeader: {
     paddingHorizontal: SPACING.page,

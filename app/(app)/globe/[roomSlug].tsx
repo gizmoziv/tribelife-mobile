@@ -117,7 +117,7 @@ export default function GlobeRoomChat() {
 
 // Named export — accepts slug as a prop so other tab stacks (e.g. Chats)
 // can render a Globe room without crossing tab boundaries.
-export function GlobeRoomScreen({ slug: roomSlug }: { slug: string }) {
+export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; backLabel?: string }) {
   const router = useRouter();
   const keyboardBehavior = useKeyboardBehavior();
   const tabBarSpace = useTabBarSpace();
@@ -652,6 +652,7 @@ export function GlobeRoomScreen({ slug: roomSlug }: { slug: string }) {
           onBack={() => router.back()}
           colors={colors}
           insetsTop={insets.top}
+          backLabel={backLabel}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
@@ -669,6 +670,7 @@ export function GlobeRoomScreen({ slug: roomSlug }: { slug: string }) {
         onBack={() => router.back()}
         colors={colors}
         insetsTop={insets.top}
+        backLabel={backLabel}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -847,9 +849,10 @@ interface CustomHeaderProps {
   onBack: () => void;
   colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
   insetsTop: number;
+  backLabel?: string;
 }
 
-function CustomHeader({ title, participantCount, onBack, colors, insetsTop }: CustomHeaderProps) {
+function CustomHeader({ title, participantCount, onBack, colors, insetsTop, backLabel = 'Globe' }: CustomHeaderProps) {
   return (
     <View
       style={[
@@ -872,7 +875,7 @@ function CustomHeader({ title, participantCount, onBack, colors, insetsTop }: Cu
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
           <Path d="M15 18l-6-6 6-6" stroke={colors.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
-        <Text style={[styles.headerBackText, { color: colors.text }]}>Globe</Text>
+        <Text style={[styles.headerBackText, { color: colors.text }]}>{backLabel}</Text>
       </Pressable>
       <View style={styles.headerTitleWrap} pointerEvents="none">
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
