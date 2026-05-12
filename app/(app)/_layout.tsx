@@ -16,6 +16,7 @@ import { useGlobeStore } from '@/store/globeStore';
 import { useChatUnreadStore } from '@/store/chatUnreadStore';
 import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
+import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi, globeApi, chat } from '@/services/api';
 import { getSocket, connectSocket } from '@/services/socket';
@@ -83,7 +84,11 @@ export default function AppLayout() {
   const { totalUnread, setUnreadCounts } = useGlobeStore();
   const chatTotalUnread = useChatUnreadStore((s) => s.totalUnread);
   const localChatUnread = useLocalChatUnreadStore((s) => s.unread);
-  const chatTabBadge = chatTotalUnread + localChatUnread;
+  // Phase 9 D-10 + Pitfall 4: include ONLY the bare 'town-square' slug, NOT
+  // useGlobeStore.totalUnread (which would double-count Town Square because
+  // totalUnread sums every globe room including town-square).
+  const townSquareUnread = useGlobeStore((s) => s.unreadCounts['town-square'] ?? 0);
+  const chatsTabBadge = chatTotalUnread + localChatUnread + townSquareUnread;
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -329,16 +334,15 @@ export default function AppLayout() {
           tabBarIcon: ({ color, focused }) => (
             <GradientTabIcon icon="chat" color={color} focused={focused} />
           ),
-          tabBarBadge: chatTabBadge > 0 ? '' : undefined,
+          tabBarBadge: chatsTabBadge > 0 ? '' : undefined,
           tabBarBadgeStyle: dotBadgeStyle,
           headerTitle: 'Chats',
         }}
         listeners={({ navigation }) => ({
-          // D-07: re-tapping the Chats bottom-nav while focused scrolls to top
-          // and clears the search filter. Logic wired in Plan 09-04.
+          // D-07: re-tap on Chats while focused → clear search + scroll list to top
           tabPress: () => {
             if (navigation.isFocused()) {
-              // Plan 09-04 fills in: clearSearchAndScrollToTop()
+              useChatsListRefStore.getState().clearAndScrollToTop();
             }
           },
         })}

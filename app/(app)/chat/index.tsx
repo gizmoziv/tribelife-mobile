@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { useChatUnreadStore } from '@/store/chatUnreadStore';
 import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
+import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -88,6 +89,7 @@ export default function ChatsScreen() {
   const [rows, setRows] = useState<ChatsRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
 
   // Initial fetch + refetch on focus (so reads from inside a DM/group/room
@@ -103,23 +105,86 @@ export default function ChatsScreen() {
     }, []),
   );
 
-  // Filtered view by title — search logic stub (Plan 09-04 adds the
-  // debounce + empty-state). For now the filter is no-op (no search
-  // input is rendered yet).
-  const filteredRows = rows;
+  // 200ms debounce on the search input (per CONTEXT.md D-06)
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(searchQuery), 200);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
+
+  // Filtered view by title (case-insensitive substring on the row title only).
+  // Title derivation matches ChatsListRow:
+  //   - local_chat: timezoneToZoneName(row.timezoneIana)
+  //   - town_square: 'Town Square'
+  //   - dm: '@' + row.partner.handle
+  //   - group: row.name
+  const filteredRows = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const title = chatsRowTitle(row);
+      return title.toLowerCase().includes(q);
+    });
+  }, [rows, debouncedQuery]);
+
+  // Register the re-tap callback. The ChatsScreen owns both the search-clear
+  // setter and the FlatList ref, so the store's action is just a closure
+  // around them. Re-register on every render so the closure captures the
+  // latest setSearchQuery (no stale-state bug).
+  useEffect(() => {
+    useChatsListRefStore.setState({
+      clearAndScrollToTop: () => {
+        setSearchQuery('');
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      },
+    });
+    return () => {
+      useChatsListRefStore.setState({
+        clearAndScrollToTop: () => { /* no-op after unmount */ },
+      });
+    };
+  }, []);
 
   if (isLoading) return <LoadingState />;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Search input row stub — Plan 09-04 fleshes out the debounced TextInput */}
-      <View style={styles.searchStub} />
-      <ChatsList
-        data={filteredRows}
-        flatListRef={flatListRef}
-      />
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.searchInput, {
+            backgroundColor: colors.surfaceGlass,
+            color: colors.text,
+            borderColor: colors.border,
+          }]}
+          placeholder="Search chats"
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+      </View>
+      {filteredRows.length === 0 && debouncedQuery.trim().length > 0 ? (
+        <View style={styles.emptyMatches}>
+          <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
+            {'No matches for “' + debouncedQuery + '”'}
+          </Text>
+        </View>
+      ) : (
+        <ChatsList data={filteredRows} flatListRef={flatListRef} />
+      )}
     </SafeAreaView>
   );
+}
+
+// Pure title derivation — kept in sync with ChatsListRow's title computation.
+function chatsRowTitle(row: ChatsRow): string {
+  switch (row.type) {
+    case 'local_chat': return timezoneToZoneName(row.timezoneIana);
+    case 'town_square': return 'Town Square';
+    case 'dm': return '@' + row.partner.handle;
+    case 'group': return row.name;
+  }
 }
 
 // ── Unified Chats List ────────────────────────────────────────────────────
@@ -1362,9 +1427,29 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontFamily: FONTS.semiBold },
   emptySubtitle: { fontSize: 15, fontFamily: FONTS.regular, textAlign: 'center', lineHeight: 22 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  searchStub: {
-    // Plan 09-04 replaces this with a real search input (44px tall).
-    height: 0,
+  searchRow: {
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
+  },
+  searchInput: {
+    height: 44,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+  },
+  emptyMatches: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
+  },
+  emptyMatchesText: {
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
   },
   roomIconContainer: {
     width: 44,
