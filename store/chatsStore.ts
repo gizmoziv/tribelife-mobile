@@ -32,7 +32,8 @@ type RowKey =
   | { type: 'dm'; conversationId: number }
   | { type: 'group'; conversationId: number }
   | { type: 'town_square'; roomSlug: string }
-  | { type: 'local_chat'; timezoneIana: string };
+  | { type: 'local_chat'; timezoneIana: string }
+  | { type: 'globe_room'; roomSlug: string };
 
 interface ChatsState {
   rows: ChatsRow[];
@@ -53,6 +54,7 @@ function rowMatchesEntity(row: ChatsRow, entityId: string | number): boolean {
   if (row.type === 'dm' || row.type === 'group') return row.conversationId === entityId;
   if (row.type === 'town_square') return entityId === 'town-square';
   if (row.type === 'local_chat') return row.timezoneIana === entityId;
+  if (row.type === 'globe_room') return row.roomSlug === entityId;
   return false;
 }
 
@@ -61,6 +63,7 @@ function rowMatchesKey(row: ChatsRow, key: RowKey): boolean {
   if (key.type === 'group' && row.type === 'group') return row.conversationId === key.conversationId;
   if (key.type === 'town_square' && row.type === 'town_square') return row.roomSlug === key.roomSlug;
   if (key.type === 'local_chat' && row.type === 'local_chat') return row.timezoneIana === key.timezoneIana;
+  if (key.type === 'globe_room' && row.type === 'globe_room') return row.roomSlug === key.roomSlug;
   return false;
 }
 
@@ -118,12 +121,16 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   },
 
   applyGlobeMessage: (msg) => {
-    // Only Town Square is in the Chats list; other globe rooms aren't.
+    // Phase 11 D-04: applies to ANY joined regional Globe room row AND Town Square.
+    // `applyToRow` is a no-op when no row matches (rowMatchesEntity returns false),
+    // so a globe:message for a room the user hasn't joined silently drops here.
+    // No unread bump — Phase 10 D-09 two-signal pattern: chat:notification is the
+    // authoritative bump; globe:message is the lastMessage signal only.
     const slug = msg.slug ?? msg.roomId?.replace('globe:', '');
-    if (slug !== 'town-square') return;
+    if (!slug) return;
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    set((s) => ({ rows: applyToRow(s.rows, 'town-square', lastMessage, false) }));
+    set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, false) }));
   },
 
   applyDmMessage: (msg) => {
