@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -65,11 +66,11 @@ function RoomListItem({
               <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
                 {room.displayName}
               </Text>
-              {room.isSuggested && (
-                <View style={[styles.suggestedBadge, { backgroundColor: colors.primaryGlow }]}>
-                  <Text style={[styles.suggestedText, { color: COLORS.primary }]}>
-                    Your region
-                  </Text>
+              {/* Phase 11 D-06: "Your region" badge dropped — server now sorts user's region first. */}
+              {/* Phase 11 D-07: Member pill renders on rows the user has a globe_room_memberships row for. */}
+              {room.isMember && (
+                <View style={[styles.memberBadge, { backgroundColor: 'rgba(52, 211, 153, 0.15)' }]}>
+                  <Text style={[styles.memberBadgeText, { color: COLORS.success }]}>Member</Text>
                 </View>
               )}
               {room.isGlobal && (
@@ -88,7 +89,7 @@ function RoomListItem({
                 numberOfLines={1}
               >
                 @{room.lastMessage.senderHandle}: {room.lastMessage.content}
-                {timeAgo ? ` \u00B7 ${timeAgo}` : ''}
+                {timeAgo ? ` · ${timeAgo}` : ''}
               </Text>
             )}
           </View>
@@ -127,12 +128,25 @@ export default function GlobeScreen() {
     markRoomRead,
   } = useGlobeStore();
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  // 200ms debounce on the search input (per 11-CONTEXT.md D-09)
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(searchQuery), 200);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
+
   useEffect(() => {
     setLoadingRooms(true);
     globeApi
       .rooms()
       .then(({ rooms: data }) => {
         setRooms(data);
+        // Phase 11 D-11: hydrate the membership map from server truth.
+        useGlobeStore.getState().setMembershipMap(
+          Object.fromEntries(data.map((r) => [r.slug, r.isMember])),
+        );
       })
       .catch(() => {})
       .finally(() => setLoadingRooms(false));
@@ -150,8 +164,14 @@ export default function GlobeScreen() {
   }, []);
 
   const tabBarSpace = useTabBarSpace();
-  // Town Square moved to the Chats tab in Phase 9; do not render it here (filtered out to avoid duplication)
-  const sortedRooms = [...rooms].filter((r) => r.slug !== 'town-square').sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // Server now orders rooms (user-region first, then sortOrder ASC) — do NOT re-sort here.
+  const visibleRooms = useMemo(() => rooms.filter((r) => r.slug !== 'town-square'), [rooms]);
+  const q = debouncedQuery.trim().toLowerCase();
+  const filteredRooms = useMemo(
+    () => (q ? visibleRooms.filter((r) => r.displayName.toLowerCase().includes(q)) : visibleRooms),
+    [visibleRooms, q],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: GlobeRoom }) => (
@@ -172,7 +192,7 @@ export default function GlobeScreen() {
   if (isLoadingRooms) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: 'Globe', headerBackTitle: 'Back' }} />
+        <Stack.Screen options={{ title: 'Community', headerBackTitle: 'Back' }} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
         </View>
@@ -182,15 +202,39 @@ export default function GlobeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ title: 'Globe', headerBackTitle: 'Back' }} />
-      <FlatList
-        data={sortedRooms}
-        keyExtractor={(item) => item.slug}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListFooterComponent={<View style={{ height: tabBarSpace }} />}
-      />
+      <Stack.Screen options={{ title: 'Community', headerBackTitle: 'Back' }} />
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.searchInput, {
+            backgroundColor: colors.surfaceGlass,
+            color: colors.text,
+            borderColor: colors.border,
+          }]}
+          placeholder="Search communities"
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+      </View>
+      {filteredRooms.length === 0 && q.length > 0 ? (
+        <View style={styles.emptyMatches}>
+          <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
+            {'No matches for “' + debouncedQuery + '”'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredRooms}
+          keyExtractor={(item) => item.slug}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={<View style={{ height: tabBarSpace }} />}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -244,6 +288,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: FONTS.medium,
   },
+  memberBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.pill,
+  },
+  memberBadgeText: {
+    fontSize: 11,
+    fontFamily: FONTS.medium,
+  },
   roomDescription: {
     fontSize: 13,
     fontFamily: FONTS.regular,
@@ -280,5 +333,29 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 11,
     fontFamily: FONTS.bold,
+  },
+  searchRow: {
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
+  },
+  searchInput: {
+    height: 40,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    fontFamily: FONTS.regular,
+    fontSize: 14,
+  },
+  emptyMatches: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.page,
+  },
+  emptyMatchesText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
   },
 });
