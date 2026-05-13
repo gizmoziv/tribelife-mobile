@@ -42,6 +42,20 @@ export const COLORS = {
   gradientBackground: ['#0A0E1A', '#1A1040'] as const,
 } as const;
 
+// Per-room tint for Community / Chats list globe icons. Distinct hues per
+// region; avoids Town Square gold (COLORS.accent) and Local Chat green
+// (COLORS.success) so the three icon families stay visually distinct.
+export const GLOBE_ROOM_TINTS: Record<string, string> = {
+  'town-square': '#F59E0B',
+  'north-america': '#3B82F6',
+  'israel': '#0EA5E9',
+  'europe': '#A78BFA',
+  'uk-ireland': '#EF4444',
+  'latin-america': '#FB923C',
+  'australia-nz': '#14B8A6',
+  'south-africa': '#F472B6',
+};
+
 export const FONTS = {
   light: 'PlusJakartaSans_300Light',
   regular: 'PlusJakartaSans_400Regular',

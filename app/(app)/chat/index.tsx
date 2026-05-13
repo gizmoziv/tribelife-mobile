@@ -50,7 +50,7 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, GLOBE_ROOM_TINTS } from '@/constants';
 import type { ChatsRow } from '@/types';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
@@ -289,8 +289,9 @@ function ChatsListRow({
     title = 'Town Square';
     subtitle = row.lastMessage?.preview ?? 'A global space';
   } else if (row.type === 'globe_room') {
+    const tint = GLOBE_ROOM_TINTS[row.roomSlug] ?? COLORS.primary;
     leadingIcon = (
-      <View style={[styles.roomIconContainer, { backgroundColor: COLORS.primary }]}>
+      <View style={[styles.roomIconContainer, { backgroundColor: tint }]}>
         <GlobeIconLarge color="#FFF" />
       </View>
     );

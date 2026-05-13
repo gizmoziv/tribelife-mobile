@@ -14,19 +14,20 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useGlobeStore } from '@/store/globeStore';
 import { globeApi } from '@/services/api';
 import { connectSocket, onGlobeParticipants } from '@/services/socket';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, GLOBE_ROOM_TINTS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
 import type { GlobeRoom } from '@/types';
 import Svg, { Path, Circle } from 'react-native-svg';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
-function GlobeHeaderIcon() {
+function GlobeHeaderIcon({ color = COLORS.primary }: { color?: string } = {}) {
   return (
-    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" stroke={color} strokeWidth={1.5} />
       <Path
-        d="M12 2a10 10 0 1010 10A10 10 0 0012 2zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"
-        stroke={COLORS.primary}
+        d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"
+        stroke={color}
         strokeWidth={1.5}
       />
     </Svg>
@@ -57,25 +58,23 @@ function RoomListItem({
     ? formatRelativeTime(room.lastMessage.createdAt)
     : null;
 
+  const tint = GLOBE_ROOM_TINTS[room.slug] ?? COLORS.primary;
+
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <GlassCard style={styles.roomCard}>
         <View style={styles.roomRow}>
+          <View style={[styles.roomIconContainer, { backgroundColor: tint }]}>
+            <GlobeHeaderIcon color="#FFF" />
+          </View>
           <View style={styles.roomInfo}>
             <View style={styles.roomNameRow}>
               <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
                 {room.displayName}
               </Text>
               {/* Phase 11 D-06: "Your region" badge dropped — server now sorts user's region first. */}
-              {/* Phase 11 D-07: Member pill renders on rows the user has a globe_room_memberships row for. */}
-              {room.isMember && (
-                <View style={[styles.memberBadge, { backgroundColor: 'rgba(52, 211, 153, 0.15)' }]}>
-                  <Text style={[styles.memberBadgeText, { color: COLORS.success }]}>Member</Text>
-                </View>
-              )}
-              {room.isGlobal && (
-                <GlobeHeaderIcon />
-              )}
+              {/* Joined rooms are filtered out of Community discovery entirely
+                  (see visibleRooms below) — no Member pill needed on this surface. */}
             </View>
             <Text
               style={[styles.roomDescription, { color: colors.textMuted }]}
@@ -122,6 +121,7 @@ export default function GlobeScreen() {
     rooms,
     isLoadingRooms,
     unreadCounts,
+    isMember,
     setRooms,
     setLoadingRooms,
     updateParticipantCount,
@@ -166,7 +166,16 @@ export default function GlobeScreen() {
   const tabBarSpace = useTabBarSpace();
 
   // Server now orders rooms (user-region first, then sortOrder ASC) — do NOT re-sort here.
-  const visibleRooms = useMemo(() => rooms.filter((r) => r.slug !== 'town-square'), [rooms]);
+  // Discovery list excludes Town Square (every user has it via Phase 7) AND any room
+  // the user has already joined. Effective membership = store-first (for instant
+  // post-join updates without a re-fetch), with server-truth fallback for cold mount.
+  const visibleRooms = useMemo(
+    () =>
+      rooms.filter(
+        (r) => r.slug !== 'town-square' && !(isMember[r.slug] ?? r.isMember),
+      ),
+    [rooms, isMember],
+  );
   const q = debouncedQuery.trim().toLowerCase();
   const filteredRooms = useMemo(
     () => (q ? visibleRooms.filter((r) => r.displayName.toLowerCase().includes(q)) : visibleRooms),
@@ -266,6 +275,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  roomIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
+  },
   roomInfo: {
     flex: 1,
     gap: 4,
@@ -285,15 +302,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill,
   },
   suggestedText: {
-    fontSize: 11,
-    fontFamily: FONTS.medium,
-  },
-  memberBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: RADIUS.pill,
-  },
-  memberBadgeText: {
     fontSize: 11,
     fontFamily: FONTS.medium,
   },
