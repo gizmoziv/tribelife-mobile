@@ -191,6 +191,33 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
     [rooms, roomSlug],
   );
 
+  // Phase 11 D-12: read-only mode driver. `isMember` map from Plan 11-02 D-11.
+  const isMember = useGlobeStore((s) => s.isMember[roomSlug] ?? false);
+  const setIsMember = useGlobeStore((s) => s.setIsMember);
+  // Fall back to server-truth GlobeRoom.isMember when the store map hasn't
+  // been hydrated yet (cold deep link directly to /globe/[slug]).
+  const effectiveIsMember = isMember || (room?.isMember ?? false);
+
+  const [isJoining, setIsJoining] = useState(false);
+
+  const handleJoin = useCallback(async () => {
+    if (isJoining) return;
+    setIsJoining(true);
+    try {
+      await globeApi.join(roomSlug);
+      // D-11 store flip — drives the composer-appears re-render.
+      setIsMember(roomSlug, true);
+      // D-12: fire-and-forget — the new globe_room row appears in Chats
+      // list next time the user opens the Chats tab. NO `await` here.
+      // NO navigation — user stays put; composer flips on via store.
+      useChatsStore.getState().hydrate();
+    } catch (err: any) {
+      Alert.alert("Couldn't join", err?.message ?? 'Please try again.');
+    } finally {
+      setIsJoining(false);
+    }
+  }, [roomSlug, isJoining, setIsMember]);
+
   const globeRoomId = `globe:${roomSlug}`;
 
   // ── Check client-side age gate on mount ─────────────────────────────────
@@ -624,13 +651,16 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
     ({ item }: { item: GlobeMessage }) => {
       const isMe = item.senderId === user?.id;
       return (
-        <SwipeableMessage onSwipeComplete={() => {
-          setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
-        }}>
+        <SwipeableMessage
+          enabled={effectiveIsMember}
+          onSwipeComplete={() => {
+            setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
+          }}
+        >
           <MessageBubble
             message={item}
             isMe={isMe}
-            onLongPress={handleLongPress}
+            onLongPress={effectiveIsMember ? handleLongPress : () => {}}
             onReactionToggle={handleReactionToggle}
             onProfilePress={() => !isMe && item.senderHandle && router.push(`/user/${item.senderHandle}`)}
             translatedContent={translations[item.id]?.text ?? null}
@@ -668,6 +698,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
           colors={colors}
           insetsTop={insets.top}
           backLabel={backLabel}
+          description={room?.description}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
@@ -686,6 +717,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
         colors={colors}
         insetsTop={insets.top}
         backLabel={backLabel}
+        description={room?.description}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -770,70 +802,90 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
           </View>
         )}
 
-        {/* Reply composer */}
-        <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+        {/* Phase 11 D-12: composer hidden in read-only mode; replaced by Join CTA. */}
+        {effectiveIsMember ? (
+          <>
+            {/* Reply composer */}
+            <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
-        {/* Chat input */}
-        <View style={{ position: 'relative' }}>
-          <MentionAutocomplete
-            text={input}
-            selection={selection}
-            scope="globe"
-            contextId={roomSlug}
-            onSelect={(newText, newCursor) => {
-              setInput(newText);
-              setSelection({ start: newCursor, end: newCursor });
-            }}
-          />
-          <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
-            {!isAgeGated && (
-              <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
-            )}
-            {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-            <View
-              style={[
-                styles.inputWrap,
-                {
-                  backgroundColor: colors.surfaceGlass,
-                  borderColor: colors.border,
-                  opacity: isAgeGated ? 0.5 : 1,
-                },
-              ]}
-            >
-              <MentionTextInput
-                style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-                placeholder={
-                  isAgeGated
-                    ? `You can post in ${ageGateHours} hour${ageGateHours !== 1 ? 's' : ''}`
-                    : 'Message...'
-                }
-                placeholderTextColor={colors.textMuted}
-                value={input}
-                onChangeText={handleInputChange}
+            {/* Chat input */}
+            <View style={{ position: 'relative' }}>
+              <MentionAutocomplete
+                text={input}
                 selection={selection}
-                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                editable={!isAgeGated}
-                multiline
-                maxLength={2000}
-                onSubmitEditing={handleSend}
+                scope="globe"
+                contextId={roomSlug}
+                onSelect={(newText, newCursor) => {
+                  setInput(newText);
+                  setSelection({ start: newCursor, end: newCursor });
+                }}
               />
+              <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+                {!isAgeGated && (
+                  <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                )}
+                {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    {
+                      backgroundColor: colors.surfaceGlass,
+                      borderColor: colors.border,
+                      opacity: isAgeGated ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <MentionTextInput
+                    style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                    placeholder={
+                      isAgeGated
+                        ? `You can post in ${ageGateHours} hour${ageGateHours !== 1 ? 's' : ''}`
+                        : 'Message...'
+                    }
+                    placeholderTextColor={colors.textMuted}
+                    value={input}
+                    onChangeText={handleInputChange}
+                    selection={selection}
+                    onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                    editable={!isAgeGated}
+                    multiline
+                    maxLength={2000}
+                    onSubmitEditing={handleSend}
+                  />
+                </View>
+                <Pressable
+                  onPress={handleSend}
+                  disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
+                  style={({ pressed }) => [
+                    { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={[...COLORS.gradientPrimary]}
+                    style={styles.sendButton}
+                  >
+                    <SendIcon />
+                  </LinearGradient>
+                </Pressable>
+              </View>
             </View>
-            <Pressable
-              onPress={handleSend}
-              disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
-              style={({ pressed }) => [
-                { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
-              ]}
+          </>
+        ) : (
+          <View style={[styles.joinChatBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+            <TouchableOpacity
+              style={[styles.joinChatButton, { backgroundColor: COLORS.primary, opacity: isJoining ? 0.6 : 1 }]}
+              onPress={handleJoin}
+              disabled={isJoining}
+              activeOpacity={0.85}
             >
-              <LinearGradient
-                colors={[...COLORS.gradientPrimary]}
-                style={styles.sendButton}
-              >
-                <SendIcon />
-              </LinearGradient>
-            </Pressable>
+              {isJoining ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.joinChatButtonText}>Join Chat</Text>
+              )}
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
 
         {/* Context menu */}
         <ContextMenu
@@ -865,9 +917,11 @@ interface CustomHeaderProps {
   colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
   insetsTop: number;
   backLabel?: string;
+  // Phase 11 D-12: room description subtitle (rendered for both member and non-member).
+  description?: string | null;
 }
 
-function CustomHeader({ title, participantCount, onBack, colors, insetsTop, backLabel = 'Globe' }: CustomHeaderProps) {
+function CustomHeader({ title, participantCount, onBack, colors, insetsTop, backLabel = 'Globe', description }: CustomHeaderProps) {
   return (
     <View
       style={[
@@ -894,6 +948,12 @@ function CustomHeader({ title, participantCount, onBack, colors, insetsTop, back
       </Pressable>
       <View style={styles.headerTitleWrap} pointerEvents="none">
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+        {/* Phase 11 D-12: description subtitle (room metadata — visible for members and non-members). */}
+        {!!description && (
+          <Text style={[styles.headerSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
+            {description}
+          </Text>
+        )}
       </View>
       <View style={[styles.headerParticipants, { backgroundColor: colors.surfaceGlass }, SHADOWS.sm]}>
         <View style={[styles.participantDot, { backgroundColor: COLORS.secondary }]} />
@@ -1061,5 +1121,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.md,
+  },
+  // Phase 11 D-12: description subtitle in the inline custom header.
+  headerSubtitle: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    marginTop: 1,
+  },
+  // Phase 11 D-12: join CTA bar replacing the composer for non-members.
+  joinChatBar: {
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+  },
+  joinChatButton: {
+    height: 48,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.md,
+  },
+  joinChatButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: FONTS.semiBold,
   },
 });
