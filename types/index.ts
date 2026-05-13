@@ -221,3 +221,44 @@ export type ChatsRow =
 export interface ChatsListResponse {
   rows: ChatsRow[];
 }
+
+// ── Phase 10: Notification Consolidation ──────────────────────────────────
+// Loose mirror of tribelife-backend/src/types/chatNotification.ts
+// ChatNotificationPayload (no shared types package — keep in sync manually
+// per CONTEXT.md canonical_refs convention, mirroring the Phase 8
+// CapsInvalidatedReason + Phase 9 ChatsRow pattern).
+//
+// Discriminator: `source`. The `entityId` field is the canonical row
+// identity from /api/chats — conversationId for DM/group, roomSlug for
+// globe_room, timezoneIana for local_chat. Lets the tap-router +
+// store-applier share one key path.
+
+export interface ChatNotificationCommon {
+  notificationId: number;
+  title: string;
+  body: string;
+  senderHandle: string;
+}
+
+export type ChatNotification =
+  | (ChatNotificationCommon & {
+      source: 'dm';
+      entityId: number;
+      conversationId: number;
+    })
+  | (ChatNotificationCommon & {
+      source: 'group';
+      entityId: number;
+      conversationId: number;
+      groupName?: string;
+    })
+  | (ChatNotificationCommon & {
+      source: 'globe_room';
+      entityId: string;
+      roomSlug: string;
+    })
+  | (ChatNotificationCommon & {
+      source: 'local_chat';
+      entityId: string;
+      timezoneIana: string;
+    });

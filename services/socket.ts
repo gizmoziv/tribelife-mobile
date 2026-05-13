@@ -138,6 +138,14 @@ export function onNotification(cb: (notif: unknown) => void): () => void {
   return () => socket?.off('notification:new', cb);
 }
 
+// Phase 10 D-03: chat-type notifications fan to `chat:notification` (replaces
+// the per-source `notification:new` emits in the backend socket handlers).
+// Mirror of onNotification — same singleton socket, same cleanup pattern.
+export function onChatNotification(cb: (n: unknown) => void): () => void {
+  socket?.on('chat:notification', cb);
+  return () => socket?.off('chat:notification', cb);
+}
+
 export function onNewsAvailable(cb: (data: { count: number }) => void): () => void {
   socket?.on('news:new', cb);
   return () => socket?.off('news:new', cb);
