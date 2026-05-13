@@ -248,9 +248,10 @@ function ChatsListRow({
       router.push('/(app)/chat/town-square');
       return;
     }
-    // Phase 11 D-04: joined regional Globe room → existing chat screen.
+    // Phase 11 D-13: joined regional Globe room → Chats-stack mirror so
+    // back-press returns to the Chats list (not the Community tab).
     if (row.type === 'globe_room') {
-      router.push('/(app)/globe/' + row.roomSlug);
+      router.push('/(app)/chat/regional/' + row.roomSlug);
       return;
     }
     // DM and Group rows route to the existing conversation screen.
