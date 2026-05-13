@@ -279,13 +279,13 @@ export default function AppLayout() {
       <Tabs.Screen
         name="globe"
         options={{
-          title: 'Globe',
+          title: 'Community',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="globe" color={color} focused={focused} />
+            <GradientTabIcon icon="community" color={color} focused={focused} />
           ),
           tabBarBadge: totalUnread > 0 ? '' : undefined,
           tabBarBadgeStyle: dotBadgeStyle,
-          headerTitle: 'Globe',
+          headerTitle: 'Community',
         }}
       />
       <Tabs.Screen
