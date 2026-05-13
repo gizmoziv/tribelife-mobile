@@ -181,6 +181,7 @@ function chatsRowTitle(row: ChatsRow): string {
     case 'town_square': return 'Town Square';
     case 'dm': return '@' + row.partner.handle;
     case 'group': return row.name;
+    case 'globe_room': return row.displayName;
   }
 }
 
@@ -221,6 +222,7 @@ function chatsRowKey(row: ChatsRow): string {
     case 'town_square': return 'town_square';
     case 'dm': return 'dm-' + row.conversationId;
     case 'group': return 'group-' + row.conversationId;
+    case 'globe_room': return 'globe_room-' + row.roomSlug;
   }
 }
 
@@ -244,6 +246,11 @@ function ChatsListRow({
       // Town Square lives in the Chats stack so back-navigation returns here,
       // not to the Globe tab. See chat/town-square.tsx.
       router.push('/(app)/chat/town-square');
+      return;
+    }
+    // Phase 11 D-04: joined regional Globe room → existing chat screen.
+    if (row.type === 'globe_room') {
+      router.push('/(app)/globe/' + row.roomSlug);
       return;
     }
     // DM and Group rows route to the existing conversation screen.
@@ -280,6 +287,15 @@ function ChatsListRow({
     );
     title = 'Town Square';
     subtitle = row.lastMessage?.preview ?? 'A global space';
+  } else if (row.type === 'globe_room') {
+    leadingIcon = (
+      <View style={[styles.roomIconContainer, { backgroundColor: COLORS.primary }]}>
+        <GlobeIconLarge color="#FFF" />
+      </View>
+    );
+    title = row.displayName;
+    subtitle = row.lastMessage?.preview ?? 'Regional community';
+    // showLock stays `false` — Globe rooms aren't private (Phase 9 D-05 only applies to groups).
   } else if (row.type === 'dm') {
     leadingIcon = (
       <AvatarCircle
