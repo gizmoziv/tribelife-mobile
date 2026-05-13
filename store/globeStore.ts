@@ -13,6 +13,11 @@ interface GlobeState {
   hasMoreMessages: boolean;
   unreadCounts: Record<string, number>;
   totalUnread: number;
+  // Phase 11 D-11: per-slug membership map. Source = Plan 11-01 server response
+  // (`/api/globe/rooms` `isMember` field). Setters called from:
+  //   - globe/index.tsx mount (setMembershipMap once after rooms fetch)
+  //   - globe/preview/[slug].tsx join success (setIsMember(slug, true)) — Plan 11-03
+  isMember: Record<string, boolean>;
 
   setRooms: (rooms: GlobeRoom[]) => void;
   setActiveRoom: (slug: string | null) => void;
@@ -29,6 +34,9 @@ interface GlobeState {
   setUnreadCounts: (counts: Record<string, number>) => void;
   markRoomRead: (slug: string) => void;
   incrementUnread: (slug: string) => void;
+  // Phase 11 D-11 setters:
+  setIsMember: (slug: string, value: boolean) => void;
+  setMembershipMap: (map: Record<string, boolean>) => void;
 }
 
 export const useGlobeStore = create<GlobeState>((set) => ({
@@ -43,6 +51,7 @@ export const useGlobeStore = create<GlobeState>((set) => ({
   hasMoreMessages: true,
   unreadCounts: {},
   totalUnread: 0,
+  isMember: {},
 
   setRooms: (rooms) => set({ rooms }),
 
@@ -121,4 +130,10 @@ export const useGlobeStore = create<GlobeState>((set) => ({
       totalUnread: Object.values(next).reduce((sum, c) => sum + c, 0),
     };
   }),
+
+  setIsMember: (slug, value) => set((state) => ({
+    isMember: { ...state.isMember, [slug]: value },
+  })),
+
+  setMembershipMap: (map) => set({ isMember: map }),
 }));
