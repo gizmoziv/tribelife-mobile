@@ -356,6 +356,19 @@ export const globeApi = {
 
   markAllRead: () =>
     request<{ ok: true }>('/api/globe/rooms/mark-all-read', { method: 'PUT' }),
+
+  // Phase 11 D-05: explicit join/leave for non-Town-Square regional rooms.
+  // Town Square stays auto-joined (Phase 7 D-04) — backend rejects DELETE
+  // with HTTP 422 + { error: 'Cannot leave an auto-join community' }.
+  join: (slug: string) =>
+    request<{ ok: true; isMember: true }>(`/api/globe/rooms/${slug}/join`, {
+      method: 'POST',
+    }),
+
+  leave: (slug: string) =>
+    request<{ ok: true; isMember: false }>(`/api/globe/rooms/${slug}/join`, {
+      method: 'DELETE',
+    }),
 };
 
 // ── Organizations ──────────────────────────────────────────────────────────
