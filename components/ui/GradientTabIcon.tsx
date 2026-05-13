@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient as SvgGradient, Stop, Path, Circle } from 're
 
 interface GradientTabIconProps {
   focused: boolean;
-  icon: 'chat' | 'globe' | 'beacon' | 'news' | 'profile';
+  icon: 'chat' | 'globe' | 'beacon' | 'news' | 'profile' | 'community';
   color: string;
   size?: number;
 }
@@ -101,18 +101,13 @@ function BeaconFlameWrapper({ size, children }: { size: number; children: React.
 
 function renderPaths(icon: string, color: string) {
   switch (icon) {
-    case 'chat':
-      return <ChatPaths color={color} />;
-    case 'globe':
-      return <GlobePaths color={color} />;
-    case 'beacon':
-      return <BeaconPaths color={color} />;
-    case 'news':
-      return <NewsPaths color={color} />;
-    case 'profile':
-      return <ProfilePaths color={color} />;
-    default:
-      return null;
+    case 'chat':      return <ChatPaths color={color} />;
+    case 'globe':     return <GlobePaths color={color} />;
+    case 'beacon':    return <BeaconPaths color={color} />;
+    case 'news':      return <NewsPaths color={color} />;
+    case 'profile':   return <ProfilePaths color={color} />;
+    case 'community': return <CommunityPaths color={color} />;
+    default:          return null;
   }
 }
 
@@ -188,6 +183,38 @@ function ProfilePaths({ color }: { color: string }) {
         d="M20 21a8 8 0 1 0-16 0"
         stroke={color}
         strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </>
+  );
+}
+
+function CommunityPaths({ color }: { color: string }) {
+  // Three-figure community silhouette: one central larger figure, two smaller
+  // flanking figures. 24×24 viewBox to match every other icon. Mirrors the
+  // stroked outline + filled circle-head convention of ProfilePaths so the
+  // gradient fill renders consistently when the tab is focused.
+  return (
+    <>
+      <Circle cx="12" cy="7" r="3" stroke={color} strokeWidth="2" />
+      <Path
+        d="M18 21a6 6 0 1 0-12 0"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <Circle cx="5" cy="9" r="2" stroke={color} strokeWidth="1.6" />
+      <Path
+        d="M1.5 20a3.5 3.5 0 0 1 7 0"
+        stroke={color}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      <Circle cx="19" cy="9" r="2" stroke={color} strokeWidth="1.6" />
+      <Path
+        d="M15.5 20a3.5 3.5 0 0 1 7 0"
+        stroke={color}
+        strokeWidth="1.6"
         strokeLinecap="round"
       />
     </>
