@@ -4,8 +4,8 @@ import { chats } from '@/services/api';
 
 // ── Phase 10: useChatsStore ─────────────────────────────────────────────
 // Single source of truth for the Chats screen rows + per-row unread counts
-// (per 10-CONTEXT.md D-07). Replaces useChatUnreadStore + useLocalChatUnreadStore
-// + the Chats-tab read of useGlobeStore.unreadCounts['town-square'].
+// (per 10-CONTEXT.md D-07). Single source of truth replacing the legacy per-source
+// stores + the Chats-tab read of useGlobeStore.unreadCounts['town-square'].
 //
 // Hydration: `hydrate()` fetches GET /api/chats (Phase 9 endpoint) and
 // replaces `rows`. Called on Chats screen mount, pull-to-refresh, AppState

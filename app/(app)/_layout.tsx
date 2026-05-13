@@ -13,12 +13,11 @@ import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore, selectBellCount } from '@/store/notificationStore';
 import { useGlobeStore } from '@/store/globeStore';
-import { useChatUnreadStore } from '@/store/chatUnreadStore';
-import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
+import { useChatsStore, selectChatsHasUnread } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import { useTheme } from '@/contexts/ThemeContext';
-import { notificationsApi, globeApi, chat } from '@/services/api';
+import { notificationsApi, globeApi } from '@/services/api';
 import { getSocket, connectSocket } from '@/services/socket';
 import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
 import { COLORS, FONTS, SHADOWS, RADIUS, SPACING } from '@/constants';
@@ -82,13 +81,11 @@ export default function AppLayout() {
     Notifications.setBadgeCountAsync(bellCount).catch(() => {});
   }, [bellCount]);
   const { totalUnread, setUnreadCounts } = useGlobeStore();
-  const chatTotalUnread = useChatUnreadStore((s) => s.totalUnread);
-  const localChatUnread = useLocalChatUnreadStore((s) => s.unread);
-  // Phase 9 D-10 + Pitfall 4: include ONLY the bare 'town-square' slug, NOT
-  // useGlobeStore.totalUnread (which would double-count Town Square because
-  // totalUnread sums every globe room including town-square).
-  const townSquareUnread = useGlobeStore((s) => s.unreadCounts['town-square'] ?? 0);
-  const chatsTabBadge = chatTotalUnread + localChatUnread + townSquareUnread;
+  // Phase 10 D-07: Chats tab badge is now derived from useChatsStore alone.
+  // The selector returns true if ANY row has unreadCount > 0. The legacy
+  // 3-way badge (DM total + local chat + town-square slot) is collapsed to
+  // one selector — single source of truth for chat unread.
+  const chatsHasUnread = useChatsStore(selectChatsHasUnread);
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -140,74 +137,6 @@ export default function AppLayout() {
       if (socketReconnectHandler) {
         const socket = getSocket();
         socket?.io.off('reconnect', socketReconnectHandler);
-      }
-    };
-  }, []);
-
-  // Keep the Chat tab aggregate badge in sync with server unread. This must
-  // live in the tab layout (not the chat list screen) because the user may
-  // be on another tab when a DM arrives — the chat list screen's own refetch
-  // wouldn't run, and the badge would stay stale until they switched tabs.
-  useEffect(() => {
-    const refetchChatUnread = () => {
-      chat.getConversations()
-        .then(({ conversations }) => {
-          const total = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
-          useChatUnreadStore.getState().setTotalUnread(total);
-        })
-        .catch(() => {});
-    };
-
-    refetchChatUnread();
-
-    const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refetchChatUnread();
-    });
-
-    let cleanupSocket: (() => void) | null = null;
-    connectSocket().then(() => {
-      const socket = getSocket();
-      if (!socket) return;
-      const onDm = () => refetchChatUnread();
-      const onReconnect = () => refetchChatUnread();
-      socket.on('dm:message', onDm);
-      socket.on('notification:new', onDm);
-      socket.io.on('reconnect', onReconnect);
-      cleanupSocket = () => {
-        socket.off('dm:message', onDm);
-        socket.off('notification:new', onDm);
-        socket.io.off('reconnect', onReconnect);
-      };
-    });
-
-    return () => {
-      appStateSub.remove();
-      cleanupSocket?.();
-    };
-  }, []);
-
-  // Local (timezone) chat unread fan-out. Every user auto-joins their
-  // timezone socket room on connect, so `room:message` already reaches them
-  // regardless of which tab they're on — we just need to translate that into
-  // a bubble on the Chat tab when they aren't actively viewing Local Chat.
-  useEffect(() => {
-    let handler: ((msg: { senderId?: number; roomId?: string }) => void) | null = null;
-    connectSocket().then(() => {
-      const socket = getSocket();
-      if (!socket) return;
-      handler = (msg) => {
-        const currentUserId = useAuthStore.getState().user?.id;
-        if (msg.senderId === currentUserId) return;
-        const ctx = useForegroundContextStore.getState().context;
-        if (ctx.type === 'localChat') return;
-        useLocalChatUnreadStore.getState().increment();
-      };
-      socket.on('room:message', handler);
-    });
-    return () => {
-      if (handler) {
-        const socket = getSocket();
-        socket?.off('room:message', handler);
       }
     };
   }, []);
@@ -334,7 +263,7 @@ export default function AppLayout() {
           tabBarIcon: ({ color, focused }) => (
             <GradientTabIcon icon="chat" color={color} focused={focused} />
           ),
-          tabBarBadge: chatsTabBadge > 0 ? '' : undefined,
+          tabBarBadge: chatsHasUnread ? '' : undefined,
           tabBarBadgeStyle: dotBadgeStyle,
           headerTitle: 'Chats',
         }}

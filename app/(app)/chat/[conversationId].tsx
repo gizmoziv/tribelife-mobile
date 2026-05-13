@@ -27,6 +27,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { chat, moderationApi, reactionsApi, notificationsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
+import { useChatsStore } from '@/store/chatsStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -254,6 +255,22 @@ export default function DMThreadScreen() {
       })
       .catch(() => { /* silent — bell will recover on next list refetch */ });
   }, [conversationId]);
+
+  // Phase 10 D-07: optimistic clear of the matching Chats row's unread +
+  // register this screen as currently-viewing (suppresses bump on incoming
+  // chat:notification for this conversation).
+  useEffect(() => {
+    if (!Number.isFinite(conversationId)) return;
+    const rowType: 'dm' | 'group' = isGroup ? 'group' : 'dm';
+    useChatsStore.getState().clearRowUnread({ type: rowType, conversationId });
+    useChatsStore.getState().setCurrentlyViewing(conversationId);
+    return () => {
+      const viewing = useChatsStore.getState().currentlyViewing;
+      if (viewing === conversationId) {
+        useChatsStore.getState().setCurrentlyViewing(null);
+      }
+    };
+  }, [conversationId, isGroup]);
 
   useEffect(() => {
     chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {

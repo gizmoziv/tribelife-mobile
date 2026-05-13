@@ -27,6 +27,7 @@ import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
+import { useChatsStore } from '@/store/chatsStore';
 import { chat, globeApi, notificationsApi, reactionsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -216,6 +217,14 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
     globeApi.markRead(roomSlug).catch(() => {});
     markRoomRead(roomSlug);
 
+    // Phase 10 D-07: only Town Square is in the Chats list. Optimistic
+    // clear of the Town Square row's unread + register currentlyViewing
+    // so live chat:notifications don't bump while we're reading.
+    if (roomSlug === 'town-square') {
+      useChatsStore.getState().clearRowUnread({ type: 'town_square', roomSlug });
+      useChatsStore.getState().setCurrentlyViewing('town-square');
+    }
+
     // Clear mention notifications scoped to this Globe room so the bell +
     // summary don't keep counting an @-mention the user has now seen.
     notificationsApi
@@ -308,6 +317,12 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
     socket?.on('connect', handleReconnect);
 
     return () => {
+      if (roomSlug === 'town-square') {
+        const viewing = useChatsStore.getState().currentlyViewing;
+        if (viewing === 'town-square') {
+          useChatsStore.getState().setCurrentlyViewing(null);
+        }
+      }
       offMessage();
       offParticipants();
       offTyping();

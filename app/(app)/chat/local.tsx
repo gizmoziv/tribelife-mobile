@@ -25,7 +25,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi, notificationsApi, chats } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
-import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
+import { useChatsStore } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
@@ -174,14 +174,23 @@ export default function LocalChatScreen() {
   useFocusEffect(
     useCallback(() => {
       useForegroundContextStore.getState().setContext({ type: 'localChat' });
-      useLocalChatUnreadStore.getState().reset();
+      // Phase 10 D-07: optimistic clear of the Local Chat row's unread +
+      // mark this screen as currently-viewing so live chat:notifications
+      // don't bump.
+      const tz = user?.timezone ?? 'UTC';
+      useChatsStore.getState().clearRowUnread({ type: 'local_chat', timezoneIana: tz });
+      useChatsStore.getState().setCurrentlyViewing(tz);
       return () => {
         const ctx = useForegroundContextStore.getState().context;
         if (ctx.type === 'localChat') {
           useForegroundContextStore.getState().setContext({ type: 'none' });
         }
+        const viewing = useChatsStore.getState().currentlyViewing;
+        if (viewing === tz) {
+          useChatsStore.getState().setCurrentlyViewing(null);
+        }
       };
-    }, [])
+    }, [user?.timezone])
   );
 
   useEffect(() => {

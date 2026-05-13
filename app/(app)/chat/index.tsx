@@ -28,8 +28,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi, groupsApi, notificationsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
-import { useChatUnreadStore } from '@/store/chatUnreadStore';
-import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
+import { useChatsStore } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,7 +52,6 @@ import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { ChatsRow } from '@/types';
-import { chats } from '@/services/api';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -86,22 +84,21 @@ function GlobeIcon() {
 
 export default function ChatsScreen() {
   const { colors } = useTheme();
-  const [rows, setRows] = useState<ChatsRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Phase 10 D-07: useChatsStore is the single source of truth for the
+  // Chats screen rows + per-row unread counts. Replace the local
+  // useState fetch with a Zustand subscription.
+  const rows = useChatsStore((s) => s.rows);
+  const isLoading = useChatsStore((s) => s.loading);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
 
-  // Initial fetch + refetch on focus (so reads from inside a DM/group/room
-  // pop the user back here with fresh unreadCount=0 on that row).
+  // Hydrate on focus (so reads from inside a DM/group/room pop the user
+  // back here with fresh server-authoritative unreadCount). The store's
+  // _hydrating flag dedupes concurrent calls.
   useFocusEffect(
     useCallback(() => {
-      chats.list()
-        .then(({ rows: r }) => {
-          setRows(r);
-          setIsLoading(false);
-        })
-        .catch(() => setIsLoading(false));
+      useChatsStore.getState().hydrate();
     }, []),
   );
 
@@ -431,7 +428,7 @@ function LocalChatPanel() {
   useFocusEffect(
     useCallback(() => {
       useForegroundContextStore.getState().setContext({ type: 'localChat' });
-      useLocalChatUnreadStore.getState().reset();
+      // Phase 10: unread reset handled by useChatsStore in chat/local.tsx
       return () => {
         const ctx = useForegroundContextStore.getState().context;
         if (ctx.type === 'localChat') {
@@ -1020,12 +1017,6 @@ function DMListPanel() {
     });
     return () => { offDm(); };
   }, []);
-
-  // Keep the Chat-tab aggregate badge in sync with the per-row unread counts.
-  useEffect(() => {
-    const total = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
-    useChatUnreadStore.getState().setTotalUnread(total);
-  }, [conversations]);
 
   const handleHideConversation = useCallback(async (conversationId: number) => {
     // Optimistic UI: remove from list immediately

@@ -23,7 +23,10 @@ import { useAuthStore } from '@/store/authStore';
 import { auth, getToken, notificationsApi } from '@/services/api';
 import { connectSocket } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
-import { onNotification } from '@/services/socket';
+import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDirectMessage } from '@/services/socket';
+import { useChatsStore } from '@/store/chatsStore';
+import { adaptChatNotification } from '@/services/chatNotificationAdapter';
+import { routeChatNotificationTap } from '@/services/notificationRouting';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
 import { checkVersion, type VersionCheckResult } from '@/services/version';
 import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
@@ -141,12 +144,44 @@ function RootLayoutInner() {
           // unread count, then refetch the authoritative per-type summary so
           // the bell badge (events, not messages) updates without waiting for
           // the next foreground/reconnect poll.
-          const cleanup = onNotification(() => {
+          // Phase 10 D-08: defensive — a legacy server pod (or stale socket
+          // connection) might still emit notification:new for chat types during a
+          // rolling deploy. Adapt + feed useChatsStore so Chats badges stay correct.
+          const cleanup = onNotification((raw) => {
             incrementUnread();
             notificationsApi
               .summary()
               .then((s) => useNotificationStore.getState().setSummary(s))
               .catch(() => {});
+            const adapted = adaptChatNotification(raw);
+            if (adapted) {
+              useChatsStore.getState().applyChatNotification(adapted);
+            }
+          });
+
+          // Phase 10 D-03: chat:notification listener feeds useChatsStore +
+          // triggers bell summary refresh.
+          const cleanupChatNotif = onChatNotification((raw) => {
+            const adapted = adaptChatNotification(raw);
+            if (adapted) {
+              useChatsStore.getState().applyChatNotification(adapted);
+            }
+            notificationsApi
+              .summary()
+              .then((s) => useNotificationStore.getState().setSummary(s))
+              .catch(() => {});
+          });
+
+          // Phase 10 D-09: per-source message events drive `lastMessage` updates
+          // on the Chats rows (the unread bump lives on chat:notification).
+          const cleanupRoomMsg = onRoomMessage((msg) => {
+            useChatsStore.getState().applyRoomMessage(msg as never);
+          });
+          const cleanupGlobeMsg = onGlobeMessage((msg) => {
+            useChatsStore.getState().applyGlobeMessage(msg as never);
+          });
+          const cleanupDmMsg = onDirectMessage((msg) => {
+            useChatsStore.getState().applyDmMessage(msg as never);
           });
 
           // Handle cold-start notification (app was killed, user tapped notification)
@@ -161,22 +196,12 @@ function RootLayoutInner() {
               markOneRead(notifId);
               notificationsApi.read(notifId).catch(() => {});
             }
-            if (nData?.type === 'new_dm' && nData?.conversationId) {
-              // navigate (not push) so that if the user was already viewing
-              // this conversation when the notification fired, we reuse that
-              // screen instance instead of stacking a duplicate — otherwise
-              // tapping "back" pops to the original and renders both the tab
-              // header and the stack header at once.
-              setTimeout(() => router.navigate({
-                pathname: '/(app)/chat/[conversationId]',
-                params: {
-                  conversationId: String(nData.conversationId),
-                  ...(nData.senderHandle ? { handle: String(nData.senderHandle) } : {}),
-                  ...(nData.isGroup ? { isGroup: 'true', groupName: String(nData.groupName ?? '') } : {}),
-                },
-              }), 500);
-            } else if (nData?.type === 'mention' && nData?.roomId) {
-              setTimeout(() => router.push('/(app)/chat'), 500);
+            // Phase 10 D-04 + D-05: adapter handles both new (data.type === 'chat')
+            // and legacy (data.type === 'mention'|'new_dm' without data.source)
+            // chat shapes. Non-chat types fall through to their existing branches.
+            const adapted = adaptChatNotification(nData);
+            if (adapted) {
+              setTimeout(() => routeChatNotificationTap(adapted, router), 500);
             } else if (nData?.type === 'beacon_match') {
               setTimeout(() => router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } }), 500);
             } else if (nData?.type === 'news_breaking') {
@@ -192,7 +217,13 @@ function RootLayoutInner() {
             }
           }
 
-          return cleanup;
+          return () => {
+            cleanup?.();
+            cleanupChatNotif?.();
+            cleanupRoomMsg?.();
+            cleanupGlobeMsg?.();
+            cleanupDmMsg?.();
+          };
         }
       } catch {
         // Token expired or invalid — user will be shown auth screen
@@ -229,7 +260,7 @@ function RootLayoutInner() {
   useEffect(() => {
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data;
-      // Auto-mark-as-read the tapped notification (industry standard: WhatsApp/iMessage)
+      // Auto-mark-as-read the tapped notification
       const notifId = typeof data?.notificationId === 'number'
         ? data.notificationId
         : Number(data?.notificationId);
@@ -237,21 +268,13 @@ function RootLayoutInner() {
         markOneRead(notifId);
         notificationsApi.read(notifId).catch(() => {});
       }
-      if (data?.type === 'mention' && data?.roomId) {
-        router.push('/(app)/chat');
-      } else if (data?.type === 'new_dm' && data?.conversationId) {
-        // See cold-start handler above: navigate reuses an existing chat
-        // instance in history if one is already open for this conversation,
-        // preventing duplicate header/keyboard glitches on back-tap.
-        router.navigate({
-          pathname: '/(app)/chat/[conversationId]',
-          params: {
-            conversationId: String(data.conversationId),
-            ...(data.senderHandle ? { handle: String(data.senderHandle) } : {}),
-            ...(data.isGroup ? { isGroup: 'true', groupName: String(data.groupName ?? '') } : {}),
-          },
-        });
-      } else if (data?.type === 'beacon_match') {
+      // Phase 10 D-04 + D-05: adapter handles new + legacy chat shapes.
+      const adapted = adaptChatNotification(data);
+      if (adapted) {
+        routeChatNotificationTap(adapted, router);
+        return;
+      }
+      if (data?.type === 'beacon_match') {
         router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
       } else if (data?.type === 'news_breaking') {
         router.push({
@@ -295,6 +318,10 @@ function RootLayoutInner() {
       // independently so neither blocks the other.
       if (useAuthStore.getState().isAuthenticated) {
         useAuthStore.getState().refreshSession();
+        // Phase 10 D-07: foreground re-fetch of /api/chats reconciles drift
+        // from missed socket events while backgrounded. Store-internal
+        // _hydrating flag dedupes rapid AppState toggles.
+        useChatsStore.getState().hydrate();
       }
       // Phase 6 / D-09 — re-run version check on every foreground transition.
       // If the operator bumped the floor while the app was backgrounded, the

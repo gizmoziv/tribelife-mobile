@@ -11,8 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useNotificationStore, selectBellCount } from '@/store/notificationStore';
-import { useChatUnreadStore } from '@/store/chatUnreadStore';
-import { useLocalChatUnreadStore } from '@/store/localChatUnreadStore';
+import { useChatsStore } from '@/store/chatsStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { chat, globeApi, notificationsApi } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
@@ -134,21 +133,14 @@ export default function NotificationsScreen() {
     try {
       const resp = await notificationsApi.readAll(activeTab);
 
-      if (resp.clearedConversationIds.length > 0) {
-        chat.getConversations()
-          .then(({ conversations }) => {
-            const total = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
-            useChatUnreadStore.getState().setTotalUnread(total);
-          })
-          .catch(() => {});
+      if (resp.clearedConversationIds.length > 0 || resp.clearedTimezoneRooms.length > 0) {
+        // Phase 10: useChatsStore owns DM + local_chat unread; re-hydrate to sync.
+        useChatsStore.getState().hydrate();
       }
       if (resp.clearedGlobeSlugs.length > 0) {
         globeApi.unread()
           .then(({ unread }) => useGlobeStore.getState().setUnreadCounts(unread))
           .catch(() => {});
-      }
-      if (resp.clearedTimezoneRooms.length > 0) {
-        useLocalChatUnreadStore.getState().reset();
       }
 
       // Authoritative refresh of per-tab summary (picks up any cross-type
