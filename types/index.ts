@@ -131,6 +131,16 @@ export interface GlobeRoom {
   isGlobal: boolean;
   sortOrder: number;
   welcomeMessage: string;
+  // Phase 11 D-03: server-derived membership flag. Drives the Member-pill
+  // render decision on the Community list AND the read-only-vs-interactive
+  // mode of the chat screen (D-12 supersedes D-08's separate-preview-screen
+  // design — the chat screen itself handles both modes based on isMember).
+  isMember: boolean;
+  // Phase 11 D-03 mirror: `autoJoin=true` rooms (Town Square only in v1.7)
+  // cannot be left — backend rejects DELETE /rooms/:slug/join with HTTP 422.
+  // Mobile mirrors the field for symmetry (no UI consumer in Phase 11; will
+  // gate a future "Leave" affordance).
+  autoJoin: boolean;
 }
 
 export interface GlobeMessage {
@@ -214,6 +224,16 @@ export type ChatsRow =
       name: string;
       iconUrl: string | null;
       memberCount: number;
+      unreadCount: number;
+      lastMessage: ChatsRowLastMessage | null;
+    }
+  // Phase 11 D-04: joined regional Globe room (Town Square stays its own
+  // `town_square` variant — pinned position, gold tint). One row per
+  // non-Town-Square `globe_room_memberships` row the user has.
+  | {
+      type: 'globe_room';
+      roomSlug: string;
+      displayName: string;
       unreadCount: number;
       lastMessage: ChatsRowLastMessage | null;
     };
