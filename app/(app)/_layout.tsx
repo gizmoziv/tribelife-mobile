@@ -159,7 +159,14 @@ export default function AppLayout() {
         }) => void)
       | null = null;
     let signalHandler:
-      | ((sig: { slug?: string; roomId?: string; senderId?: number }) => void)
+      | ((sig: {
+          slug?: string;
+          roomId?: string;
+          senderId?: number;
+          senderHandle?: string;
+          content?: string;
+          createdAt?: string;
+        }) => void)
       | null = null;
     connectSocket().then(() => {
       const socket = getSocket();
@@ -192,6 +199,16 @@ export default function AppLayout() {
       signalHandler = (sig) => {
         const slug = sig.slug ?? sig.roomId?.replace('globe:', '');
         incrementForSlug(slug, sig.senderId);
+        // Update the Chevra discovery tile's lastMessage preview live for
+        // every connected user — including non-members who'd otherwise see
+        // a stale preview frozen at the moment they first loaded /api/globe/rooms.
+        if (slug && sig.senderHandle && sig.content) {
+          useGlobeStore.getState().updateRoomLastMessage(slug, {
+            senderHandle: sig.senderHandle,
+            content: sig.content,
+            createdAt: sig.createdAt ?? new Date().toISOString(),
+          });
+        }
       };
       socket.on('globe:unread-signal', signalHandler);
     });

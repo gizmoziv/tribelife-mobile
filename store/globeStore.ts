@@ -25,6 +25,10 @@ interface GlobeState {
   addMessage: (message: GlobeMessage) => void;
   prependMessages: (messages: GlobeMessage[], hasMore: boolean) => void;
   updateParticipantCount: (slug: string, count: number) => void;
+  updateRoomLastMessage: (
+    slug: string,
+    lastMessage: { senderHandle: string; content: string; createdAt: string },
+  ) => void;
   setTyping: (handle: string, isTyping: boolean) => void;
   setIsAtBottom: (isAtBottom: boolean) => void;
   resetNewMessageCount: () => void;
@@ -78,6 +82,13 @@ export const useGlobeStore = create<GlobeState>((set) => ({
     set((state) => ({
       rooms: state.rooms.map((r) =>
         r.slug === slug ? { ...r, participantCount: count } : r
+      ),
+    })),
+
+  updateRoomLastMessage: (slug, lastMessage) =>
+    set((state) => ({
+      rooms: state.rooms.map((r) =>
+        r.slug === slug ? { ...r, lastMessage } : r,
       ),
     })),
 
