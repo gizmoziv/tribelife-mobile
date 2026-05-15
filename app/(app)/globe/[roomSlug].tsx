@@ -110,10 +110,12 @@ const TYPING_DEBOUNCE_MS = 2000;
 const TYPING_TIMEOUT_MS = 5000;
 const AGE_GATE_HOURS = 24;
 
-// Default export — reads roomSlug from Expo Router params (Globe tab stack).
+// Default export — reads roomSlug from Expo Router params (Chevra tab stack).
+// The Chats-stack mirror at app/(app)/chat/regional/[roomSlug].tsx overrides
+// backLabel="Chats" so back-pill matches the stack the user came from.
 export default function GlobeRoomChat() {
   const { roomSlug } = useLocalSearchParams<{ roomSlug: string }>();
-  return <GlobeRoomScreen slug={roomSlug!} />;
+  return <GlobeRoomScreen slug={roomSlug!} backLabel="Chevra" />;
 }
 
 // Named export — accepts slug as a prop so other tab stacks (e.g. Chats)
@@ -662,7 +664,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
             isMe={isMe}
             onLongPress={effectiveIsMember ? handleLongPress : () => {}}
             onReactionToggle={handleReactionToggle}
-            onProfilePress={() => !isMe && item.senderHandle && router.push(`/user/${item.senderHandle}`)}
+            onProfilePress={effectiveIsMember ? () => !isMe && item.senderHandle && router.push(`/user/${item.senderHandle}`) : () => {}}
             translatedContent={translations[item.id]?.text ?? null}
             showTranslation={translations[item.id]?.showing ?? false}
             onToggleTranslation={handleToggleTranslation}
@@ -753,7 +755,10 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
           ref={flatListRef}
           keyboardDismissMode="on-drag"
           data={messages}
-          extraData={messages}
+          // Include effectiveIsMember so post-Join the membership-gated props
+          // on SwipeableMessage + MessageBubble (long-press, profile press)
+          // re-bind without needing a navigation cycle.
+          extraData={[messages, effectiveIsMember]}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
