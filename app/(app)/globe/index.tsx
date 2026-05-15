@@ -45,11 +45,9 @@ function OnlineDot() {
 // ── Room List Item ──────────────────────────────────────────────────────────
 function RoomListItem({
   room,
-  unreadCount,
   onPress,
 }: {
   room: GlobeRoom;
-  unreadCount: number;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
@@ -99,13 +97,10 @@ function RoomListItem({
                 {room.participantCount}
               </Text>
             </View>
-            {unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
-              </View>
-            )}
+            {/* No unread badge on Chevra discovery rows — the user is by
+                definition NOT a member of any row that renders here (joined
+                rooms are filtered out). Unread for joined rooms surfaces in
+                the Chats tab. */}
           </View>
         </View>
       </GlassCard>
@@ -186,7 +181,6 @@ export default function GlobeScreen() {
     ({ item }: { item: GlobeRoom }) => (
       <RoomListItem
         room={item}
-        unreadCount={unreadCounts[item.slug] ?? 0}
         onPress={() => {
           // Clear locally so the badge disappears before the room screen's
           // markRoomRead call lands (which also clears server-side via read-pos).
