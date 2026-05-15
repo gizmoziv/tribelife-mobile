@@ -146,6 +146,21 @@ export default function AppLayout() {
 
   // Fetch Globe unread counts and listen for real-time globe messages
   useEffect(() => {
+    // Hydrate Globe rooms + membership map on app boot, not just on the
+    // Chevra tab. A user who taps a joined regional row from the Chats tab
+    // without ever visiting Chevra still needs displayName + isMember
+    // resolved — otherwise the chat screen falls back to "Globe Room" and
+    // shows the Join CTA for an actual member.
+    globeApi
+      .rooms()
+      .then(({ rooms }) => {
+        useGlobeStore.getState().setRooms(rooms);
+        useGlobeStore.getState().setMembershipMap(
+          Object.fromEntries(rooms.map((r) => [r.slug, r.isMember])),
+        );
+      })
+      .catch(() => {});
+
     globeApi
       .unread()
       .then(({ unread }) => setUnreadCounts(unread))
