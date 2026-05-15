@@ -124,7 +124,6 @@ export interface PublicProfile {
 export interface GlobeRoom {
   slug: string;
   displayName: string;
-  description: string;
   participantCount: number;
   lastMessage: { content: string; createdAt: string; senderHandle: string } | null;
   isSuggested: boolean;

@@ -700,7 +700,6 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
           colors={colors}
           insetsTop={insets.top}
           backLabel={backLabel}
-          description={room?.description}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
@@ -719,7 +718,6 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
         colors={colors}
         insetsTop={insets.top}
         backLabel={backLabel}
-        description={room?.description}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -922,11 +920,9 @@ interface CustomHeaderProps {
   colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
   insetsTop: number;
   backLabel?: string;
-  // Phase 11 D-12: room description subtitle (rendered for both member and non-member).
-  description?: string | null;
 }
 
-function CustomHeader({ title, participantCount, onBack, colors, insetsTop, backLabel = 'Globe', description }: CustomHeaderProps) {
+function CustomHeader({ title, participantCount, onBack, colors, insetsTop, backLabel = 'Chevra' }: CustomHeaderProps) {
   return (
     <View
       style={[
@@ -953,12 +949,6 @@ function CustomHeader({ title, participantCount, onBack, colors, insetsTop, back
       </Pressable>
       <View style={styles.headerTitleWrap} pointerEvents="none">
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
-        {/* Phase 11 D-12: description subtitle (room metadata — visible for members and non-members). */}
-        {!!description && (
-          <Text style={[styles.headerSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
-            {description}
-          </Text>
-        )}
       </View>
       <View style={[styles.headerParticipants, { backgroundColor: colors.surfaceGlass }, SHADOWS.sm]}>
         <View style={[styles.participantDot, { backgroundColor: COLORS.secondary }]} />
@@ -1126,12 +1116,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.md,
-  },
-  // Phase 11 D-12: description subtitle in the inline custom header.
-  headerSubtitle: {
-    fontSize: 12,
-    fontFamily: FONTS.regular,
-    marginTop: 1,
   },
   // Phase 11 D-12: join CTA bar replacing the composer for non-members.
   joinChatBar: {

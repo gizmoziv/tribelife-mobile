@@ -74,12 +74,6 @@ function RoomListItem({
               {/* Joined rooms are filtered out of Community discovery entirely
                   (see visibleRooms below) — no Member pill needed on this surface. */}
             </View>
-            <Text
-              style={[styles.roomDescription, { color: colors.textMuted }]}
-              numberOfLines={1}
-            >
-              {room.description}
-            </Text>
             {room.lastMessage && (
               <Text
                 style={[styles.lastMessage, { color: colors.textMuted }]}
