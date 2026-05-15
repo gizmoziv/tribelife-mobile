@@ -83,7 +83,7 @@ export default function AppLayout() {
   useEffect(() => {
     Notifications.setBadgeCountAsync(bellCount).catch(() => {});
   }, [bellCount]);
-  const { totalUnread, setUnreadCounts } = useGlobeStore();
+  const { setUnreadCounts } = useGlobeStore();
   // Phase 10 D-07: Chats tab badge is now derived from useChatsStore alone.
   // The selector returns true if ANY row has unreadCount > 0. The legacy
   // 3-way badge (DM total + local chat + town-square slot) is collapsed to
@@ -293,8 +293,9 @@ export default function AppLayout() {
           tabBarIcon: ({ color, focused }) => (
             <GradientTabIcon icon="community" color={color} focused={focused} />
           ),
-          tabBarBadge: totalUnread > 0 ? '' : undefined,
-          tabBarBadgeStyle: dotBadgeStyle,
+          // Chevra is a discovery surface — no unread notifications belong on
+          // this tab. Joined regional rooms surface unread via the Chats tab
+          // (selectChatsHasUnread covers all rows incl. globe_room variants).
           headerTitle: 'Chevra',
         }}
       />
