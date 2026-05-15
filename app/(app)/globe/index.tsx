@@ -201,7 +201,7 @@ export default function GlobeScreen() {
   if (isLoadingRooms) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: 'Community', headerBackTitle: 'Back' }} />
+        <Stack.Screen options={{ title: 'Chevra', headerBackTitle: 'Back' }} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
         </View>

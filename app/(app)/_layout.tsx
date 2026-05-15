@@ -11,7 +11,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '@/store/authStore';
-import { useNotificationStore, selectBellCount } from '@/store/notificationStore';
+import {
+  useNotificationStore,
+  selectBellCount,
+} from '@/store/notificationStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { useChatsStore, selectChatsHasUnread } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
@@ -149,7 +152,11 @@ export default function AppLayout() {
       .catch(() => {});
 
     let messageHandler:
-      | ((msg: { roomSlug?: string; roomId?: string; senderId?: number }) => void)
+      | ((msg: {
+          roomSlug?: string;
+          roomId?: string;
+          senderId?: number;
+        }) => void)
       | null = null;
     let signalHandler:
       | ((sig: { slug?: string; roomId?: string; senderId?: number }) => void)
@@ -158,7 +165,10 @@ export default function AppLayout() {
       const socket = getSocket();
       if (!socket) return;
 
-      const incrementForSlug = (slug: string | undefined, senderId: number | undefined) => {
+      const incrementForSlug = (
+        slug: string | undefined,
+        senderId: number | undefined,
+      ) => {
         if (!slug) return;
         const currentUserId = useAuthStore.getState().user?.id;
         if (senderId === currentUserId) return;
@@ -279,13 +289,13 @@ export default function AppLayout() {
       <Tabs.Screen
         name="globe"
         options={{
-          title: 'Community',
+          title: 'Chevra',
           tabBarIcon: ({ color, focused }) => (
             <GradientTabIcon icon="community" color={color} focused={focused} />
           ),
           tabBarBadge: totalUnread > 0 ? '' : undefined,
           tabBarBadgeStyle: dotBadgeStyle,
-          headerTitle: 'Community',
+          headerTitle: 'Chevra',
         }}
       />
       <Tabs.Screen
