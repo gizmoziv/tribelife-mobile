@@ -432,7 +432,10 @@ export default function CreateGroupScreen() {
   // Server-driven; UI hint only — server enforcement is authoritative.
   const canCreatePrivateGroup = useCapability('canCreatePrivateGroup');
   // Tier-aware default: free tier → Public (only allowed); premium/org_admin → Private (existing mental model).
-  const [isPublic, setIsPublic] = useState(!canCreatePrivateGroup);
+  // CPO: Public is the default for everyone — premium users opt into
+  // Private explicitly. Reverts the earlier tier-aware default that nudged
+  // premium users toward Private out of v1.7 muscle memory.
+  const [isPublic, setIsPublic] = useState(true);
   const scrollRef = React.useRef<ScrollView>(null);
 
   const scrollToForm = () => {
