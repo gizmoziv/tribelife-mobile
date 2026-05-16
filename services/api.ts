@@ -89,10 +89,22 @@ export const auth = {
       { method: 'POST', body: JSON.stringify({ identityToken, fullName, email }) }
     ),
 
-  onboarding: (handle: string, timezone: string, acceptedTerms: boolean, referralCode?: string) =>
+  onboarding: (
+    handle: string,
+    timezone: string,
+    acceptedTerms: boolean,
+    referralCode?: string,
+    attributionSource?: 'handle_code' | 'profile_share' | 'group_invite',
+  ) =>
     request('/api/auth/onboarding', {
       method: 'POST',
-      body: JSON.stringify({ handle, timezone, acceptedTerms, ...(referralCode ? { referralCode } : {}) }),
+      body: JSON.stringify({
+        handle,
+        timezone,
+        acceptedTerms,
+        ...(referralCode ? { referralCode } : {}),
+        ...(attributionSource ? { attributionSource } : {}),
+      }),
     }),
 
   checkHandle: (handle: string) =>

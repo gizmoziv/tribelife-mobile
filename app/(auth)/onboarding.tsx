@@ -110,14 +110,32 @@ export default function OnboardingScreen() {
 
     setIsSubmitting(true);
     try {
-      const referralCode = await AsyncStorage.getItem('referralCode');
-      await auth.onboarding(handle, detectedTimezone, true, referralCode ?? undefined);
+      // Phase 13: read both attribution keys in parallel and pass both to the
+      // backend. Cast `attributionSource` to the typed union — runtime origin
+      // (extractAndStoreAttribution / clipboard recovery / legacy migration)
+      // constrains the value; backend Zod rejects anything outside the enum.
+      const [attributionRef, attributionSource] = await Promise.all([
+        AsyncStorage.getItem('attributionRef'),
+        AsyncStorage.getItem('attributionSource'),
+      ]);
+      await auth.onboarding(
+        handle,
+        detectedTimezone,
+        true,
+        attributionRef ?? undefined,
+        (attributionSource as 'handle_code' | 'profile_share' | 'group_invite' | null) ?? undefined,
+      );
       completeOnboarding({
         handle,
         timezone: detectedTimezone,
         acceptedTermsAt: new Date().toISOString(),
       });
-      await AsyncStorage.removeItem('referralCode');
+      // Clear on success ONLY — failed submits keep both keys so a retry
+      // preserves attribution.
+      await Promise.all([
+        AsyncStorage.removeItem('attributionRef'),
+        AsyncStorage.removeItem('attributionSource'),
+      ]);
       const ctaDismissed = await AsyncStorage.getItem('globe_cta_dismissed');
       if (ctaDismissed === 'true') {
         router.replace('/(app)/beacon');
