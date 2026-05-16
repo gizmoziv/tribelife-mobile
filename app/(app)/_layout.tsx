@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
-import { Tabs, useRouter } from 'expo-router';
-import { StackActions } from '@react-navigation/native';
+import { Tabs, useRouter, usePathname } from 'expo-router';
 import {
   View,
   Text,
@@ -74,6 +73,7 @@ function PlusIcon({ color }: { color: string }) {
 
 export default function AppLayout() {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, needsOnboarding, isLoading } = useAuthStore();
   const { setNotifications, setSummary } = useNotificationStore();
   const bellCount = useNotificationStore(selectBellCount);
@@ -319,21 +319,19 @@ export default function AppLayout() {
           headerTitle: 'Chats',
         }}
         listeners={({ navigation }) => ({
-          // D-07 + Phase 12: re-tap on Chats while focused → pop any nested
-          // screen back to the Chats list, then clear search + scroll to top.
-          // Without the popToTop, tapping Chats from inside a conversation
-          // (DM or group) felt unresponsive because the tab was already
-          // "focused" from the tabs navigator's perspective. We guard on
-          // the inner stack state — dispatching popToTop when the stack
-          // is already at its root errors with
-          // "action 'POP_TO_TOP' was not handled by any navigator".
-          tabPress: () => {
+          // D-07 + Phase 12: tap on Chats while already on this tab should
+          // pop back to the list — but ONLY when the user is currently on
+          // a chat sub-screen (e.g. chat/[conversationId] reached from
+          // user/[handle]). When already on chat/index we fall through to
+          // clearAndScrollToTop without dispatching router.replace, which
+          // would otherwise re-mount the list and re-fire hydrate() on
+          // every harmless tab re-tap.
+          tabPress: (e) => {
             if (!navigation.isFocused()) return;
-            const tabState = navigation.getState();
-            const focusedTab = tabState.routes[tabState.index];
-            const stackRoutes = focusedTab.state?.routes;
-            if (stackRoutes && stackRoutes.length > 1) {
-              navigation.dispatch(StackActions.popToTop());
+            const onSubScreen = !!pathname && pathname.startsWith('/chat/');
+            if (onSubScreen) {
+              e.preventDefault();
+              router.replace('/(app)/chat');
             }
             useChatsListRefStore.getState().clearAndScrollToTop();
           },
