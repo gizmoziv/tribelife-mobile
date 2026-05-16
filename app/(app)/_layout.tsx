@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
+import { StackActions } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -318,9 +319,14 @@ export default function AppLayout() {
           headerTitle: 'Chats',
         }}
         listeners={({ navigation }) => ({
-          // D-07: re-tap on Chats while focused → clear search + scroll list to top
+          // D-07 + Phase 12: re-tap on Chats while focused → pop any nested
+          // screen back to the Chats list, then clear search + scroll to top.
+          // Without the popToTop, tapping Chats from inside a conversation
+          // (DM or group) felt unresponsive because the tab was already
+          // "focused" from the tabs navigator's perspective.
           tabPress: () => {
             if (navigation.isFocused()) {
+              navigation.dispatch(StackActions.popToTop());
               useChatsListRefStore.getState().clearAndScrollToTop();
             }
           },
