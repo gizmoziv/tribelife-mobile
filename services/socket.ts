@@ -151,6 +151,26 @@ export function onNewsAvailable(cb: (data: { count: number }) => void): () => vo
   return () => socket?.off('news:new', cb);
 }
 
+// Phase 12: broadcast emitted when a public, non-archived group receives a
+// new message — Chevra subscribes so its row preview updates without
+// requiring a manual refresh or focus-cycle.
+export type ChevraGroupMessagePayload = {
+  conversationId: number;
+  name: string;
+  iconUrl: string | null;
+  lastMessage: {
+    content: string;
+    createdAt: string;
+    senderHandle: string;
+  };
+};
+export function onChevraGroupMessage(
+  cb: (data: ChevraGroupMessagePayload) => void,
+): () => void {
+  socket?.on('chevra:group-message', cb);
+  return () => socket?.off('chevra:group-message', cb);
+}
+
 export function onMessageRejected(cb: (data: { reason?: string }) => void): () => void {
   socket?.on('message:rejected', cb);
   return () => socket?.off('message:rejected', cb);

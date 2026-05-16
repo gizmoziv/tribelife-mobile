@@ -13,7 +13,7 @@ import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGlobeStore } from '@/store/globeStore';
 import { globeApi } from '@/services/api';
-import { connectSocket, onGlobeParticipants } from '@/services/socket';
+import { connectSocket, onGlobeParticipants, onChevraGroupMessage } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, GLOBE_ROOM_TINTS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -253,6 +253,25 @@ export default function GlobeScreen() {
         updateParticipantCount(slug, count);
       });
       cleanups.push(offParticipants);
+
+      // Phase 12: live last-message preview on Chevra rows.
+      const offChevraMsg = onChevraGroupMessage((payload) => {
+        setPublicGroupRows((prev) => {
+          const idx = prev.findIndex(
+            (r) => r.kind === 'group' && r.conversationId === payload.conversationId,
+          );
+          if (idx === -1) {
+            // Row not yet present — server fetch on next focus will surface it.
+            return prev;
+          }
+          const next = prev.slice();
+          const target = next[idx];
+          if (target.kind !== 'group') return prev;
+          next[idx] = { ...target, lastMessage: payload.lastMessage };
+          return next;
+        });
+      });
+      cleanups.push(offChevraMsg);
     });
 
     return () => { cleanups.forEach(fn => fn()); };
