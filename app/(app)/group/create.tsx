@@ -21,6 +21,7 @@ import { groupsApi } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
+import { PillToggle } from '@/components/ui/PillToggle';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
@@ -293,7 +294,7 @@ export default function CreateGroupScreen() {
     }
     setIsCreating(true);
     try {
-      const { conversation } = await groupsApi.create(trimmedName, slug || undefined);
+      const { conversation } = await groupsApi.create(trimmedName, slug || undefined, isPublic);
       router.replace({
         pathname: '/(app)/chat/[conversationId]',
         params: {
@@ -318,14 +319,12 @@ export default function CreateGroupScreen() {
   };
 
   // Server-driven; UI hint only — server enforcement is authoritative.
-  const canCreateGroup = useCapability('canCreatePrivateGroup');
+  const canCreatePrivateGroup = useCapability('canCreatePrivateGroup');
+  // Tier-aware default: free tier → Public (only allowed); premium/org_admin → Private (existing mental model).
+  const [isPublic, setIsPublic] = useState(!canCreatePrivateGroup);
   const scrollRef = React.useRef<ScrollView>(null);
 
   const scrollToForm = () => {
-    if (!canCreateGroup) {
-      router.push('/(app)/profile');
-      return;
-    }
     scrollRef.current?.scrollToEnd({ animated: true });
   };
 
@@ -345,7 +344,7 @@ export default function CreateGroupScreen() {
             Running a kabbalah study group, volunteer meetup or commercial network? The connections that used to happen organically are now happening digitally in TribeLife.
           </Text>
           <PillButton
-            title={canCreateGroup ? 'Create a Group' : 'Upgrade to Create a Group'}
+            title="Create a Group"
             onPress={scrollToForm}
             variant="primary"
             size="md"
@@ -475,54 +474,7 @@ export default function CreateGroupScreen() {
     </AnimatedEntry>
   );
 
-  // ---------- Non-premium view ----------
-  if (!canCreateGroup) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={goBack} hitSlop={8} style={styles.backButton}>
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-              <Path d="M15 18l-6-6 6-6" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Create Group</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        <ScrollView
-          ref={scrollRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace + SPACING.lg }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {HeroBlock}
-          {LeaderCard}
-          {DifferentSection}
-          {TribeSection}
-          {Tagline}
-
-          <AnimatedEntry delay={420} style={{ marginTop: SPACING.lg }}>
-            <GlassCard glowColor={COLORS.borderGlow}>
-              <View style={styles.formInner}>
-                <Text style={[styles.label, { color: colors.text, textAlign: 'center', fontSize: 16 }]}>
-                  Upgrade to Premium to create private groups
-                </Text>
-                <PillButton
-                  title="Upgrade"
-                  onPress={() => router.push('/(app)/profile')}
-                  variant="primary"
-                  size="lg"
-                  style={{ width: '100%', marginTop: SPACING.lg }}
-                />
-              </View>
-            </GlassCard>
-          </AnimatedEntry>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // ---------- Premium view ----------
+  // ---------- Unified view (free + premium) ----------
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
@@ -555,6 +507,31 @@ export default function CreateGroupScreen() {
           <AnimatedEntry delay={420} style={{ marginTop: SPACING.lg }}>
             <GlassCard>
               <View style={styles.formInner}>
+                <PillToggle
+                  options={['Public', 'Private']}
+                  activeIndex={isPublic ? 0 : 1}
+                  onSelect={(idx) => {
+                    if (idx === 1 && !canCreatePrivateGroup) {
+                      Alert.alert(
+                        'Upgrade to Premium',
+                        'Private groups are a Premium feature. Upgrade to create invite-only groups.',
+                        [
+                          { text: 'Not Now', style: 'cancel' },
+                          { text: 'Upgrade', onPress: () => router.push('/(app)/profile') },
+                        ],
+                      );
+                      return;
+                    }
+                    setIsPublic(idx === 0);
+                  }}
+                  style={{ marginBottom: SPACING.md }}
+                />
+                <Text style={[styles.toggleHint, { color: colors.textMuted }]}>
+                  {isPublic
+                    ? 'Anyone can find and join this group from Chevra.'
+                    : 'Invite only. Members join via the invite link.'}
+                </Text>
+
                 <Text style={[styles.label, { color: colors.text }]}>Group Name</Text>
                 <View style={[styles.inputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <TextInput
@@ -745,6 +722,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'lowercase',
     textDecorationLine: 'underline',
+  },
+
+  // Visibility toggle hint
+  toggleHint: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.md,
+    lineHeight: 16,
   },
 
   // Form
