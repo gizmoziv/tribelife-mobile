@@ -63,6 +63,16 @@
             {
               "scheme": "https",
               "host": "tribelife.app",
+              "pathPrefix": "/u/"
+            },
+            {
+              "scheme": "https",
+              "host": "tribelife.app",
+              "pathPrefix": "/invite"
+            },
+            {
+              "scheme": "https",
+              "host": "tribelife.app",
               "pathPrefix": "/org/"
             },
             {
