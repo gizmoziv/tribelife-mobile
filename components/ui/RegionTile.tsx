@@ -28,11 +28,9 @@ export function RegionTile({ slug, size = 44, showRing = true }: RegionTileProps
   const { isDark, colors } = useTheme();
   const visual = GLOBE_ROOM_VISUALS[slug];
   const abbreviation = visual?.abbreviation ?? '··';
-  const accent = visual?.accent ?? COLORS.primary;
 
   const gradient = isDark ? REGION_TILE_GRADIENT_DARK : REGION_TILE_GRADIENT_LIGHT;
   const labelColor = isDark ? '#FFFFFF' : '#1F2940';
-  const stripeHeight = Math.max(3, Math.round(size * 0.08));
 
   const tile = (
     <LinearGradient
@@ -71,21 +69,6 @@ export function RegionTile({ slug, size = 44, showRing = true }: RegionTileProps
       >
         {abbreviation}
       </Text>
-
-      {/* Accent stripe — thin colored arc anchored to the bottom edge. */}
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          left: size * 0.18,
-          right: size * 0.18,
-          bottom: size * 0.12,
-          height: stripeHeight / 2,
-          borderRadius: stripeHeight,
-          backgroundColor: accent,
-          opacity: 0.85,
-        }}
-      />
     </LinearGradient>
   );
 
