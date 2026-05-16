@@ -313,9 +313,9 @@ export const groupsApi = {
     request<{ groups: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; createdAt: string; role: string; memberCount: number }[] }>(
       '/api/chat/groups'),
 
-  create: (name: string, slug?: string) =>
+  create: (name: string, slug?: string, isPublic = false) =>
     request<{ conversation: { id: number; groupName: string; inviteSlug: string; createdAt: string } }>(
-      '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug }) }),
+      '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug, isPublic }) }),
 
   getInfo: (slug: string) =>
     request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; memberCount: number; isMember: boolean; createdAt: string } }>(
@@ -335,7 +335,7 @@ export const groupsApi = {
     request(`/api/chat/groups/${id}/members/${userId}`, { method: 'DELETE' }),
 
   leave: (id: number) =>
-    request(`/api/chat/groups/${id}/leave`, { method: 'POST' }),
+    request<{ ok: true; archived: boolean }>(`/api/chat/groups/${id}/leave`, { method: 'POST' }),
 };
 
 // ── Globe ──────────────────────────────────────────────────────────────────
