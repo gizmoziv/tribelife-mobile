@@ -107,7 +107,17 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const viewing = get().currentlyViewing;
     const alsoBump = viewing !== n.entityId;
     const lastMessage = { preview: n.body, at: new Date().toISOString() };
-    set((s) => ({ rows: applyToRow(s.rows, n.entityId, lastMessage, alsoBump) }));
+    // If the row already exists, in-place bump (cheap, no network).
+    // If not — e.g. brand-new DM that the recipient hasn't hydrated yet —
+    // applyToRow would silently no-op; trigger a hydrate so the new row
+    // surfaces (and brings the yellow-dot tab badge with it). _hydrating
+    // dedupes rapid back-to-back notifications.
+    const hasMatchingRow = get().rows.some((r) => rowMatchesEntity(r, n.entityId));
+    if (hasMatchingRow) {
+      set((s) => ({ rows: applyToRow(s.rows, n.entityId, lastMessage, alsoBump) }));
+    } else {
+      get().hydrate();
+    }
   },
 
   applyRoomMessage: (msg) => {
