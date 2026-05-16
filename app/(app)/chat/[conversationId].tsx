@@ -66,18 +66,21 @@ function SendIcon() {
 }
 
 export default function DMThreadScreen() {
-  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug, isMember: rawIsMember } = useLocalSearchParams<{
+  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug, isMember: rawIsMember, isArchived: rawIsArchived } = useLocalSearchParams<{
     conversationId: string;
     handle?: string;
     isGroup?: string;
     groupName?: string;
     inviteSlug?: string;
     isMember?: string;
+    isArchived?: string;
   }>();
   const conversationId = parseInt(rawId);
   const isGroup = rawIsGroup === 'true';
   const groupName = rawGroupName ?? '';
   const inviteSlug = rawInviteSlug ?? '';
+  // D-11: archived groups render a read-only archived bar instead of the composer.
+  const isArchived = rawIsArchived === 'true';
   // D-09: default to member when the flag is absent — preserves existing Chats-list tap behavior.
   const initialIsMember = rawIsMember !== 'false';
   const navigation = useNavigation();
@@ -165,11 +168,12 @@ export default function DMThreadScreen() {
 
   useEffect(() => {
     if (isGroup && groupName) {
-      navigation.setOptions({ title: groupName });
+      // D-11: append "[Archived]" indicator to the title when the group is archived.
+      navigation.setOptions({ title: isArchived ? `${groupName} [Archived]` : groupName });
     } else if (handle) {
       navigation.setOptions({ title: `@${handle} & You` });
     }
-  }, [handle, isGroup, groupName]);
+  }, [handle, isGroup, groupName, isArchived]);
 
   useEffect(() => {
     if (isGroup) {
@@ -739,8 +743,16 @@ export default function DMThreadScreen() {
           </View>
         )}
 
-        {/* D-09: Preview mode — non-member public group shows Join CTA; member shows composer. */}
-        {isGroup && !isMember ? (
+        {/* D-11: Archived group — disabled composer, no join CTA (archived is terminal).
+            D-09: Non-member preview — "Join Community" CTA.
+            Default: standard composer for members of healthy groups. */}
+        {isGroup && isArchived ? (
+          <View style={[styles.archivedBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+            <Text style={[styles.archivedBarText, { color: colors.textMuted }]}>
+              This group is archived. No new messages can be sent.
+            </Text>
+          </View>
+        ) : isGroup && !isMember ? (
           <View style={[styles.joinChatBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
             <TouchableOpacity
               style={[styles.joinChatButton, { backgroundColor: COLORS.primary, opacity: isJoining ? 0.6 : 1 }]}
@@ -879,6 +891,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.md,
+  },
+  // D-11: Archived bar — same spacing as joinChatBar but text-only, no button.
+  archivedBar: {
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archivedBarText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
   },
   // D-09: Join CTA bar — mirrors v1.7 Phase 11 D-12 globe/[roomSlug].tsx joinChatBar.
   joinChatBar: {
