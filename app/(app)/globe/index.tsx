@@ -14,10 +14,11 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useGlobeStore } from '@/store/globeStore';
 import { globeApi } from '@/services/api';
 import { connectSocket, onGlobeParticipants, onChevraGroupMessage } from '@/services/socket';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, GLOBE_ROOM_TINTS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import { RegionTile } from '@/components/ui/RegionTile';
 import type { ChevraRow, ChevraListResponse } from '@/types';
 import Svg, { Path, Circle } from 'react-native-svg';
 
@@ -132,16 +133,12 @@ function RoomListItem({
     ? formatRelativeTime(item.lastMessage.createdAt)
     : null;
 
-  const tint = GLOBE_ROOM_TINTS[item.slug] ?? COLORS.primary;
-
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <GlassCard style={styles.roomCard}>
         <View style={styles.roomRow}>
-          <View style={[styles.roomIconContainer, { backgroundColor: tint }]}>
-            <GlobeHeaderIcon color="#FFF" />
-          </View>
-          <View style={styles.roomInfo}>
+          <RegionTile slug={item.slug} size={48} />
+          <View style={[styles.roomInfo, { marginLeft: SPACING.sm }]}>
             <View style={styles.roomNameRow}>
               <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
                 {item.displayName}

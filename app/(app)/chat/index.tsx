@@ -50,10 +50,11 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, GLOBE_ROOM_TINTS } from '@/constants';
+import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { ChatsRow } from '@/types';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import { RegionTile } from '@/components/ui/RegionTile';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
@@ -282,20 +283,11 @@ function ChatsListRow({
     title = timezoneToZoneName(row.timezoneIana);
     subtitle = row.lastMessage?.preview ?? 'Local timezone room';
   } else if (row.type === 'town_square') {
-    leadingIcon = (
-      <View style={[styles.roomIconContainer, { backgroundColor: COLORS.accent }]}>
-        <GlobeIconLarge color="#FFF" />
-      </View>
-    );
+    leadingIcon = <RegionTile slug="town-square" size={44} />;
     title = 'Town Square';
     subtitle = row.lastMessage?.preview ?? 'A global space';
   } else if (row.type === 'globe_room') {
-    const tint = GLOBE_ROOM_TINTS[row.roomSlug] ?? COLORS.primary;
-    leadingIcon = (
-      <View style={[styles.roomIconContainer, { backgroundColor: tint }]}>
-        <GlobeIconLarge color="#FFF" />
-      </View>
-    );
+    leadingIcon = <RegionTile slug={row.roomSlug} size={44} />;
     title = row.displayName;
     subtitle = row.lastMessage?.preview ?? 'Regional community';
     // showLock stays `false` — Globe rooms aren't private (Phase 9 D-05 only applies to groups).
