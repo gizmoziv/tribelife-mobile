@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGlobeStore } from '@/store/globeStore';
 import { globeApi } from '@/services/api';
@@ -204,7 +204,7 @@ export default function GlobeScreen() {
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
-  useEffect(() => {
+  const fetchChevra = useCallback(() => {
     setLoadingRooms(true);
     globeApi
       .rooms()
@@ -234,7 +234,18 @@ export default function GlobeScreen() {
       })
       .catch(() => {})
       .finally(() => setLoadingRooms(false));
+  }, [setRooms, setLoadingRooms]);
 
+  // Re-fetch every time the Chevra tab gains focus so newly-created public
+  // groups, fresh last-message previews, and just-joined memberships all show
+  // up without requiring an app restart.
+  useFocusEffect(
+    useCallback(() => {
+      fetchChevra();
+    }, [fetchChevra]),
+  );
+
+  useEffect(() => {
     const cleanups: (() => void)[] = [];
 
     connectSocket().then(() => {
