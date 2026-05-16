@@ -675,28 +675,38 @@ export default function DMThreadScreen() {
     }, 1500);
   };
 
+  // Phase 12 D-09: non-member preview mode is read-only — disable the
+  // long-press context menu, the swipe-to-reply gesture, and reaction toggles.
+  const isReadOnlyPreview = isGroup && !isMember;
+  const noopLongPress = useCallback(() => {}, []);
+  const noopReactionToggle = useCallback(() => {}, []);
+
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
+    const bubble = (
+      <MessageBubble
+        message={item}
+        isMe={isMe}
+        onLongPress={isReadOnlyPreview ? noopLongPress : handleLongPress}
+        onReactionToggle={isReadOnlyPreview ? noopReactionToggle : handleReactionToggle}
+        showAvatar={isGroup}
+        onProfilePress={() => !isMe && item.senderHandle ? router.push(`/user/${item.senderHandle}`) : undefined}
+        translatedContent={translations[item.id]?.text ?? null}
+        showTranslation={translations[item.id]?.showing ?? false}
+        onToggleTranslation={handleToggleTranslation}
+        onReplyPress={scrollToMessage}
+        highlighted={item.id === highlightedId}
+      />
+    );
+    if (isReadOnlyPreview) return bubble;
     return (
       <SwipeableMessage onSwipeComplete={() => {
         setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
       }}>
-        <MessageBubble
-          message={item}
-          isMe={isMe}
-          onLongPress={handleLongPress}
-          onReactionToggle={handleReactionToggle}
-          showAvatar={isGroup}
-          onProfilePress={() => !isMe && item.senderHandle ? router.push(`/user/${item.senderHandle}`) : undefined}
-          translatedContent={translations[item.id]?.text ?? null}
-          showTranslation={translations[item.id]?.showing ?? false}
-          onToggleTranslation={handleToggleTranslation}
-          onReplyPress={scrollToMessage}
-          highlighted={item.id === highlightedId}
-        />
+        {bubble}
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle]);
 
   if (isLoading) {
     return (
@@ -763,7 +773,7 @@ export default function DMThreadScreen() {
               {isJoining ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
-                <Text style={styles.joinChatButtonText}>Join Community</Text>
+                <Text style={styles.joinChatButtonText}>Join</Text>
               )}
             </TouchableOpacity>
           </View>
