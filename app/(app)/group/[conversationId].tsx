@@ -161,28 +161,58 @@ export default function GroupInfoScreen() {
   }, [conversationId]);
 
   const handleLeave = useCallback(() => {
-    Alert.alert(
-      'Leave Group',
-      'Are you sure you want to leave this group? You can rejoin with an invite link.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            setIsLeaving(true);
-            try {
-              await groupsApi.leave(conversationId);
-              router.replace('/(app)/chat');
-            } catch {
-              Alert.alert('Error', 'Failed to leave group.');
-              setIsLeaving(false);
-            }
+    // D-10: detect last-admin from already-loaded members list.
+    const adminCount = members?.filter((m) => m.role === 'admin').length ?? 0;
+    const currentMember = members?.find((m) => m.userId === user?.id);
+    const isLastAdmin = currentMember?.role === 'admin' && adminCount === 1;
+
+    if (isLastAdmin) {
+      Alert.alert(
+        'Archive this group?',
+        "You're the last admin. If you leave, this group will be archived — no one will be able to send new messages.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Leave & Archive',
+            style: 'destructive',
+            onPress: async () => {
+              setIsLeaving(true);
+              try {
+                await groupsApi.leave(conversationId);
+                router.replace('/(app)/chat');
+              } catch {
+                Alert.alert('Error', 'Failed to leave group.');
+                setIsLeaving(false);
+              }
+            },
           },
-        },
-      ]
-    );
-  }, [conversationId]);
+        ]
+      );
+    } else {
+      // Non-last-admin path — existing copy unchanged.
+      Alert.alert(
+        'Leave Group',
+        'Are you sure you want to leave this group? You can rejoin with an invite link.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Leave',
+            style: 'destructive',
+            onPress: async () => {
+              setIsLeaving(true);
+              try {
+                await groupsApi.leave(conversationId);
+                router.replace('/(app)/chat');
+              } catch {
+                Alert.alert('Error', 'Failed to leave group.');
+                setIsLeaving(false);
+              }
+            },
+          },
+        ]
+      );
+    }
+  }, [conversationId, members, user?.id]);
 
   const goBack = () => {
     if (router.canGoBack()) {
