@@ -620,6 +620,16 @@ export default function DMThreadScreen() {
       await groupsApi.join(inviteSlug);
       // Flip local state — composer enables in-place; NO route change.
       setIsMember(true);
+      // The server inserted a "@<handle> joined the community" system message
+      // and emitted dm:message before our socket joined the conversation room
+      // (dm:join requires participation, which the preview-mode user lacks
+      // until the join completes — dmHandler.ts:370). Re-fetch messages to
+      // pick the system message up + (re-)join the conversation room so any
+      // subsequent live messages arrive immediately.
+      chat.getConversationMessages(conversationId)
+        .then(({ messages: msgs }) => setMessages(msgs))
+        .catch(() => {});
+      joinConversation(conversationId);
       // Fire-and-forget: new group row appears in Chats list.
       useChatsStore.getState().hydrate();
     } catch (err: any) {
@@ -627,7 +637,7 @@ export default function DMThreadScreen() {
     } finally {
       setIsJoining(false);
     }
-  }, [inviteSlug, isJoining]);
+  }, [inviteSlug, isJoining, conversationId]);
 
   const handleImagesSelected = useCallback(async (uris: string[]) => {
     setIsUploading(true);
