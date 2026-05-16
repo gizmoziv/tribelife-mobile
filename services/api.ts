@@ -317,6 +317,7 @@ export const reactionsApi = {
 // ── Referrals ─────────────────────────────────────────────────────────────
 export const referralsApi = {
   getStats: () => request<{ totalReferrals: number; premiumMonthsEarned: number }>('/api/referrals/stats'),
+  getFunnel: () => request<{ bySource: Record<string, { joined: number; paid: number }>; totalPremiumMonths: number }>('/api/referrals/funnel'),
 };
 
 // ── Groups ─────────────────────────────────────────────────────────────────
