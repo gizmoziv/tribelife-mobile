@@ -323,12 +323,19 @@ export default function AppLayout() {
           // screen back to the Chats list, then clear search + scroll to top.
           // Without the popToTop, tapping Chats from inside a conversation
           // (DM or group) felt unresponsive because the tab was already
-          // "focused" from the tabs navigator's perspective.
+          // "focused" from the tabs navigator's perspective. We guard on
+          // the inner stack state — dispatching popToTop when the stack
+          // is already at its root errors with
+          // "action 'POP_TO_TOP' was not handled by any navigator".
           tabPress: () => {
-            if (navigation.isFocused()) {
+            if (!navigation.isFocused()) return;
+            const tabState = navigation.getState();
+            const focusedTab = tabState.routes[tabState.index];
+            const stackRoutes = focusedTab.state?.routes;
+            if (stackRoutes && stackRoutes.length > 1) {
               navigation.dispatch(StackActions.popToTop());
-              useChatsListRefStore.getState().clearAndScrollToTop();
             }
+            useChatsListRefStore.getState().clearAndScrollToTop();
           },
         })}
       />
