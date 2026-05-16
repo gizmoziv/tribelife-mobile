@@ -236,7 +236,9 @@ export default function ProfileScreen() {
 
   const handleShare = async () => {
     const handle = user?.handle ?? '';
-    const url = `https://tribelife.app/invite?ref=${handle}`;
+    if (!handle) return; // defensive: onboarding gates entry but never share without handle
+    // Phase 13: /u/:handle is the new attribution-carrying surface (CONTEXT.md D-02).
+    const url = `https://tribelife.app/u/${handle}?ref=${handle}`;
     try {
       await Share.share({
         message: `Join me on TribeLife — the global Jewish community app!\n${url}`,

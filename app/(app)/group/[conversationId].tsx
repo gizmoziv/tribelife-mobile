@@ -131,12 +131,14 @@ export default function GroupInfoScreen() {
   const handleShare = useCallback(async () => {
     // We need the invite slug — find it from conversation list or use a fallback
     try {
-      const url = `https://tribelife.app/g/${inviteSlug}`;
+      const handle = user?.handle ?? '';
+      const refParam = handle ? `?ref=${handle}` : '';
+      const url = `https://tribelife.app/g/${inviteSlug}${refParam}`;
       await Share.share({
         message: `Join our group on TribeLife!\n${url}`,
       });
     } catch { /* user cancelled */ }
-  }, [inviteSlug]);
+  }, [inviteSlug, user?.handle]);
 
   const handleKick = useCallback((memberId: number, memberHandle: string) => {
     Alert.alert(
