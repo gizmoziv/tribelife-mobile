@@ -17,7 +17,8 @@ import { connectSocket, onGlobeParticipants } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, GLOBE_ROOM_TINTS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { GlassCard } from '@/components/ui/GlassCard';
-import type { GlobeRoom } from '@/types';
+import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import type { ChevraRow, ChevraListResponse } from '@/types';
 import Svg, { Path, Circle } from 'react-native-svg';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -42,21 +43,75 @@ function OnlineDot() {
   );
 }
 
+// ── Member Pill ─────────────────────────────────────────────────────────────
+// Phase 12 D-07: inline "Member" badge for public group rows where isMember=true.
+function MemberPill() {
+  return (
+    <View
+      style={{
+        backgroundColor: COLORS.success + '22',
+        borderRadius: RADIUS.pill,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        marginLeft: 6,
+      }}
+    >
+      <Text style={{ fontSize: 11, fontFamily: FONTS.semiBold, color: COLORS.success }}>
+        Member
+      </Text>
+    </View>
+  );
+}
+
 // ── Room List Item ──────────────────────────────────────────────────────────
+// Phase 12 D-07: accepts ChevraRow union (kind: 'globe_room' | 'group').
+// Globe-room branch: existing UI verbatim.
+// Group branch: AvatarCircle + name + memberCount + lastMessage + MemberPill.
 function RoomListItem({
-  room,
+  item,
   onPress,
 }: {
-  room: GlobeRoom;
+  item: ChevraRow;
   onPress: () => void;
 }) {
   const { colors } = useTheme();
 
-  const timeAgo = room.lastMessage
-    ? formatRelativeTime(room.lastMessage.createdAt)
+  // ── Group row ──────────────────────────────────────────────────────────────
+  if (item.kind === 'group') {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+        <GlassCard style={styles.roomCard}>
+          <View style={styles.roomRow}>
+            <AvatarCircle
+              name={item.name}
+              size={44}
+              imageUrl={item.iconUrl ?? undefined}
+              showRing={false}
+            />
+            <View style={[styles.roomInfo, { marginLeft: SPACING.sm }]}>
+              <View style={styles.roomNameRow}>
+                <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                {item.isMember && <MemberPill />}
+              </View>
+              <Text style={[styles.lastMessage, { color: colors.textMuted }]} numberOfLines={1}>
+                {item.memberCount} {item.memberCount === 1 ? 'member' : 'members'}
+                {item.lastMessage ? ` · ${item.lastMessage.content.slice(0, 40)}` : ''}
+              </Text>
+            </View>
+          </View>
+        </GlassCard>
+      </TouchableOpacity>
+    );
+  }
+
+  // ── Globe room row (existing UI verbatim) ───────────────────────────────────
+  const timeAgo = item.lastMessage
+    ? formatRelativeTime(item.lastMessage.createdAt)
     : null;
 
-  const tint = GLOBE_ROOM_TINTS[room.slug] ?? COLORS.primary;
+  const tint = GLOBE_ROOM_TINTS[item.slug] ?? COLORS.primary;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
@@ -68,18 +123,18 @@ function RoomListItem({
           <View style={styles.roomInfo}>
             <View style={styles.roomNameRow}>
               <Text style={[styles.roomName, { color: colors.text }]} numberOfLines={1}>
-                {room.displayName}
+                {item.displayName}
               </Text>
               {/* Phase 11 D-06: "Your region" badge dropped — server now sorts user's region first. */}
               {/* Joined rooms are filtered out of Community discovery entirely
                   (see visibleRooms below) — no Member pill needed on this surface. */}
             </View>
-            {room.lastMessage && (
+            {item.lastMessage && (
               <Text
                 style={[styles.lastMessage, { color: colors.textMuted }]}
                 numberOfLines={1}
               >
-                @{room.lastMessage.senderHandle}: {room.lastMessage.content}
+                @{item.lastMessage.senderHandle}: {item.lastMessage.content}
                 {timeAgo ? ` · ${timeAgo}` : ''}
               </Text>
             )}
@@ -88,7 +143,7 @@ function RoomListItem({
             <View style={styles.onlineRow}>
               <OnlineDot />
               <Text style={[styles.onlineText, { color: colors.textMuted }]}>
-                {room.participantCount}
+                {item.participantCount}
               </Text>
             </View>
             {/* No unread badge on Chevra discovery rows — the user is by
@@ -119,6 +174,8 @@ export default function GlobeScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  // Phase 12 D-07: public group rows kept in local state; store remains GlobeRoom[].
+  const [publicGroupRows, setPublicGroupRows] = useState<ChevraRow[]>([]);
 
   // 200ms debounce on the search input (per 11-CONTEXT.md D-09)
   useEffect(() => {
@@ -130,12 +187,29 @@ export default function GlobeScreen() {
     setLoadingRooms(true);
     globeApi
       .rooms()
-      .then(({ rooms: data }) => {
-        setRooms(data);
+      .then((response) => {
+        const data = (response as ChevraListResponse).rooms;
+
+        // Phase 12 D-07: split mixed ChevraRow[] into globe rooms and public groups.
+        // Store keeps GlobeRoom[] shape (other consumers depend on it).
+        const globeRoomRows = data.filter(
+          (r): r is Extract<ChevraRow, { kind: 'globe_room' }> => r.kind === 'globe_room',
+        );
+        const groupRows = data.filter(
+          (r): r is Extract<ChevraRow, { kind: 'group' }> => r.kind === 'group',
+        );
+
+        // Strip `kind` field before pushing into store (GlobeRoom has no `kind`).
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const storeRooms = globeRoomRows.map(({ kind, ...rest }) => rest as Parameters<typeof setRooms>[0][0]);
+        setRooms(storeRooms);
+
         // Phase 11 D-11: hydrate the membership map from server truth.
         useGlobeStore.getState().setMembershipMap(
-          Object.fromEntries(data.map((r) => [r.slug, r.isMember])),
+          Object.fromEntries(globeRoomRows.map((r) => [r.slug, r.isMember])),
         );
+
+        setPublicGroupRows(groupRows);
       })
       .catch(() => {})
       .finally(() => setLoadingRooms(false));
@@ -154,36 +228,70 @@ export default function GlobeScreen() {
 
   const tabBarSpace = useTabBarSpace();
 
-  // Server now orders rooms (user-region first, then sortOrder ASC) — do NOT re-sort here.
-  // Discovery list excludes Town Square (every user has it via Phase 7) AND any room
-  // the user has already joined. Effective membership = store-first (for instant
-  // post-join updates without a re-fetch), with server-truth fallback for cold mount.
-  const visibleRooms = useMemo(
+  // Phase 12 D-08: Server orders both buckets; mobile preserves receive order.
+  // Globe-room filter: exclude Town Square (auto-joined) + already-joined rooms.
+  // Group rows: pass through unconditionally — isMember pill drives the joined-or-not visual.
+  const visibleGlobeRooms = useMemo(
     () =>
       rooms.filter(
         (r) => r.slug !== 'town-square' && !(isMember[r.slug] ?? r.isMember),
       ),
     [rooms, isMember],
   );
+
+  // Combine: globe rooms first (filtered), then public groups (unfiltered) — D-08.
+  // Re-attach kind discriminator to globe rows so RoomListItem can branch on item.kind.
+  const combinedRows = useMemo((): ChevraRow[] => [
+    ...visibleGlobeRooms.map((r) => ({ kind: 'globe_room' as const, ...r })),
+    ...publicGroupRows,
+  ], [visibleGlobeRooms, publicGroupRows]);
+
   const q = debouncedQuery.trim().toLowerCase();
-  const filteredRooms = useMemo(
-    () => (q ? visibleRooms.filter((r) => r.displayName.toLowerCase().includes(q)) : visibleRooms),
-    [visibleRooms, q],
+  const filteredRows = useMemo(
+    () =>
+      q
+        ? combinedRows.filter((r) =>
+            r.kind === 'globe_room'
+              ? r.displayName.toLowerCase().includes(q)
+              : r.name.toLowerCase().includes(q),
+          )
+        : combinedRows,
+    [combinedRows, q],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: GlobeRoom }) => (
+    ({ item }: { item: ChevraRow }) => (
       <RoomListItem
-        room={item}
+        item={item}
         onPress={() => {
-          // Clear locally so the badge disappears before the room screen's
-          // markRoomRead call lands (which also clears server-side via read-pos).
+          if (item.kind === 'group') {
+            // Phase 12 D-07: route group tap to unified chat screen.
+            // Plan 12-08 implements the preview-mode UX on the receiving screen.
+            router.push({
+              pathname: '/(app)/chat/[conversationId]',
+              params: {
+                conversationId: item.conversationId.toString(),
+                isGroup: 'true',
+                groupName: item.name,
+                isMember: item.isMember ? 'true' : 'false',
+              },
+            });
+            return;
+          }
+          // Globe room tap: clear local unread badge then navigate.
           if ((unreadCounts[item.slug] ?? 0) > 0) markRoomRead(item.slug);
           router.push(`/globe/${item.slug}`);
         }}
       />
     ),
     [router, unreadCounts, markRoomRead],
+  );
+
+  // Stable key per row type — globe rooms keyed by slug, groups by conversationId.
+  const keyExtractor = useCallback(
+    (item: ChevraRow) =>
+      item.kind === 'globe_room' ? `globe_${item.slug}` : `group_${item.conversationId}`,
+    [],
   );
 
   if (isLoadingRooms) {
@@ -216,16 +324,16 @@ export default function GlobeScreen() {
           returnKeyType="search"
         />
       </View>
-      {filteredRooms.length === 0 && q.length > 0 ? (
+      {filteredRows.length === 0 && q.length > 0 ? (
         <View style={styles.emptyMatches}>
           <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
-            {'No matches for “' + debouncedQuery + '”'}
+            {'No matches for "' + debouncedQuery + '"'}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={filteredRooms}
-          keyExtractor={(item) => item.slug}
+          data={filteredRows}
+          keyExtractor={keyExtractor}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
