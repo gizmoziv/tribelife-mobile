@@ -265,6 +265,7 @@ export type ChevraRow =
       conversationId: number;
       name: string;
       iconUrl: string | null;
+      inviteSlug: string;
       memberCount: number;
       lastMessage: { senderHandle: string; content: string; createdAt: string } | null;
       isMember: boolean;

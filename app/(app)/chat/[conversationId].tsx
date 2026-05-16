@@ -25,7 +25,7 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
-import { chat, moderationApi, reactionsApi, notificationsApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi, notificationsApi, groupsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useChatsStore } from '@/store/chatsStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -66,23 +66,29 @@ function SendIcon() {
 }
 
 export default function DMThreadScreen() {
-  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug } = useLocalSearchParams<{
+  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug, isMember: rawIsMember } = useLocalSearchParams<{
     conversationId: string;
     handle?: string;
     isGroup?: string;
     groupName?: string;
     inviteSlug?: string;
+    isMember?: string;
   }>();
   const conversationId = parseInt(rawId);
   const isGroup = rawIsGroup === 'true';
   const groupName = rawGroupName ?? '';
   const inviteSlug = rawInviteSlug ?? '';
+  // D-09: default to member when the flag is absent — preserves existing Chats-list tap behavior.
+  const initialIsMember = rawIsMember !== 'false';
   const navigation = useNavigation();
   const router = useRouter();
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   const keyboardBehavior = useKeyboardBehavior();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // ── D-09: Preview-to-join state (mirrors v1.7 Phase 11 D-12 pattern) ───────
+  const [isMember, setIsMember] = useState<boolean>(initialIsMember);
+  const [isJoining, setIsJoining] = useState<boolean>(false);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -579,6 +585,23 @@ export default function DMThreadScreen() {
     } catch { /* silent */ }
   }, [applyOptimisticReaction]);
 
+  // ── D-09: Join handler — mirrors v1.7 Phase 11 D-12 globe/[roomSlug].tsx ──
+  const handleJoin = useCallback(async () => {
+    if (isJoining) return;
+    setIsJoining(true);
+    try {
+      await groupsApi.join(inviteSlug);
+      // Flip local state — composer enables in-place; NO route change.
+      setIsMember(true);
+      // Fire-and-forget: new group row appears in Chats list.
+      useChatsStore.getState().hydrate();
+    } catch (err: any) {
+      Alert.alert("Couldn't join", err?.message ?? 'Please try again.');
+    } finally {
+      setIsJoining(false);
+    }
+  }, [inviteSlug, isJoining]);
+
   const handleImagesSelected = useCallback(async (uris: string[]) => {
     setIsUploading(true);
     try {
@@ -716,49 +739,69 @@ export default function DMThreadScreen() {
           </View>
         )}
 
-        <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
-
-        <View style={{ position: 'relative' }}>
-          <MentionAutocomplete
-            text={input}
-            selection={selection}
-            scope={isGroup ? 'group' : 'dm'}
-            contextId={isGroup ? conversationId.toString() : (handle ?? '')}
-            onSelect={(newText, newCursor) => {
-              setInput(newText);
-              setSelection({ start: newCursor, end: newCursor });
-            }}
-          />
-          <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
-            <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
-            {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-            <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-              <MentionTextInput
-                style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-                placeholder="Message..."
-                placeholderTextColor={colors.textMuted}
-                value={input}
-                onChangeText={handleInputChange}
-                selection={selection}
-                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                multiline
-                maxLength={2000}
-              />
-            </View>
-            <Pressable
-              onPress={handleSend}
-              disabled={!input.trim() || isUploading}
-              style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
+        {/* D-09: Preview mode — non-member public group shows Join CTA; member shows composer. */}
+        {isGroup && !isMember ? (
+          <View style={[styles.joinChatBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+            <TouchableOpacity
+              style={[styles.joinChatButton, { backgroundColor: COLORS.primary, opacity: isJoining ? 0.6 : 1 }]}
+              onPress={handleJoin}
+              disabled={isJoining}
+              activeOpacity={0.85}
             >
-              <LinearGradient
-                colors={[...COLORS.gradientPrimary]}
-                style={styles.sendButton}
-              >
-                <SendIcon />
-              </LinearGradient>
-            </Pressable>
+              {isJoining ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.joinChatButtonText}>Join Community</Text>
+              )}
+            </TouchableOpacity>
           </View>
-        </View>
+        ) : (
+          <>
+            <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+
+            <View style={{ position: 'relative' }}>
+              <MentionAutocomplete
+                text={input}
+                selection={selection}
+                scope={isGroup ? 'group' : 'dm'}
+                contextId={isGroup ? conversationId.toString() : (handle ?? '')}
+                onSelect={(newText, newCursor) => {
+                  setInput(newText);
+                  setSelection({ start: newCursor, end: newCursor });
+                }}
+              />
+              <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
+                <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+                <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+                  <MentionTextInput
+                    style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                    placeholder="Message..."
+                    placeholderTextColor={colors.textMuted}
+                    value={input}
+                    onChangeText={handleInputChange}
+                    selection={selection}
+                    onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                    multiline
+                    maxLength={2000}
+                  />
+                </View>
+                <Pressable
+                  onPress={handleSend}
+                  disabled={!input.trim() || isUploading}
+                  style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
+                >
+                  <LinearGradient
+                    colors={[...COLORS.gradientPrimary]}
+                    style={styles.sendButton}
+                  >
+                    <SendIcon />
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </View>
+          </>
+        )}
 
         <ContextMenu
           visible={menuVisible}
@@ -836,5 +879,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.md,
+  },
+  // D-09: Join CTA bar — mirrors v1.7 Phase 11 D-12 globe/[roomSlug].tsx joinChatBar.
+  joinChatBar: {
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.md,
+  },
+  joinChatButton: {
+    height: 48,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.md,
+  },
+  joinChatButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: FONTS.semiBold,
   },
 });

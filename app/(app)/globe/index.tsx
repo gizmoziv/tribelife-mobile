@@ -274,6 +274,7 @@ export default function GlobeScreen() {
                 isGroup: 'true',
                 groupName: item.name,
                 isMember: item.isMember ? 'true' : 'false',
+                inviteSlug: item.inviteSlug,
               },
             });
             return;
