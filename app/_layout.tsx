@@ -33,22 +33,40 @@ import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
 
 SplashScreen.preventAutoHideAsync();
 
-function extractAndStoreReferralCode(url: string) {
+function extractAndStoreAttribution(url: string) {
   try {
     const parsed = ExpoLinking.parse(url);
     const ref = parsed.queryParams?.ref;
-    if (ref && typeof ref === 'string') {
-      AsyncStorage.setItem('referralCode', ref.toLowerCase());
+    if (!ref || typeof ref !== 'string') return;
+
+    const path = parsed.path ?? '';
+    let source: 'handle_code' | 'profile_share' | 'group_invite';
+    if (path.startsWith('u/')) {
+      source = 'profile_share';
+    } else if (path.startsWith('g/')) {
+      source = 'group_invite';
+    } else {
+      // /invite?ref= path (or fallback)
+      source = 'handle_code';
     }
+
+    AsyncStorage.setItem('attributionRef', ref.toLowerCase());
+    AsyncStorage.setItem('attributionSource', source);
   } catch { /* ignore parse errors */ }
 }
 
 /**
- * Recover a referral code left on the clipboard by the /invite interstitial
- * page. Runs ONCE per install (guarded by a flag) and only when the user is
- * not yet authenticated, to avoid inspecting the clipboard on every launch.
+ * Recover an attribution payload left on the clipboard by the interstitial
+ * pages (/invite, /g/:slug, /u/:handle). Runs ONCE per install (guarded by
+ * a flag) and only when the user is not yet authenticated, to avoid
+ * inspecting the clipboard on every launch.
+ *
+ * Phase 13: supports 3 payload formats:
+ *  - `tribelife-ref:<handle>`              → source = 'handle_code'
+ *  - `tribelife-g-ref:<handle>:<slug>`     → source = 'group_invite'
+ *  - `tribelife-u-ref:<handle>:<handle>`   → source = 'profile_share'
  */
-async function recoverReferralCodeFromClipboard() {
+async function recoverAttributionFromClipboard() {
   try {
     const alreadyChecked = await AsyncStorage.getItem('clipboardRefChecked');
     if (alreadyChecked) return;
@@ -58,11 +76,32 @@ async function recoverReferralCodeFromClipboard() {
     if (!hasString) return;
 
     const content = await Clipboard.getStringAsync();
-    const match = content?.match(/^tribelife-ref:([a-zA-Z0-9_-]+)$/);
-    if (!match) return;
+    if (!content) return;
 
-    const ref = match[1].toLowerCase();
-    await AsyncStorage.setItem('referralCode', ref);
+    // Match in order — first hit wins. The two-segment patterns (g-ref / u-ref)
+    // are matched BEFORE the single-segment fallback so a payload like
+    // `tribelife-g-ref:alice:my-group` is not misclassified.
+    const matchG = content.match(/^tribelife-g-ref:([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)$/);
+    const matchU = content.match(/^tribelife-u-ref:([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)$/);
+    const match = content.match(/^tribelife-ref:([a-zA-Z0-9_-]+)$/);
+
+    let ref: string | null = null;
+    let source: 'handle_code' | 'profile_share' | 'group_invite' | null = null;
+    if (matchG) {
+      ref = matchG[1].toLowerCase();
+      source = 'group_invite';
+    } else if (matchU) {
+      ref = matchU[1].toLowerCase();
+      source = 'profile_share';
+    } else if (match) {
+      ref = match[1].toLowerCase();
+      source = 'handle_code';
+    }
+
+    if (!ref || !source) return;
+
+    await AsyncStorage.setItem('attributionRef', ref);
+    await AsyncStorage.setItem('attributionSource', source);
 
     // Clear the clipboard so the user doesn't accidentally paste it elsewhere
     await Clipboard.setStringAsync('');
@@ -119,11 +158,23 @@ function RootLayoutInner() {
   useEffect(() => {
     async function restoreSession() {
       try {
+        // Phase 13: one-time migration of the legacy `referralCode` AsyncStorage
+        // key → `attributionRef` + `attributionSource='handle_code'`. Idempotent:
+        // after `removeItem` runs, subsequent launches read null and skip. The
+        // `removeItem` is the gate (no separate "has-migrated" flag needed).
+        const legacyRef = await AsyncStorage.getItem('referralCode');
+        if (legacyRef) {
+          await AsyncStorage.setItem('attributionRef', legacyRef);
+          await AsyncStorage.setItem('attributionSource', 'handle_code');
+          await AsyncStorage.removeItem('referralCode');
+        }
+
         const token = await getToken();
-        // First launch without a session: recover a referral code the
-        // /invite interstitial may have left on the clipboard.
+        // First launch without a session: recover an attribution payload an
+        // interstitial page (/invite, /g/:slug, /u/:handle) may have left on
+        // the clipboard.
         if (!token) {
-          await recoverReferralCodeFromClipboard();
+          await recoverAttributionFromClipboard();
         }
         if (token) {
           const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
@@ -236,13 +287,15 @@ function RootLayoutInner() {
   }, []);
 
   useEffect(() => {
-    // Group invite routes (/g/:slug) are handled by app/g/[slug].tsx via Expo
-    // Router's native linking. This listener only extracts the referral code.
+    // Group invite routes (/g/:slug) and profile share routes (/u/:handle) are
+    // handled by their respective Expo Router files via native linking. This
+    // listener only extracts the attribution token + source channel from the
+    // incoming URL. Phase 13 recognizes 3 surfaces: /invite, /g/:slug, /u/:handle.
     ExpoLinking.getInitialURL().then((url) => {
-      if (url) extractAndStoreReferralCode(url);
+      if (url) extractAndStoreAttribution(url);
     });
     const sub = ExpoLinking.addEventListener('url', ({ url }) => {
-      extractAndStoreReferralCode(url);
+      extractAndStoreAttribution(url);
     });
     return () => sub.remove();
   }, []);
