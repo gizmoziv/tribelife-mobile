@@ -407,7 +407,7 @@ function ClosedLockIcon({ color }: { color: string }) {
 function OpenLockIcon({ color }: { color: string }) {
   return (
     <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-      <Path d="M8 10V8a6 6 0 0111.5-2.3" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M6 10V7a5 5 0 0 1 10 -1" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
     </Svg>
   );

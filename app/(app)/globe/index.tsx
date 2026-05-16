@@ -86,7 +86,7 @@ function GroupPill() {
 function OpenLockIcon({ color }: { color: string }) {
   return (
     <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 4 }}>
-      <Path d="M8 10V8a6 6 0 0111.5-2.3" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M6 10V7a5 5 0 0 1 10 -1" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
     </Svg>
   );
@@ -261,7 +261,8 @@ export default function GlobeScreen() {
 
   // Phase 12 D-08: Server orders both buckets; mobile preserves receive order.
   // Globe-room filter: exclude Town Square (auto-joined) + already-joined rooms.
-  // Group rows: pass through unconditionally — isMember pill drives the joined-or-not visual.
+  // Group filter: mirror the globe-room rule — Chevra is a discovery surface,
+  // groups the user already belongs to surface in the Chats tab instead.
   const visibleGlobeRooms = useMemo(
     () =>
       rooms.filter(
@@ -270,12 +271,17 @@ export default function GlobeScreen() {
     [rooms, isMember],
   );
 
-  // Combine: globe rooms first (filtered), then public groups (unfiltered) — D-08.
+  const visiblePublicGroups = useMemo(
+    () => publicGroupRows.filter((r) => r.kind === 'group' && !r.isMember),
+    [publicGroupRows],
+  );
+
+  // Combine: globe rooms first (filtered), then public groups (filtered) — D-08.
   // Re-attach kind discriminator to globe rows so RoomListItem can branch on item.kind.
   const combinedRows = useMemo((): ChevraRow[] => [
     ...visibleGlobeRooms.map((r) => ({ kind: 'globe_room' as const, ...r })),
-    ...publicGroupRows,
-  ], [visibleGlobeRooms, publicGroupRows]);
+    ...visiblePublicGroups,
+  ], [visibleGlobeRooms, visiblePublicGroups]);
 
   const q = debouncedQuery.trim().toLowerCase();
   const filteredRows = useMemo(
