@@ -68,6 +68,7 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [referralCount, setReferralCount] = useState(0);
   const [premiumMonthsEarned, setPremiumMonthsEarned] = useState(0);
+  const [funnelData, setFunnelData] = useState<{ bySource: Record<string, { joined: number; paid: number }>; totalPremiumMonths: number } | null>(null);
   const [myGroups, setMyGroups] = useState<{ id: number; groupName: string; inviteSlug: string; memberCount: number; role: string }[]>([]);
 
   const loadMyGroups = useCallback(() => {
@@ -231,6 +232,12 @@ export default function ProfileScreen() {
         setReferralCount(totalReferrals);
         setPremiumMonthsEarned(premiumMonthsEarned);
       })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    referralsApi.getFunnel()
+      .then((data) => setFunnelData(data))
       .catch(() => {});
   }, []);
 
@@ -760,6 +767,19 @@ export default function ProfileScreen() {
                   ? `${premiumMonthsEarned} of 12 premium months earned!`
                   : 'Share to earn free premium months!'}
               </Text>
+              {funnelData && (
+                <>
+                  <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                    Profile shares: {funnelData.bySource.profile_share?.joined ?? 0} joined → {funnelData.bySource.profile_share?.paid ?? 0} paid
+                  </Text>
+                  <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                    Group invites: {funnelData.bySource.group_invite?.joined ?? 0} joined → {funnelData.bySource.group_invite?.paid ?? 0} paid
+                  </Text>
+                  <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                    Direct referrals: {funnelData.bySource.handle_code?.joined ?? 0} joined → {funnelData.bySource.handle_code?.paid ?? 0} paid
+                  </Text>
+                </>
+              )}
               <PillButton
                 title="Share TribeLife"
                 onPress={handleShare}
