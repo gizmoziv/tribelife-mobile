@@ -42,60 +42,39 @@ export const COLORS = {
   gradientBackground: ['#0A0E1A', '#1A1040'] as const,
 } as const;
 
-// Per-room visual config for Community / Chats list globe icons. Two-stop
-// soft gradient + a stylized continent silhouette per region. Desaturated
-// from the original solid tints (v1.7) for a more premium read in dense
-// lists. Town Square keeps the warm-amber identity from the v1.5 globe.
+// Per-room visual config — monochromatic dark tile across every region,
+// with a 2-letter abbreviation as the primary identifier and a thin
+// accent stripe at the bottom in the region's legacy tint as a secondary
+// recognition cue. Trades the v1.7 rainbow-saturated circles for a
+// quieter, premium read in dense lists (the differentiator becomes the
+// typography + accent stripe, not the tile color).
 export type GlobeRoomVisual = {
-  gradient: readonly [string, string];
-  silhouette?: string; // SVG path data on a 24x24 viewBox; omit for town-square (renders generic globe glyph instead)
+  abbreviation: string;     // 2-3 chars rendered inside the tile
+  accent: string;           // thin bottom-edge stripe color — secondary identifier
 };
+
+// Shared monochromatic gradient for the tile background — same for every
+// region. Dark theme uses these stops; light theme is computed from them
+// at render time by RegionTile.
+export const REGION_TILE_GRADIENT_DARK = ['#2A3147', '#1A1F2E'] as const;
+export const REGION_TILE_GRADIENT_LIGHT = ['#E8EAF2', '#D4D8E5'] as const;
 
 export const GLOBE_ROOM_VISUALS: Record<string, GlobeRoomVisual> = {
-  'town-square': {
-    gradient: ['#FFC974', '#E5A23A'],
-  },
-  'north-america': {
-    gradient: ['#7AA9F0', '#4A7DC8'],
-    // Wide Canada top tapering through US to a Mexico tip.
-    silhouette: 'M3.5 5 L9 4 L15 4 L20.5 5 L20 8 L17.5 10 L17 13 L14.5 15.5 L12.5 18 L10.5 20 L9 17 L7.5 14 L5.5 11 L3.5 8 Z',
-  },
-  'israel': {
-    gradient: ['#86CDEC', '#4FA3CA'],
-    // Narrow north-south sliver — Israel's distinctive elongated shape.
-    silhouette: 'M11 4 L12.5 4 L13.5 7 L14 11 L13.5 15 L12.5 18 L11.5 20.5 L10 18 L10 14 L10.5 10 Z',
-  },
-  'europe': {
-    gradient: ['#B9A8F3', '#8C7AD9'],
-    // Western/central Europe blob with Iberian peninsula bulge and Italy tail.
-    silhouette: 'M5 7 L7 5 L11 4.5 L15 4.5 L18 6 L20 8 L19.5 11 L17 12 L15 14 L13.5 17 L12.5 19 L11 17 L9.5 15 L7 14 L5 12 L4 9.5 Z',
-  },
-  'uk-ireland': {
-    gradient: ['#F09494', '#C76868'],
-    // British Isles — UK on the right with Scotland top, Ireland (separate blob) on the left.
-    silhouette: 'M14 3.5 Q16.5 5 16.5 8 Q17.5 11 16 14 Q14.5 17 13 16.5 Q11.5 15 11.5 12 Q11.5 8 12.5 5 Q13 3.5 14 3.5 Z M6.5 10 Q8.5 9.5 8.5 12 Q9 14 7 14.5 Q4.5 14 4.5 12 Q4.5 10 6.5 10 Z',
-  },
-  'latin-america': {
-    gradient: ['#F2AE74', '#D8854C'],
-    // Mexico + Central + South America — tapering wedge down to Patagonia.
-    silhouette: 'M8 4 L14 4 L15.5 6.5 L14 9 L13.5 12 L12.5 15 L11.5 18 L10.5 20.5 L10 18 L10.5 15 L10 12 L9 9 L8 6.5 Z',
-  },
-  'australia-nz': {
-    gradient: ['#6CD6C3', '#36AC96'],
-    // Australia main body + small NZ off to the southeast (two separate blobs).
-    silhouette: 'M3.5 8 Q5.5 5.5 9 5.5 Q14 5.5 17 7 Q19 9 18 12 Q15 13.5 12 13 Q8 13 5.5 11.5 Q3.5 10.5 3.5 8 Z M19 15 Q20.5 14.5 20.5 16 Q20.5 17.5 19.5 18 Q18.5 17.5 19 15 Z M18 19 Q19.5 18.5 20 20 Q19.5 21 18.5 20.5 Z',
-  },
-  'south-africa': {
-    gradient: ['#F0ABC9', '#C77899'],
-    // Southern Africa wedge — wider top tapering to the cape.
-    silhouette: 'M7 5 L17 5 L18 8 L17.5 11 L16 14 L14 16.5 L12 18.5 L10 16.5 L8 14 L7 11 Z',
-  },
+  'town-square': { abbreviation: 'TS', accent: '#E5A23A' },
+  'north-america': { abbreviation: 'NA', accent: '#4A7DC8' },
+  'israel': { abbreviation: 'IL', accent: '#4FA3CA' },
+  'europe': { abbreviation: 'EU', accent: '#8C7AD9' },
+  'uk-ireland': { abbreviation: 'UK', accent: '#C76868' },
+  'latin-america': { abbreviation: 'LA', accent: '#D8854C' },
+  'australia-nz': { abbreviation: 'AU', accent: '#36AC96' },
+  'south-africa': { abbreviation: 'SA', accent: '#C77899' },
 };
 
-// Backwards-compat tint map — derived from the gradient's first stop so old
-// consumers (single-color avatars, badges) keep working without touching them.
+// Backwards-compat tint map — single representative color per slug for
+// any future consumer that wants a flat color (badges, dot indicators,
+// etc.). Derived from the accent stripe color.
 export const GLOBE_ROOM_TINTS: Record<string, string> = Object.fromEntries(
-  Object.entries(GLOBE_ROOM_VISUALS).map(([slug, v]) => [slug, v.gradient[0]]),
+  Object.entries(GLOBE_ROOM_VISUALS).map(([slug, v]) => [slug, v.accent]),
 );
 
 export const FONTS = {

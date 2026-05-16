@@ -1,13 +1,25 @@
-// Phase 12 polish: shared region-avatar tile for Chevra rows + Chats-list
-// globe_room rows. Replaces the v1.7 solid-color circle with a soft diagonal
-// gradient + stylized continent silhouette on top — same component drives
-// both surfaces so the visual stays consistent when a regional room is
-// joined and surfaces in the Chats tab.
+// Phase 12 polish v2: monochromatic premium region tile.
+//
+// All regions share the same dark gradient — the differentiator is the
+// 2-letter abbreviation in white type and a thin accent stripe at the
+// bottom in the region's legacy tint. Reads as a quiet, refined set of
+// tiles rather than a rainbow row of saturated circles.
+//
+// Used by both Chevra (app/(app)/globe/index.tsx) and the Chats list
+// globe_room rows (app/(app)/chat/index.tsx) so joined regional rooms
+// look consistent across surfaces.
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path, Circle } from 'react-native-svg';
-import { COLORS, GLOBE_ROOM_VISUALS, SHADOWS } from '@/constants';
+import {
+  COLORS,
+  FONTS,
+  GLOBE_ROOM_VISUALS,
+  REGION_TILE_GRADIENT_DARK,
+  REGION_TILE_GRADIENT_LIGHT,
+  SHADOWS,
+} from '@/constants';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type RegionTileProps = {
   slug: string;
@@ -15,13 +27,19 @@ type RegionTileProps = {
 };
 
 export function RegionTile({ slug, size = 44 }: RegionTileProps) {
+  const { isDark } = useTheme();
   const visual = GLOBE_ROOM_VISUALS[slug];
-  const gradient = visual?.gradient ?? [COLORS.primary, COLORS.primaryDark];
-  const silhouette = visual?.silhouette;
+  const abbreviation = visual?.abbreviation ?? '··';
+  const accent = visual?.accent ?? COLORS.primary;
   const radius = size / 2;
-  // Silhouette renders at ~58% of tile diameter; gives breathing room and
-  // keeps the continent shape readable even at small list sizes (44px).
-  const glyphSize = Math.round(size * 0.58);
+
+  const gradient = isDark
+    ? REGION_TILE_GRADIENT_DARK
+    : REGION_TILE_GRADIENT_LIGHT;
+  const labelColor = isDark ? '#FFFFFF' : '#1F2940';
+  // Stripe sits as a thin arc at the bottom of the circle — premium fintech
+  // recognition cue without coloring the whole tile.
+  const stripeHeight = Math.max(3, Math.round(size * 0.08));
 
   return (
     <View style={[styles.shadowWrap, { width: size, height: size, borderRadius: radius }]}>
@@ -38,33 +56,44 @@ export function RegionTile({ slug, size = 44 }: RegionTileProps) {
           },
         ]}
       >
-        {/* Subtle top-edge glass highlight — extra polish for premium feel. */}
+        {/* Subtle top-edge glass highlight for depth. */}
         <LinearGradient
-          colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']}
+          colors={[
+            isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+            'rgba(255,255,255,0)',
+          ]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 0.55 }}
-          style={[
-            StyleSheet.absoluteFillObject,
-            { borderRadius: radius },
-          ]}
+          style={[StyleSheet.absoluteFillObject, { borderRadius: radius }]}
           pointerEvents="none"
         />
-        {silhouette ? (
-          <Svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24">
-            <Path d={silhouette} fill="rgba(255,255,255,0.88)" />
-          </Svg>
-        ) : (
-          // Town Square fallback — generic stylized globe glyph (no specific region).
-          <Svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24" fill="none">
-            <Circle cx={12} cy={12} r={9} stroke="rgba(255,255,255,0.9)" strokeWidth={1.6} />
-            <Path
-              d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"
-              stroke="rgba(255,255,255,0.9)"
-              strokeWidth={1.6}
-              strokeLinecap="round"
-            />
-          </Svg>
-        )}
+
+        <Text
+          style={{
+            fontFamily: FONTS.semiBold,
+            fontSize: Math.round(size * 0.34),
+            color: labelColor,
+            letterSpacing: 0.6,
+          }}
+          numberOfLines={1}
+        >
+          {abbreviation}
+        </Text>
+
+        {/* Accent stripe — thin colored arc anchored to the bottom edge. */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: size * 0.18,
+            right: size * 0.18,
+            bottom: size * 0.12,
+            height: stripeHeight / 2,
+            borderRadius: stripeHeight,
+            backgroundColor: accent,
+            opacity: 0.85,
+          }}
+        />
       </LinearGradient>
     </View>
   );
@@ -72,7 +101,6 @@ export function RegionTile({ slug, size = 44 }: RegionTileProps) {
 
 const styles = StyleSheet.create({
   shadowWrap: {
-    // Soft drop shadow for depth — tuned low so the tile sits, doesn't float.
     ...SHADOWS.sm,
   },
   tile: {
