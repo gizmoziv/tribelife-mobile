@@ -21,7 +21,7 @@ import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi, globeApi } from '@/services/api';
-import { getSocket, connectSocket } from '@/services/socket';
+import { getSocket, connectSocket, onChatRemoved } from '@/services/socket';
 import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
 import { COLORS, FONTS, SHADOWS, RADIUS, SPACING } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
@@ -127,12 +127,19 @@ export default function AppLayout() {
     });
 
     let socketReconnectHandler: (() => void) | null = null;
+    let offChatRemoved: (() => void) | null = null;
     connectSocket().then(() => {
       const socket = getSocket();
       if (socket) {
         socketReconnectHandler = () => refetchNotifications();
         socket.io.on('reconnect', socketReconnectHandler);
       }
+      // Phase 12: kicked or removed-from-conversation events refresh the
+      // Chats list so the affected row disappears. Per-screen ejection is
+      // handled inside chat/[conversationId].tsx.
+      offChatRemoved = onChatRemoved(() => {
+        useChatsStore.getState().hydrate();
+      });
     });
 
     return () => {
@@ -141,6 +148,7 @@ export default function AppLayout() {
         const socket = getSocket();
         socket?.io.off('reconnect', socketReconnectHandler);
       }
+      offChatRemoved?.();
     };
   }, []);
 

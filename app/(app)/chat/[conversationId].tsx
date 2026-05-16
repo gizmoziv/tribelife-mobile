@@ -42,6 +42,7 @@ import {
   onMessageRejected,
   onReactionUpdate,
   onMediaRemoved,
+  onChatRemoved,
   onMediaRejected,
   getSocket,
 } from '@/services/socket';
@@ -361,6 +362,27 @@ export default function DMThreadScreen() {
       Alert.alert('Image Removed', data.message);
     });
 
+    // Phase 12: server tells us we were removed (e.g. admin kick). If the
+    // event targets this open conversation, eject back to the Chats list.
+    // Global hydrate of the chats list happens in (app)/_layout.tsx — this
+    // listener only handles the in-screen UX.
+    const offChatRemoved = onChatRemoved((data) => {
+      if (data.conversationId !== conversationId) return;
+      Alert.alert(
+        'Removed from group',
+        'An admin removed you from this conversation.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (router.canGoBack()) router.back();
+              else router.replace('/(app)/chat');
+            },
+          },
+        ],
+      );
+    });
+
     return () => {
       leaveConversation(conversationId);
       offDm();
@@ -369,6 +391,7 @@ export default function DMThreadScreen() {
       offRejected();
       offMediaRemoved();
       offMediaRejected();
+      offChatRemoved();
       if (typingClearTimerRef.current) {
         clearTimeout(typingClearTimerRef.current);
         typingClearTimerRef.current = null;

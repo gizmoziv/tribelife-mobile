@@ -171,6 +171,20 @@ export function onChevraGroupMessage(
   return () => socket?.off('chevra:group-message', cb);
 }
 
+// Phase 12: server tells a user their participation in a conversation ended
+// (e.g. admin kick) so their Chats list refreshes + any open chat screen
+// ejects to the list.
+export type ChatRemovedPayload = {
+  conversationId: number;
+  reason: 'kicked' | 'archived';
+};
+export function onChatRemoved(
+  cb: (data: ChatRemovedPayload) => void,
+): () => void {
+  socket?.on('chat:removed', cb);
+  return () => socket?.off('chat:removed', cb);
+}
+
 export function onMessageRejected(cb: (data: { reason?: string }) => void): () => void {
   socket?.on('message:rejected', cb);
   return () => socket?.off('message:rejected', cb);
