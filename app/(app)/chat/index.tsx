@@ -261,7 +261,7 @@ function ChatsListRow({
         conversationId: row.conversationId.toString(),
         ...(row.type === 'dm'
           ? { handle: row.partner.handle }
-          : { isGroup: 'true', groupName: row.name }),
+          : { isGroup: 'true', groupName: row.name, isArchived: row.isArchived ? 'true' : 'false' }),
       },
     });
   }, [row, router]);
@@ -321,7 +321,7 @@ function ChatsListRow({
     );
     title = row.name;
     subtitle = row.lastMessage?.preview ?? (row.memberCount + ' members');
-    showLock = true;
+    showLock = !row.isArchived;
   }
 
   return (
@@ -338,6 +338,11 @@ function ChatsListRow({
               {title}
             </Text>
             {showLock && <ClosedLockIcon color={colors.textMuted} />}
+            {row.type === 'group' && row.isArchived && (
+              <View style={[styles.archivedPill, { backgroundColor: colors.textMuted + '22' }]}>
+                <Text style={[styles.archivedPillText, { color: colors.textMuted }]}>Archived</Text>
+              </View>
+            )}
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
             {row.lastMessage && (
@@ -1480,4 +1485,15 @@ const styles = StyleSheet.create({
   chatsRowTitle: { fontSize: 15, fontFamily: FONTS.semiBold },
   chatsRowTime: { fontSize: 12, fontFamily: FONTS.regular },
   chatsRowPreview: { fontSize: 14, fontFamily: FONTS.regular, marginTop: 2 },
+  // D-11: Archived pill on group row
+  archivedPill: {
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 2,
+  },
+  archivedPillText: {
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+  },
 });
