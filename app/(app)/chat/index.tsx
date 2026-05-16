@@ -270,7 +270,8 @@ function ChatsListRow({
   let leadingIcon: React.ReactNode;
   let title: string;
   let subtitle: string;
-  let showLock = false;
+  let isGroupRow = false;
+  let groupIsPublic = false;
 
   if (row.type === 'local_chat') {
     leadingIcon = (
@@ -321,7 +322,8 @@ function ChatsListRow({
     );
     title = row.name;
     subtitle = row.lastMessage?.preview ?? (row.memberCount + ' members');
-    showLock = !row.isArchived;
+    isGroupRow = !row.isArchived;
+    groupIsPublic = row.isPublic;
   }
 
   return (
@@ -337,7 +339,10 @@ function ChatsListRow({
             <Text style={[styles.chatsRowTitle, { color: colors.text }]} numberOfLines={1}>
               {title}
             </Text>
-            {showLock && <ClosedLockIcon color={colors.textMuted} />}
+            {isGroupRow && <GroupPill />}
+            {isGroupRow && (groupIsPublic
+              ? <OpenLockIcon color={colors.textMuted} />
+              : <ClosedLockIcon color={colors.textMuted} />)}
             {row.type === 'group' && row.isArchived && (
               <View style={[styles.archivedPill, { backgroundColor: colors.textMuted + '22' }]}>
                 <Text style={[styles.archivedPillText, { color: colors.textMuted }]}>Archived</Text>
@@ -396,6 +401,32 @@ function ClosedLockIcon({ color }: { color: string }) {
       <Path d="M6 10V8a6 6 0 0112 0v2" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
       <Path d="M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
     </Svg>
+  );
+}
+
+function OpenLockIcon({ color }: { color: string }) {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M8 10V8a6 6 0 0111.5-2.3" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M5 10h14a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1v-9a1 1 0 011-1z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function GroupPill() {
+  return (
+    <View
+      style={{
+        backgroundColor: COLORS.primaryGlow,
+        borderRadius: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+      }}
+    >
+      <Text style={{ fontSize: 10, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+        GROUP
+      </Text>
+    </View>
   );
 }
 
