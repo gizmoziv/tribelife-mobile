@@ -21,7 +21,6 @@ import { groupsApi } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
-import { PillToggle } from '@/components/ui/PillToggle';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
@@ -262,6 +261,118 @@ const GradientTagline = ({ text }: { text: string }) => (
     <Text style={[styles.taglineText, { color: COLORS.accent }]}>{text}</Text>
   </LinearGradient>
 );
+
+// ── Visibility radio card ───────────────────────────────────────────────────
+// Stacked card variant of the Public/Private chooser. Reads as a deliberate
+// attribute decision rather than a tab switch (CPO feedback).
+function VisibilityCard({
+  selected,
+  title,
+  description,
+  icon,
+  onPress,
+  premiumLocked = false,
+  textColor,
+  mutedColor,
+  surfaceColor,
+  borderColor,
+}: {
+  selected: boolean;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  onPress: () => void;
+  premiumLocked?: boolean;
+  textColor: string;
+  mutedColor: string;
+  surfaceColor: string;
+  borderColor: string;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={onPress}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: SPACING.md,
+        borderRadius: RADIUS.md,
+        backgroundColor: surfaceColor,
+        borderColor: selected ? COLORS.primary : borderColor,
+        borderWidth: selected ? 2 : 1,
+      }}
+    >
+      <View style={{ width: 28, alignItems: 'center', marginRight: SPACING.md }}>
+        {icon}
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontFamily: FONTS.semiBold, color: textColor }}>
+            {title}
+          </Text>
+          {premiumLocked && (
+            <View
+              style={{
+                backgroundColor: COLORS.accentSoft,
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 6,
+              }}
+            >
+              <Text style={{ fontSize: 10, fontFamily: FONTS.semiBold, color: COLORS.accent }}>
+                PREMIUM
+              </Text>
+            </View>
+          )}
+        </View>
+        <Text style={{ fontSize: 12, fontFamily: FONTS.regular, color: mutedColor, marginTop: 2, lineHeight: 16 }}>
+          {description}
+        </Text>
+      </View>
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          borderWidth: 2,
+          borderColor: selected ? COLORS.primary : borderColor,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginLeft: SPACING.sm,
+        }}
+      >
+        {selected && (
+          <View
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: COLORS.primary,
+            }}
+          />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function GlobeRadioIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={1.7} />
+      <Path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function LockRadioIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path d="M6 11V8a6 6 0 0112 0v3" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
+      <Path d="M5 11h14a1 1 0 011 1v8a1 1 0 01-1 1H5a1 1 0 01-1-1v-8a1 1 0 011-1z" stroke={color} strokeWidth={1.7} strokeLinejoin="round" />
+    </Svg>
+  );
+}
 
 export default function CreateGroupScreen() {
   const { colors } = useTheme();
@@ -507,11 +618,27 @@ export default function CreateGroupScreen() {
           <AnimatedEntry delay={420} style={{ marginTop: SPACING.lg }}>
             <GlassCard>
               <View style={styles.formInner}>
-                <PillToggle
-                  options={['Public', 'Private']}
-                  activeIndex={isPublic ? 0 : 1}
-                  onSelect={(idx) => {
-                    if (idx === 1 && !canCreatePrivateGroup) {
+                <Text style={[styles.label, { color: colors.text, marginBottom: SPACING.sm }]}>Visibility</Text>
+                <VisibilityCard
+                  selected={isPublic}
+                  title="Public"
+                  description="Anyone can find and join from Chevra."
+                  icon={<GlobeRadioIcon color={isPublic ? COLORS.primary : colors.textMuted} />}
+                  onPress={() => setIsPublic(true)}
+                  textColor={colors.text}
+                  mutedColor={colors.textMuted}
+                  surfaceColor={colors.surface}
+                  borderColor={colors.border}
+                />
+                <View style={{ height: SPACING.sm }} />
+                <VisibilityCard
+                  selected={!isPublic}
+                  title="Private"
+                  description="Invite only. Members join via the invite link."
+                  icon={<LockRadioIcon color={!isPublic ? COLORS.primary : colors.textMuted} />}
+                  premiumLocked={!canCreatePrivateGroup}
+                  onPress={() => {
+                    if (!canCreatePrivateGroup) {
                       Alert.alert(
                         'Upgrade to Premium',
                         'Private groups are a Premium feature. Upgrade to create invite-only groups.',
@@ -522,15 +649,14 @@ export default function CreateGroupScreen() {
                       );
                       return;
                     }
-                    setIsPublic(idx === 0);
+                    setIsPublic(false);
                   }}
-                  style={{ marginBottom: SPACING.md }}
+                  textColor={colors.text}
+                  mutedColor={colors.textMuted}
+                  surfaceColor={colors.surface}
+                  borderColor={colors.border}
                 />
-                <Text style={[styles.toggleHint, { color: colors.textMuted }]}>
-                  {isPublic
-                    ? 'Anyone can find and join this group from Chevra.'
-                    : 'Invite only. Members join via the invite link.'}
-                </Text>
+                <View style={{ height: SPACING.md }} />
 
                 <Text style={[styles.label, { color: colors.text }]}>Group Name</Text>
                 <View style={[styles.inputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
