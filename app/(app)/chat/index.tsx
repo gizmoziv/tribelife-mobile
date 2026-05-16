@@ -297,7 +297,6 @@ function ChatsListRow({
         name={row.partner.handle ?? '?'}
         size={44}
         imageUrl={row.partner.avatarUrl ?? undefined}
-        showRing={false}
       />
     );
     title = '@' + row.partner.handle;
@@ -309,7 +308,6 @@ function ChatsListRow({
         name={row.name}
         size={44}
         imageUrl={row.iconUrl ?? undefined}
-        showRing={false}
       />
     );
     title = row.name;

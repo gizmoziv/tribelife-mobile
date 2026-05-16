@@ -107,7 +107,6 @@ function RoomListItem({
               name={item.name}
               size={44}
               imageUrl={item.iconUrl ?? undefined}
-              showRing={false}
             />
             <View style={[styles.roomInfo, { marginLeft: SPACING.sm }]}>
               <View style={styles.roomNameRow}>
