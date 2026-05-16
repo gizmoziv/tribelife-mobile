@@ -322,10 +322,14 @@ export default function GlobeScreen() {
         item={item}
         onPress={() => {
           if (item.kind === 'group') {
-            // Phase 12 D-07: route group tap to unified chat screen.
-            // Plan 12-08 implements the preview-mode UX on the receiving screen.
+            // Phase 12 D-07: route group tap to the unified chat screen, but
+            // through the Chevra-stack alias (app/(app)/globe/group/
+            // [conversationId].tsx) so the bottom-nav tab indicator stays on
+            // Chevra during preview and tapping Chats actually switches back.
+            // Same component, same params — Plan 12-08 preview branch runs
+            // unchanged on the receiving screen.
             router.push({
-              pathname: '/(app)/chat/[conversationId]',
+              pathname: '/(app)/globe/group/[conversationId]',
               params: {
                 conversationId: item.conversationId.toString(),
                 isGroup: 'true',
