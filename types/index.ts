@@ -225,6 +225,8 @@ export type ChatsRow =
       memberCount: number;
       unreadCount: number;
       lastMessage: ChatsRowLastMessage | null;
+      isPublic: boolean;
+      isArchived: boolean;
     }
   // Phase 11 D-04: joined regional Globe room (Town Square stays its own
   // `town_square` variant — pinned position, gold tint). One row per
@@ -239,6 +241,37 @@ export type ChatsRow =
 
 export interface ChatsListResponse {
   rows: ChatsRow[];
+}
+
+// ── Phase 12: Chevra Discovery Row ─────────────────────────────────────────
+// Separate from ChatsRow — uses `kind` discriminator (not `type`) per D-13.
+// Consumers: globe/index.tsx FlatList; globeApi.rooms() return type.
+export type ChevraRow =
+  | {
+      kind: 'globe_room';
+      slug: string;
+      displayName: string;
+      participantCount: number;
+      lastMessage: { content: string; createdAt: string; senderHandle: string } | null;
+      isSuggested: boolean;
+      isGlobal: boolean;
+      sortOrder: number;
+      welcomeMessage: string;
+      isMember: boolean;
+      autoJoin: boolean;
+    }
+  | {
+      kind: 'group';
+      conversationId: number;
+      name: string;
+      iconUrl: string | null;
+      memberCount: number;
+      lastMessage: { senderHandle: string; content: string; createdAt: string } | null;
+      isMember: boolean;
+    };
+
+export interface ChevraListResponse {
+  rooms: ChevraRow[];
 }
 
 // ── Phase 10: Notification Consolidation ──────────────────────────────────
