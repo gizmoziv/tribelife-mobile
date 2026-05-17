@@ -89,6 +89,13 @@ export default function UserProfileScreen() {
           )}
         </View>
 
+        {/* Bio (hidden when null/empty) */}
+        {profile.bio && profile.bio.trim().length > 0 && (
+          <View style={[styles.bioCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.bioText, { color: colors.text }]}>{profile.bio}</Text>
+          </View>
+        )}
+
         {/* Meta info */}
         <View style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           {profile.timezone && (
@@ -157,4 +164,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   messageButtonText: { color: '#FFF', fontSize: 16, fontFamily: FONTS.semiBold },
+  bioCard: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  bioText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    lineHeight: 20,
+  },
 });
