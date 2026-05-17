@@ -116,6 +116,12 @@ export const auth = {
       { method: 'PUT', body: JSON.stringify({ handle }) }
     ),
 
+  updateBio: (bio: string | null) =>
+    request<{ bio: string | null }>(
+      '/api/auth/me/bio',
+      { method: 'PUT', body: JSON.stringify({ bio }) },
+    ),
+
   me: (timezone?: string) =>
     request<{ user: User; needsOnboarding: boolean; capabilities: Capabilities }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
 

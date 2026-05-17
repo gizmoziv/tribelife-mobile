@@ -10,6 +10,7 @@ export interface User {
   timezone: string | null;
   acceptedTermsAt: string | null;
   handleUpdatedAt: string | null;
+  bio: string | null;
 }
 
 export interface ReactionGroup {
@@ -116,6 +117,7 @@ export interface PublicProfile {
   handle: string;
   avatarUrl: string | null;
   timezone: string | null;
+  bio: string | null;
   isPremium: boolean;
   createdAt: string;
 }
