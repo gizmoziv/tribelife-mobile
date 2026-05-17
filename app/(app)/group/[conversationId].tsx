@@ -36,6 +36,7 @@ export default function GroupInfoScreen() {
   const conversationId = parseInt(rawId);
   const [groupName, setGroupName] = useState(rawGroupName ?? '');
   const inviteSlug = rawSlug ?? '';
+  const [resolvedSlug, setResolvedSlug] = useState<string>(inviteSlug);
   const { colors } = useTheme();
   const { user } = useAuthStore();
   const router = useRouter();
@@ -57,11 +58,23 @@ export default function GroupInfoScreen() {
   }, [conversationId]);
 
   useEffect(() => {
-    if (!inviteSlug) return;
-    groupsApi.getInfo(inviteSlug)
-      .then(({ group }) => setGroupIconUrl(group.groupIconUrl ?? null))
-      .catch(() => {});
-  }, [inviteSlug]);
+    if (inviteSlug) {
+      groupsApi.getInfo(inviteSlug)
+        .then(({ group }) => {
+          setGroupIconUrl(group.groupIconUrl ?? null);
+          setResolvedSlug(group.inviteSlug);
+        })
+        .catch(() => {});
+    } else {
+      // Route param was empty — fall back to myGroups() to find the canonical slug.
+      groupsApi.myGroups()
+        .then(({ groups }) => {
+          const found = groups.find((g) => g.id === conversationId);
+          if (found) setResolvedSlug(found.inviteSlug);
+        })
+        .catch(() => {});
+    }
+  }, [conversationId, inviteSlug]);
 
   const handleUploadIcon = useCallback(async () => {
     if (!isAdmin) return;
@@ -129,16 +142,19 @@ export default function GroupInfoScreen() {
   }, [conversationId, groupName]);
 
   const handleShare = useCallback(async () => {
-    // We need the invite slug — find it from conversation list or use a fallback
+    if (!resolvedSlug) {
+      Alert.alert('Cannot share yet', 'Group info still loading. Please try again in a moment.');
+      return;
+    }
     try {
       const handle = user?.handle ?? '';
       const refParam = handle ? `?ref=${handle}` : '';
-      const url = `https://tribelife.app/g/${inviteSlug}${refParam}`;
+      const url = `https://tribelife.app/g/${resolvedSlug}${refParam}`;
       await Share.share({
         message: `Join our group on TribeLife!\n${url}`,
       });
     } catch { /* user cancelled */ }
-  }, [inviteSlug, user?.handle]);
+  }, [resolvedSlug, user?.handle]);
 
   const handleKick = useCallback((memberId: number, memberHandle: string) => {
     Alert.alert(
