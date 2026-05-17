@@ -775,9 +775,6 @@ export default function ProfileScreen() {
                   <Text style={[styles.referralCount, { color: colors.textMuted }]}>
                     Group invites: {funnelData.bySource.group_invite?.joined ?? 0} joined → {funnelData.bySource.group_invite?.paid ?? 0} paid
                   </Text>
-                  <Text style={[styles.referralCount, { color: colors.textMuted }]}>
-                    Direct referrals: {funnelData.bySource.handle_code?.joined ?? 0} joined → {funnelData.bySource.handle_code?.paid ?? 0} paid
-                  </Text>
                 </>
               )}
               <PillButton
