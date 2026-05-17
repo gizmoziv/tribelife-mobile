@@ -260,6 +260,7 @@ export function MessageBubble({
               style={styles.bubble}
             >
               {/* Reply preview inside bubble */}
+              {/* Reply quotes intentionally freeze to original content — edit feature does not rewrite replyTo.content (PLAN 260517-hiy). */}
               {replyTo && (
                 <Pressable onPress={() => onReplyPress?.(replyTo.id)} style={[styles.replyPreview, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
                   <View style={[styles.replyBar, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
@@ -316,6 +317,7 @@ export function MessageBubble({
                 <View style={[styles.mentionAccent, { backgroundColor: COLORS.primary }]} />
               )}
               {/* Reply preview inside bubble */}
+              {/* Reply quotes intentionally freeze to original content — edit feature does not rewrite replyTo.content (PLAN 260517-hiy). */}
               {replyTo && (
                 <Pressable onPress={() => onReplyPress?.(replyTo.id)} style={[styles.replyPreview, { backgroundColor: colors.surface }]}>
                   <View style={[styles.replyBar, { backgroundColor: colors.primary, opacity: 0.6 }]} />
@@ -364,7 +366,7 @@ export function MessageBubble({
 
         {/* Timestamp */}
         <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
-          {formatTime(message.createdAt)}
+          {formatTime(message.createdAt)}{(message as { editedAt?: string | null }).editedAt ? ' (edited)' : ''}
         </Text>
 
         {/* Reaction pills */}

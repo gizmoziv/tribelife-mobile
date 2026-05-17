@@ -28,6 +28,8 @@ interface ContextMenuProps {
   onReact: (emoji: string) => void;
   onCopy?: () => void;       // optional — omitted when there's no text content to copy
   onReply?: () => void;      // optional — news feed omits Reply row (news has no reply concept)
+  onEdit?: () => void;       // optional — only shown when isOwn === true
+  isOwn?: boolean;           // default false — controls Edit row visibility
   onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
   onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
   messageContent: string;
@@ -39,6 +41,8 @@ export function ContextMenu({
   onReact,
   onCopy,
   onReply,
+  onEdit,
+  isOwn = false,
   onReport,
   onTranslate,
   messageContent,
@@ -82,6 +86,11 @@ export function ContextMenu({
 
   const handleReply = () => {
     onReply?.();
+    onClose();
+  };
+
+  const handleEdit = () => {
+    onEdit?.();
     onClose();
   };
 
@@ -155,6 +164,17 @@ export function ContextMenu({
               </TouchableOpacity>
             )}
 
+            {onEdit && isOwn && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleEdit}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x270E;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Edit</Text>
+              </TouchableOpacity>
+            )}
+
             {onTranslate && (
               <TouchableOpacity
                 style={styles.actionRow}
@@ -189,6 +209,8 @@ export function ContextMenu({
         onEmojiSelected={handleFullPickerSelect}
         open={showFullPicker}
         onClose={() => setShowFullPicker(false)}
+        enableSearchBar
+        enableRecentlyUsed
       />
     </>
   );
