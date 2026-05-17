@@ -38,6 +38,7 @@ import {
   onTypingStart,
   onTypingStop,
   onMessageRejected,
+  onMessageEdited,
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
@@ -50,6 +51,7 @@ import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
@@ -130,6 +132,8 @@ export default function LocalChatScreen() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
@@ -257,7 +261,11 @@ export default function LocalChatScreen() {
         Alert.alert('Image Removed', data.message);
       });
 
-      cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offMediaRemoved, offMediaRejected);
+      const offEdited = onMessageEdited((p) => {
+        setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
+      });
+
+      cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offEdited, offMediaRemoved, offMediaRejected);
     });
 
     return () => {
@@ -582,6 +590,25 @@ export default function LocalChatScreen() {
           <TypingIndicator users={typingUsers} />
         )}
 
+        {editingMessage ? (
+          <EditComposer
+            initialContent={editingMessage.content}
+            saving={savingEdit}
+            onSave={async (next) => {
+              setSavingEdit(true);
+              try {
+                const { message } = await chat.editMessage(editingMessage.id, next);
+                setMessages((prev) => prev.map((m) => m.id === message.id ? { ...m, content: message.content, editedAt: message.editedAt } : m));
+                setEditingMessage(null);
+              } catch (err: any) {
+                Alert.alert('Could not edit message', err?.message ?? 'Please try again.');
+              } finally {
+                setSavingEdit(false);
+              }
+            }}
+            onCancel={() => setEditingMessage(null)}
+          />
+        ) : null}
         <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
         <ChatInput
@@ -608,6 +635,10 @@ export default function LocalChatScreen() {
           onReply={handleReply}
           onReport={handleReport}
           onTranslate={handleTranslate}
+          isOwn={!!user && selectedMessage?.senderId === user.id}
+          onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
+            ? () => { setEditingMessage(selectedMessage); }
+            : undefined}
           messageContent={selectedMessage?.content ?? ''}
         />
         <LanguagePicker

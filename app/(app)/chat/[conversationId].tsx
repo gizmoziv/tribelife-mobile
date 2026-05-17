@@ -40,6 +40,7 @@ import {
   onTypingStart,
   onTypingStop,
   onMessageRejected,
+  onMessageEdited,
   onReactionUpdate,
   onMediaRemoved,
   onChatRemoved,
@@ -52,6 +53,7 @@ import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
@@ -117,6 +119,8 @@ export default function DMThreadScreen() {
   const typingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
@@ -349,6 +353,10 @@ export default function DMThreadScreen() {
       );
     });
 
+    const offEdited = onMessageEdited((p) => {
+      setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
+    });
+
     const offMediaRemoved = onMediaRemoved((data) => {
       setMessages((prev) => prev.map((msg) => {
         if (msg.id === data.messageId) {
@@ -389,6 +397,7 @@ export default function DMThreadScreen() {
       offTypingStart();
       offTypingStop();
       offRejected();
+      offEdited();
       offMediaRemoved();
       offMediaRejected();
       offChatRemoved();
@@ -813,6 +822,25 @@ export default function DMThreadScreen() {
           </View>
         ) : (
           <>
+            {editingMessage ? (
+              <EditComposer
+                initialContent={editingMessage.content}
+                saving={savingEdit}
+                onSave={async (next) => {
+                  setSavingEdit(true);
+                  try {
+                    const { message } = await chat.editMessage(editingMessage.id, next);
+                    setMessages((prev) => prev.map((m) => m.id === message.id ? { ...m, content: message.content, editedAt: message.editedAt } : m));
+                    setEditingMessage(null);
+                  } catch (err: any) {
+                    Alert.alert('Could not edit message', err?.message ?? 'Please try again.');
+                  } finally {
+                    setSavingEdit(false);
+                  }
+                }}
+                onCancel={() => setEditingMessage(null)}
+              />
+            ) : null}
             <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
             <View style={{ position: 'relative' }}>
@@ -867,6 +895,10 @@ export default function DMThreadScreen() {
           onReply={handleReply}
           onReport={handleReport}
           onTranslate={handleTranslate}
+          isOwn={!!user && selectedMessage?.senderId === user.id}
+          onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
+            ? () => { setEditingMessage(selectedMessage); }
+            : undefined}
           messageContent={selectedMessage?.content ?? ''}
         />
         <LanguagePicker

@@ -44,6 +44,7 @@ import {
   onGlobeTyping,
   onGlobeAgeGated,
   onGlobeRateLimited,
+  onMessageEdited,
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
@@ -54,6 +55,7 @@ import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
@@ -166,6 +168,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<GlobeMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<GlobeMessage | null>(null);
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
   const [langPickerVisible, setLangPickerVisible] = useState(false);
@@ -338,6 +342,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
       Alert.alert('Image Removed', data.message);
     });
 
+    const offEdited = onMessageEdited((p) => {
+      const current = useGlobeStore.getState().messages;
+      setMessages(current.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
+    });
+
     // Reconnection handler
     const socket = getSocket();
     const handleReconnect = () => {
@@ -359,6 +368,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
       offRateLimited();
       offMediaRemoved();
       offMediaRejected();
+      offEdited();
       socket?.off('connect', handleReconnect);
       leaveGlobeRoom(roomSlug);
       clearRoom();
@@ -808,6 +818,29 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
         {/* Phase 11 D-12: composer hidden in read-only mode; replaced by Join CTA. */}
         {effectiveIsMember ? (
           <>
+            {/* Edit composer — shown when editing an own message */}
+            {editingMessage && (
+              <EditComposer
+                initialContent={editingMessage.content}
+                saving={savingEdit}
+                onCancel={() => setEditingMessage(null)}
+                onSave={async (newContent) => {
+                  if (!editingMessage) return;
+                  setSavingEdit(true);
+                  try {
+                    const { message: updated } = await chat.editMessage(editingMessage.id, newContent);
+                    const current = useGlobeStore.getState().messages;
+                    setMessages(current.map((m) => m.id === updated.id ? { ...m, content: updated.content, editedAt: updated.editedAt } : m));
+                    setEditingMessage(null);
+                  } catch (err: any) {
+                    Alert.alert('Edit Failed', err?.message ?? 'Could not save edit. Please try again.');
+                  } finally {
+                    setSavingEdit(false);
+                  }
+                }}
+              />
+            )}
+
             {/* Reply composer */}
             <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
@@ -899,6 +932,10 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
           onReply={handleReply}
           onReport={handleReport}
           onTranslate={handleTranslate}
+          isOwn={!!user && selectedMessage?.senderId === user.id}
+          onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
+            ? () => { setEditingMessage(selectedMessage); }
+            : undefined}
           messageContent={selectedMessage?.content ?? ''}
         />
         <LanguagePicker
