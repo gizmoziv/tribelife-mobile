@@ -42,6 +42,7 @@ import {
   uploadToSpaces,
   confirmAvatarUpload,
 } from '@/services/upload';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   FONTS,
   COLORS,
@@ -49,6 +50,8 @@ import {
   RADIUS,
   SHADOWS,
   PREMIUM_PRICE,
+  REGION_TILE_GRADIENT_DARK,
+  REGION_TILE_GRADIENT_LIGHT,
 } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useIsPremium } from '@/hooks/useCapability';
@@ -688,23 +691,101 @@ export default function ProfileScreen() {
 
         {/* Bio */}
         <AnimatedEntry delay={30}>
-          <TouchableOpacity onPress={openBioEditor} activeOpacity={0.7}>
-            <GlassCard>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <View style={{ flex: 1 }}>
+          <TouchableOpacity onPress={openBioEditor} activeOpacity={0.85}>
+            <View style={[bioStyles.card, SHADOWS.sm]}>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? [REGION_TILE_GRADIENT_DARK[0], REGION_TILE_GRADIENT_DARK[1]]
+                    : [REGION_TILE_GRADIENT_LIGHT[0], REGION_TILE_GRADIENT_LIGHT[1]]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={bioStyles.surface}
+              >
+                <LinearGradient
+                  colors={[
+                    isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.55)',
+                    'rgba(255,255,255,0)',
+                  ]}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 0.55 }}
+                  style={StyleSheet.absoluteFillObject}
+                  pointerEvents="none"
+                />
+
+                <View
+                  style={[
+                    bioStyles.editPill,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255,255,255,0.10)'
+                        : 'rgba(15,23,42,0.06)',
+                    },
+                  ]}
+                  pointerEvents="none"
+                >
+                  <Text
+                    style={[
+                      bioStyles.editPillText,
+                      { color: isDark ? COLORS.text : COLORS.lightText },
+                    ]}
+                  >
+                    {user?.bio ? 'Edit' : 'Add'}
+                  </Text>
+                </View>
+
+                <View style={bioStyles.content}>
                   {user?.bio ? (
-                    <Text style={{ fontFamily: FONTS.regular, color: colors.text, lineHeight: 20, fontSize: 14 }}>
-                      {user.bio}
-                    </Text>
+                    <>
+                      <Text
+                        style={[
+                          bioStyles.eyebrow,
+                          { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                        ]}
+                      >
+                        ABOUT
+                      </Text>
+                      <Text
+                        style={[
+                          bioStyles.text,
+                          { color: isDark ? COLORS.text : COLORS.lightText },
+                        ]}
+                      >
+                        {user.bio}
+                      </Text>
+                    </>
                   ) : (
-                    <Text style={{ fontFamily: FONTS.regular, color: colors.textMuted, fontSize: 14 }}>
-                      Add a bio
-                    </Text>
+                    <>
+                      <Text
+                        style={[
+                          bioStyles.eyebrow,
+                          { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                        ]}
+                      >
+                        ABOUT
+                      </Text>
+                      <Text
+                        style={[
+                          bioStyles.placeholder,
+                          { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                        ]}
+                      >
+                        Tell people who you are
+                      </Text>
+                    </>
                   )}
                 </View>
-                <Text style={[styles.handleEditHint, { color: colors.textMuted, marginLeft: 8 }]}>Edit</Text>
-              </View>
-            </GlassCard>
+
+                <LinearGradient
+                  colors={[...COLORS.gradientPrimary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={bioStyles.accentStripe}
+                  pointerEvents="none"
+                />
+              </LinearGradient>
+            </View>
           </TouchableOpacity>
         </AnimatedEntry>
 
@@ -1671,6 +1752,63 @@ function SettingsRow({
     </View>
   );
 }
+
+const bioStyles = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  surface: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  eyebrow: {
+    fontSize: 10,
+    fontFamily: FONTS.semiBold,
+    letterSpacing: 1.4,
+    marginBottom: 10,
+  },
+  text: {
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    lineHeight: 23,
+    letterSpacing: 0.1,
+  },
+  placeholder: {
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    lineHeight: 22,
+    fontStyle: 'italic',
+    opacity: 0.85,
+  },
+  editPill: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.pill,
+    zIndex: 1,
+  },
+  editPillText: {
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+    letterSpacing: 0.4,
+  },
+  accentStripe: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    opacity: 0.9,
+  },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

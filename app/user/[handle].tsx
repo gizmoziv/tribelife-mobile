@@ -13,14 +13,21 @@ import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { usersApi, chat } from '@/services/api';
-import { FONTS, COLORS } from '@/constants';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  FONTS,
+  COLORS,
+  SHADOWS,
+  REGION_TILE_GRADIENT_DARK,
+  REGION_TILE_GRADIENT_LIGHT,
+} from '@/constants';
 import type { PublicProfile } from '@/types';
 
 export default function UserProfileScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>();
   const router = useRouter();
   const navigation = useNavigation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { user: currentUser } = useAuthStore();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -91,8 +98,55 @@ export default function UserProfileScreen() {
 
         {/* Bio (hidden when null/empty) */}
         {profile.bio && profile.bio.trim().length > 0 && (
-          <View style={[styles.bioCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.bioText, { color: colors.text }]}>{profile.bio}</Text>
+          <View style={[styles.bioCard, SHADOWS.sm]}>
+            <LinearGradient
+              colors={
+                isDark
+                  ? [REGION_TILE_GRADIENT_DARK[0], REGION_TILE_GRADIENT_DARK[1]]
+                  : [REGION_TILE_GRADIENT_LIGHT[0], REGION_TILE_GRADIENT_LIGHT[1]]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.bioSurface}
+            >
+              <LinearGradient
+                colors={[
+                  isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.55)',
+                  'rgba(255,255,255,0)',
+                ]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 0.55 }}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
+
+              <View style={styles.bioContent}>
+                <Text
+                  style={[
+                    styles.bioEyebrow,
+                    { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                  ]}
+                >
+                  ABOUT
+                </Text>
+                <Text
+                  style={[
+                    styles.bioText,
+                    { color: isDark ? COLORS.text : COLORS.lightText },
+                  ]}
+                >
+                  {profile.bio}
+                </Text>
+              </View>
+
+              <LinearGradient
+                colors={[...COLORS.gradientPrimary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.bioAccentStripe}
+                pointerEvents="none"
+              />
+            </LinearGradient>
           </View>
         )}
 
@@ -165,14 +219,36 @@ const styles = StyleSheet.create({
   },
   messageButtonText: { color: '#FFF', fontSize: 16, fontFamily: FONTS.semiBold },
   bioCard: {
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  bioSurface: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  bioContent: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 20,
+  },
+  bioEyebrow: {
+    fontSize: 10,
+    fontFamily: FONTS.semiBold,
+    letterSpacing: 1.4,
+    marginBottom: 10,
   },
   bioText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: FONTS.regular,
-    lineHeight: 20,
+    lineHeight: 23,
+    letterSpacing: 0.1,
+  },
+  bioAccentStripe: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    opacity: 0.9,
   },
 });

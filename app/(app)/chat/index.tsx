@@ -55,6 +55,7 @@ import type { ChatsRow } from '@/types';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { RegionTile } from '@/components/ui/RegionTile';
+import { LocalRoomTile } from '@/components/ui/LocalRoomTile';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
@@ -71,14 +72,6 @@ function SendIcon() {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
       <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="#FFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
-function GlobeIcon() {
-  return (
-    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" stroke="#7A8BA8" strokeWidth={1.5} />
     </Svg>
   );
 }
@@ -273,19 +266,19 @@ function ChatsListRow({
   let subtitle: string;
   let isGroupRow = false;
   let groupIsPublic = false;
+  let isLocalRow = false;
+  let isGlobalRow = false;
 
   if (row.type === 'local_chat') {
-    leadingIcon = (
-      <View style={[styles.roomIconContainer, { backgroundColor: COLORS.success }]}>
-        <LocationPinIcon color="#FFF" />
-      </View>
-    );
+    leadingIcon = <LocalRoomTile size={44} />;
     title = timezoneToZoneName(row.timezoneIana);
-    subtitle = row.lastMessage?.preview ?? 'Local timezone room';
+    subtitle = row.lastMessage?.preview ?? 'Your timezone';
+    isLocalRow = true;
   } else if (row.type === 'town_square') {
     leadingIcon = <RegionTile slug="town-square" size={44} />;
     title = 'Town Square';
     subtitle = row.lastMessage?.preview ?? 'A global space';
+    isGlobalRow = true;
   } else if (row.type === 'globe_room') {
     leadingIcon = <RegionTile slug={row.roomSlug} size={44} />;
     title = row.displayName;
@@ -329,6 +322,8 @@ function ChatsListRow({
             <Text style={[styles.chatsRowTitle, { color: colors.text }]} numberOfLines={1}>
               {title}
             </Text>
+            {isLocalRow && <LocalPill />}
+            {isGlobalRow && <GlobalPill />}
             {isGroupRow && <GroupPill />}
             {isGroupRow && !groupIsPublic && <PrivatePill />}
             {row.type === 'group' && row.isArchived && (
@@ -360,26 +355,37 @@ function ChatsListRow({
   );
 }
 
-// ── Inline SVGs for Phase 9 row icons ─────────────────────────────────────
-function LocationPinIcon({ color }: { color: string }) {
+function LocalPill() {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <View
+      style={{
+        backgroundColor: 'rgba(52,211,153,0.15)',
+        borderRadius: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+      }}
+    >
+      <Text style={{ fontSize: 10, fontFamily: FONTS.semiBold, color: COLORS.success }}>
+        LOCAL
+      </Text>
+    </View>
   );
 }
 
-function GlobeIconLarge({ color }: { color: string }) {
+function GlobalPill() {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 2a10 10 0 1010 10A10 10 0 0012 2zm0 18a8 8 0 118-8 8 8 0 01-8 8z" stroke={color} strokeWidth={1.5} />
-      <Path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z" stroke={color} strokeWidth={1.5} />
-    </Svg>
+    <View
+      style={{
+        backgroundColor: 'rgba(192,132,252,0.15)',
+        borderRadius: 6,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+      }}
+    >
+      <Text style={{ fontSize: 10, fontFamily: FONTS.semiBold, color: '#C084FC' }}>
+        GLOBAL
+      </Text>
+    </View>
   );
 }
 
@@ -1480,13 +1486,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.regular,
     textAlign: 'center',
-  },
-  roomIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   chatsRow: {
     flexDirection: 'row',

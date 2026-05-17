@@ -170,7 +170,7 @@ export function ContextMenu({
                 onPress={handleEdit}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x270E;</Text>
+                <Text style={styles.actionIcon}>&#x270F;&#xFE0F;</Text>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Edit</Text>
               </TouchableOpacity>
             )}
