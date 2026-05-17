@@ -23,12 +23,33 @@ import * as Notifications from 'expo-notifications';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, referralsApi, notificationsApi, groupsApi, newsPushApi, ApiError } from '@/services/api';
+import {
+  auth,
+  referralsApi,
+  notificationsApi,
+  groupsApi,
+  newsPushApi,
+  ApiError,
+} from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
-import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
-import { requestAvatarUploadUrl, uploadToSpaces, confirmAvatarUpload } from '@/services/upload';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS, PREMIUM_PRICE } from '@/constants';
+import {
+  registerForPushNotifications,
+  sendPushTokenToServer,
+} from '@/services/pushNotifications';
+import {
+  requestAvatarUploadUrl,
+  uploadToSpaces,
+  confirmAvatarUpload,
+} from '@/services/upload';
+import {
+  FONTS,
+  COLORS,
+  SPACING,
+  RADIUS,
+  SHADOWS,
+  PREMIUM_PRICE,
+} from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useIsPremium } from '@/hooks/useCapability';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -42,7 +63,13 @@ import Svg, { Path, Circle } from 'react-native-svg';
 function ChevronIcon({ color }: { color: string }) {
   return (
     <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path d="M9 18l6-6-6-6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M9 18l6-6-6-6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -50,7 +77,13 @@ function ChevronIcon({ color }: { color: string }) {
 function CameraIcon() {
   return (
     <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-      <Path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"
+        stroke="#fff"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <Circle cx={12} cy={13} r={4} stroke="#fff" strokeWidth={2} />
     </Svg>
   );
@@ -68,12 +101,24 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [referralCount, setReferralCount] = useState(0);
   const [premiumMonthsEarned, setPremiumMonthsEarned] = useState(0);
-  const [funnelData, setFunnelData] = useState<{ bySource: Record<string, { joined: number; paid: number }>; totalPremiumMonths: number } | null>(null);
-  const [myGroups, setMyGroups] = useState<{ id: number; groupName: string; inviteSlug: string; memberCount: number; role: string }[]>([]);
+  const [funnelData, setFunnelData] = useState<{
+    bySource: Record<string, { joined: number; paid: number }>;
+    totalPremiumMonths: number;
+  } | null>(null);
+  const [myGroups, setMyGroups] = useState<
+    {
+      id: number;
+      groupName: string;
+      inviteSlug: string;
+      memberCount: number;
+      role: string;
+    }[]
+  >([]);
 
   const loadMyGroups = useCallback(() => {
     if (!isPremium) return;
-    groupsApi.myGroups()
+    groupsApi
+      .myGroups()
       .then(({ groups }) => setMyGroups(groups))
       .catch(() => {});
   }, [isPremium]);
@@ -82,14 +127,20 @@ export default function ProfileScreen() {
     loadMyGroups();
   }, [loadMyGroups]);
 
-  const [renameTarget, setRenameTarget] = useState<{ id: number; groupName: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{
+    id: number;
+    groupName: string;
+  } | null>(null);
   const [renameInput, setRenameInput] = useState('');
   const [isSavingRename, setIsSavingRename] = useState(false);
 
-  const handleRenameGroup = useCallback((group: { id: number; groupName: string }) => {
-    setRenameInput(group.groupName);
-    setRenameTarget(group);
-  }, []);
+  const handleRenameGroup = useCallback(
+    (group: { id: number; groupName: string }) => {
+      setRenameInput(group.groupName);
+      setRenameTarget(group);
+    },
+    [],
+  );
 
   const handleSaveRename = useCallback(async () => {
     if (!renameTarget) return;
@@ -101,7 +152,11 @@ export default function ProfileScreen() {
     setIsSavingRename(true);
     try {
       await groupsApi.update(renameTarget.id, { name: trimmed });
-      setMyGroups(prev => prev.map(g => g.id === renameTarget.id ? { ...g, groupName: trimmed } : g));
+      setMyGroups((prev) =>
+        prev.map((g) =>
+          g.id === renameTarget.id ? { ...g, groupName: trimmed } : g,
+        ),
+      );
       setRenameTarget(null);
     } catch {
       Alert.alert('Error', 'Could not rename the group.');
@@ -110,23 +165,60 @@ export default function ProfileScreen() {
     }
   }, [renameTarget, renameInput]);
 
+  // ── Bio edit ──────────────────────────────────────────────────────────────
+  const [bioEditorVisible, setBioEditorVisible] = useState(false);
+  const [bioInput, setBioInput] = useState('');
+  const [isSavingBio, setIsSavingBio] = useState(false);
+  const [bioSaveError, setBioSaveError] = useState<string | null>(null);
+
+  const openBioEditor = useCallback(() => {
+    setBioInput(user?.bio ?? '');
+    setBioSaveError(null);
+    setBioEditorVisible(true);
+  }, [user?.bio]);
+
+  const handleSaveBio = useCallback(async () => {
+    setIsSavingBio(true);
+    const trimmed = bioInput.trim();
+    const next: string | null = trimmed.length === 0 ? null : trimmed;
+    try {
+      await auth.updateBio(next);
+      updateUser({ bio: next });
+      setBioEditorVisible(false);
+    } catch (err) {
+      setBioSaveError(err instanceof Error ? err.message : 'Could not update bio.');
+    } finally {
+      setIsSavingBio(false);
+    }
+  }, [bioInput, updateUser]);
+
   // ── Handle edit (30-day cooldown) ─────────────────────────────────────────
   const HANDLE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
   const cooldownDate = user?.handleUpdatedAt
     ? new Date(new Date(user.handleUpdatedAt).getTime() + HANDLE_COOLDOWN_MS)
     : null;
-  const isInCooldown = cooldownDate ? cooldownDate.getTime() > Date.now() : false;
-  const cooldownDateText = cooldownDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const isInCooldown = cooldownDate
+    ? cooldownDate.getTime() > Date.now()
+    : false;
+  const cooldownDateText = cooldownDate?.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   const [editHandleVisible, setEditHandleVisible] = useState(false);
   const [confirmHandleVisible, setConfirmHandleVisible] = useState(false);
   const [cooldownNoticeVisible, setCooldownNoticeVisible] = useState(false);
   const [handleInput, setHandleInput] = useState('');
-  const [handleResult, setHandleResult] = useState<'none' | 'invalid' | 'available' | 'taken'>('none');
+  const [handleResult, setHandleResult] = useState<
+    'none' | 'invalid' | 'available' | 'taken'
+  >('none');
   const [isCheckingHandle, setIsCheckingHandle] = useState(false);
   const [isSavingHandle, setIsSavingHandle] = useState(false);
   const [handleSaveError, setHandleSaveError] = useState<string | null>(null);
-  const checkHandleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const checkHandleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const latestHandleInputRef = useRef('');
 
   const openHandleEditor = useCallback(() => {
@@ -142,45 +234,49 @@ export default function ProfileScreen() {
     setEditHandleVisible(true);
   }, [isInCooldown]);
 
-  const handleHandleInputChange = useCallback((text: string) => {
-    const cleaned = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
-    setHandleInput(cleaned);
-    latestHandleInputRef.current = cleaned;
-    setHandleSaveError(null);
+  const handleHandleInputChange = useCallback(
+    (text: string) => {
+      const cleaned = text.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      setHandleInput(cleaned);
+      latestHandleInputRef.current = cleaned;
+      setHandleSaveError(null);
 
-    if (checkHandleTimeoutRef.current) clearTimeout(checkHandleTimeoutRef.current);
+      if (checkHandleTimeoutRef.current)
+        clearTimeout(checkHandleTimeoutRef.current);
 
-    if (cleaned.length === 0 || cleaned === (user?.handle ?? '')) {
-      setHandleResult('none');
-      setIsCheckingHandle(false);
-      return;
-    }
-
-    if (cleaned.length < 3) {
-      setHandleResult('invalid');
-      setIsCheckingHandle(false);
-      return;
-    }
-
-    setHandleResult((prev) => (prev === 'invalid' ? 'none' : prev));
-    setIsCheckingHandle(true);
-
-    checkHandleTimeoutRef.current = setTimeout(async () => {
-      const current = latestHandleInputRef.current;
-      if (current.length < 3) return;
-      try {
-        const { available } = await auth.checkHandle(current);
-        if (latestHandleInputRef.current === current) {
-          setHandleResult(available ? 'available' : 'taken');
-          setIsCheckingHandle(false);
-        }
-      } catch {
-        if (latestHandleInputRef.current === current) {
-          setIsCheckingHandle(false);
-        }
+      if (cleaned.length === 0 || cleaned === (user?.handle ?? '')) {
+        setHandleResult('none');
+        setIsCheckingHandle(false);
+        return;
       }
-    }, 600);
-  }, [user?.handle]);
+
+      if (cleaned.length < 3) {
+        setHandleResult('invalid');
+        setIsCheckingHandle(false);
+        return;
+      }
+
+      setHandleResult((prev) => (prev === 'invalid' ? 'none' : prev));
+      setIsCheckingHandle(true);
+
+      checkHandleTimeoutRef.current = setTimeout(async () => {
+        const current = latestHandleInputRef.current;
+        if (current.length < 3) return;
+        try {
+          const { available } = await auth.checkHandle(current);
+          if (latestHandleInputRef.current === current) {
+            setHandleResult(available ? 'available' : 'taken');
+            setIsCheckingHandle(false);
+          }
+        } catch {
+          if (latestHandleInputRef.current === current) {
+            setIsCheckingHandle(false);
+          }
+        }
+      }, 600);
+    },
+    [user?.handle],
+  );
 
   const handleRequestHandleSave = useCallback(() => {
     if (handleResult !== 'available' || isCheckingHandle) return;
@@ -197,15 +293,20 @@ export default function ProfileScreen() {
     } catch (err) {
       setConfirmHandleVisible(false);
       if (err instanceof ApiError && err.status === 429) {
-        const next = (err.data as { nextChangeAt?: string } | undefined)?.nextChangeAt;
+        const next = (err.data as { nextChangeAt?: string } | undefined)
+          ?.nextChangeAt;
         if (next) {
-          const inferred = new Date(new Date(next).getTime() - HANDLE_COOLDOWN_MS);
+          const inferred = new Date(
+            new Date(next).getTime() - HANDLE_COOLDOWN_MS,
+          );
           updateUser({ handleUpdatedAt: inferred.toISOString() });
         }
         setEditHandleVisible(false);
         setCooldownNoticeVisible(true);
       } else {
-        setHandleSaveError(err instanceof Error ? err.message : 'Could not update handle.');
+        setHandleSaveError(
+          err instanceof Error ? err.message : 'Could not update handle.',
+        );
       }
     } finally {
       setIsSavingHandle(false);
@@ -223,11 +324,15 @@ export default function ProfileScreen() {
     none: '',
     available: 'Available',
     taken: 'Already taken',
-    invalid: handleInput.length < 3 ? 'At least 3 characters required' : 'Letters, numbers, and underscores only',
+    invalid:
+      handleInput.length < 3
+        ? 'At least 3 characters required'
+        : 'Letters, numbers, and underscores only',
   }[handleResult];
 
   useEffect(() => {
-    referralsApi.getStats()
+    referralsApi
+      .getStats()
       .then(({ totalReferrals, premiumMonthsEarned }) => {
         setReferralCount(totalReferrals);
         setPremiumMonthsEarned(premiumMonthsEarned);
@@ -236,7 +341,8 @@ export default function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    referralsApi.getFunnel()
+    referralsApi
+      .getFunnel()
       .then((data) => setFunnelData(data))
       .catch(() => {});
   }, []);
@@ -250,7 +356,9 @@ export default function ProfileScreen() {
       await Share.share({
         message: `Join me on TribeLife — the global Jewish community app!\n${url}`,
       });
-    } catch { /* user cancelled */ }
+    } catch {
+      /* user cancelled */
+    }
   };
 
   // Notification preferences
@@ -269,8 +377,12 @@ export default function ProfileScreen() {
       setPushEnabled(status === 'granted');
     });
     // Load server-side preferences
-    notificationsApi.getPreferences().then(setNotifPrefs).catch(() => {});
-    newsPushApi.getPreference()
+    notificationsApi
+      .getPreferences()
+      .then(setNotifPrefs)
+      .catch(() => {});
+    newsPushApi
+      .getPreference()
       .then(({ newsPushEnabled }) => setNewsPushEnabled(newsPushEnabled))
       .catch(() => {});
   }, []);
@@ -288,7 +400,7 @@ export default function ProfileScreen() {
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
+          ],
         );
       }
     } else {
@@ -298,20 +410,23 @@ export default function ProfileScreen() {
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Open Settings', onPress: () => Linking.openSettings() },
-        ]
+        ],
       );
     }
   }, []);
 
-  const updateNotifPref = useCallback(async (key: keyof typeof notifPrefs, value: boolean) => {
-    setNotifPrefs(prev => ({ ...prev, [key]: value }));
-    try {
-      await notificationsApi.updatePreferences({ [key]: value });
-    } catch {
-      // Revert on failure
-      setNotifPrefs(prev => ({ ...prev, [key]: !value }));
-    }
-  }, []);
+  const updateNotifPref = useCallback(
+    async (key: keyof typeof notifPrefs, value: boolean) => {
+      setNotifPrefs((prev) => ({ ...prev, [key]: value }));
+      try {
+        await notificationsApi.updatePreferences({ [key]: value });
+      } catch {
+        // Revert on failure
+        setNotifPrefs((prev) => ({ ...prev, [key]: !value }));
+      }
+    },
+    [],
+  );
 
   const updateNewsPushPref = useCallback(async (value: boolean) => {
     setNewsPushEnabled(value); // optimistic
@@ -324,9 +439,13 @@ export default function ProfileScreen() {
 
   async function handleAvatarUpload() {
     try {
-      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permResult.granted) {
-        Alert.alert('Permission needed', 'Please allow access to your photo library to upload an avatar.');
+        Alert.alert(
+          'Permission needed',
+          'Please allow access to your photo library to upload an avatar.',
+        );
         return;
       }
 
@@ -345,7 +464,7 @@ export default function ProfileScreen() {
       const processed = await manipulateAsync(
         pickResult.assets[0].uri,
         [{ resize: { width: 500, height: 500 } }],
-        { compress: 0.8, format: SaveFormat.JPEG }
+        { compress: 0.8, format: SaveFormat.JPEG },
       );
 
       // Optimistic local update
@@ -368,7 +487,10 @@ export default function ProfileScreen() {
       updateUser({ avatarUrl });
     } catch (err: any) {
       console.error('[profile] Avatar upload failed:', err?.message || err);
-      Alert.alert('Upload failed', err?.message || 'Could not upload your photo. Please try again.');
+      Alert.alert(
+        'Upload failed',
+        err?.message || 'Could not upload your photo. Please try again.',
+      );
     } finally {
       setUploadingAvatar(false);
     }
@@ -409,21 +531,28 @@ export default function ProfileScreen() {
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      try { await Purchases.logOut(); } catch { /* ignore if not logged in */ }
+                      try {
+                        await Purchases.logOut();
+                      } catch {
+                        /* ignore if not logged in */
+                      }
                       await auth.deleteAccount();
                       disconnectSocket();
                       await logout();
                       router.replace('/(auth)/welcome');
                     } catch {
-                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                      Alert.alert(
+                        'Error',
+                        'Failed to delete account. Please try again.',
+                      );
                     }
                   },
                 },
-              ]
+              ],
             );
           },
         },
-      ]
+      ],
     );
   };
 
@@ -434,25 +563,33 @@ export default function ProfileScreen() {
       const monthly = offerings.current?.monthly;
 
       if (!monthly) {
-        Alert.alert('Unavailable', 'Premium is not available right now. Please try again later.');
+        Alert.alert(
+          'Unavailable',
+          'Premium is not available right now. Please try again later.',
+        );
         return;
       }
 
       const { customerInfo } = await Purchases.purchasePackage(monthly);
-      const isPremiumEntitlement = customerInfo.entitlements.active['premium'] !== undefined;
+      const isPremiumEntitlement =
+        customerInfo.entitlements.active['premium'] !== undefined;
 
       if (isPremiumEntitlement) {
         await refreshSession();
-        const maxBeacons = useAuthStore.getState().capabilities?.limits.maxBeacons ?? 3;
+        const maxBeacons =
+          useAuthStore.getState().capabilities?.limits.maxBeacons ?? 3;
         Alert.alert(
           'Welcome to Premium!',
           `You can now run up to ${maxBeacons} beacons at a time. Thank you for supporting TribeLife!`,
-          [{ text: 'Awesome!' }]
+          [{ text: 'Awesome!' }],
         );
       }
     } catch (err: any) {
       if (!err.userCancelled) {
-        Alert.alert('Purchase Failed', 'Unable to complete the purchase. Please try again later.');
+        Alert.alert(
+          'Purchase Failed',
+          'Unable to complete the purchase. Please try again later.',
+        );
       }
     } finally {
       setIsUpgrading(false);
@@ -462,12 +599,19 @@ export default function ProfileScreen() {
   const handleRestorePurchase = async () => {
     try {
       const customerInfo = await Purchases.restorePurchases();
-      const isPremiumEntitlement = customerInfo.entitlements.active['premium'] !== undefined;
+      const isPremiumEntitlement =
+        customerInfo.entitlements.active['premium'] !== undefined;
       if (isPremiumEntitlement) {
         await refreshSession();
-        Alert.alert('Restored!', 'Your premium subscription has been restored.');
+        Alert.alert(
+          'Restored!',
+          'Your premium subscription has been restored.',
+        );
       } else {
-        Alert.alert('No Subscription Found', 'No active premium subscription was found for your account.');
+        Alert.alert(
+          'No Subscription Found',
+          'No active premium subscription was found for your account.',
+        );
       }
     } catch {
       Alert.alert('Error', 'Could not restore purchases. Please try again.');
@@ -475,21 +619,39 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* User Header */}
         <AnimatedEntry>
           <GlassCard>
             <View style={styles.userCardInner}>
-              <TouchableOpacity onPress={handleAvatarUpload} disabled={uploadingAvatar}>
+              <TouchableOpacity
+                onPress={handleAvatarUpload}
+                disabled={uploadingAvatar}
+              >
                 <View>
-                  <AvatarCircle name={user?.name ?? '?'} size={64} imageUrl={user?.avatarUrl ?? undefined} />
-                  <View style={{
-                    position: 'absolute', bottom: 0, right: 0,
-                    backgroundColor: COLORS.primary, borderRadius: 12,
-                    width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
-                    borderWidth: 2, borderColor: colors.background,
-                  }}>
+                  <AvatarCircle
+                    name={user?.name ?? '?'}
+                    size={64}
+                    imageUrl={user?.avatarUrl ?? undefined}
+                  />
+                  <View
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      right: 0,
+                      backgroundColor: COLORS.primary,
+                      borderRadius: 12,
+                      width: 24,
+                      height: 24,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 2,
+                      borderColor: colors.background,
+                    }}
+                  >
                     {uploadingAvatar ? (
                       <ActivityIndicator size={12} color="#fff" />
                     ) : (
@@ -499,10 +661,20 @@ export default function ProfileScreen() {
                 </View>
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.userName, { color: colors.text }]}>{user?.name}</Text>
-                <TouchableOpacity onPress={openHandleEditor} activeOpacity={0.7} style={styles.handleRow}>
-                  <Text style={[styles.userHandle, { color: COLORS.primary }]}>@{user?.handle}</Text>
-                  <Text style={[styles.handleEditHint, { color: colors.textMuted }]}>
+                <Text style={[styles.userName, { color: colors.text }]}>
+                  {user?.name}
+                </Text>
+                <TouchableOpacity
+                  onPress={openHandleEditor}
+                  activeOpacity={0.7}
+                  style={styles.handleRow}
+                >
+                  <Text style={[styles.userHandle, { color: COLORS.primary }]}>
+                    @{user?.handle}
+                  </Text>
+                  <Text
+                    style={[styles.handleEditHint, { color: colors.textMuted }]}
+                  >
                     {isInCooldown ? `Locked until ${cooldownDateText}` : 'Edit'}
                   </Text>
                 </TouchableOpacity>
@@ -512,6 +684,28 @@ export default function ProfileScreen() {
               </View>
             </View>
           </GlassCard>
+        </AnimatedEntry>
+
+        {/* Bio */}
+        <AnimatedEntry delay={30}>
+          <TouchableOpacity onPress={openBioEditor} activeOpacity={0.7}>
+            <GlassCard>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <View style={{ flex: 1 }}>
+                  {user?.bio ? (
+                    <Text style={{ fontFamily: FONTS.regular, color: colors.text, lineHeight: 20, fontSize: 14 }}>
+                      {user.bio}
+                    </Text>
+                  ) : (
+                    <Text style={{ fontFamily: FONTS.regular, color: colors.textMuted, fontSize: 14 }}>
+                      Add a bio
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.handleEditHint, { color: colors.textMuted, marginLeft: 8 }]}>Edit</Text>
+              </View>
+            </GlassCard>
+          </TouchableOpacity>
         </AnimatedEntry>
 
         {/* Appearance */}
@@ -563,7 +757,9 @@ export default function ProfileScreen() {
                 right={
                   <Switch
                     value={pushEnabled && notifPrefs.timezoneChatPush}
-                    onValueChange={(v) => updateNotifPref('timezoneChatPush', v)}
+                    onValueChange={(v) =>
+                      updateNotifPref('timezoneChatPush', v)
+                    }
                     trackColor={{ false: colors.border, true: COLORS.primary }}
                     thumbColor="#FFF"
                     disabled={!pushEnabled}
@@ -575,7 +771,9 @@ export default function ProfileScreen() {
                 right={
                   <Switch
                     value={pushEnabled && notifPrefs.beaconMatchesPush}
-                    onValueChange={(v) => updateNotifPref('beaconMatchesPush', v)}
+                    onValueChange={(v) =>
+                      updateNotifPref('beaconMatchesPush', v)
+                    }
                     trackColor={{ false: colors.border, true: COLORS.primary }}
                     thumbColor="#FFF"
                     disabled={!pushEnabled}
@@ -639,21 +837,37 @@ export default function ProfileScreen() {
                       >
                         <TouchableOpacity
                           style={{ flex: 1 }}
-                          onPress={() => router.push({
-                            pathname: '/(app)/chat/[conversationId]',
-                            params: {
-                              conversationId: g.id.toString(),
-                              isGroup: 'true',
-                              groupName: g.groupName,
-                              inviteSlug: g.inviteSlug,
-                            },
-                          })}
+                          onPress={() =>
+                            router.push({
+                              pathname: '/(app)/chat/[conversationId]',
+                              params: {
+                                conversationId: g.id.toString(),
+                                isGroup: 'true',
+                                groupName: g.groupName,
+                                inviteSlug: g.inviteSlug,
+                              },
+                            })
+                          }
                         >
-                          <Text style={{ fontSize: 15, fontFamily: FONTS.semiBold, color: colors.text }}>
+                          <Text
+                            style={{
+                              fontSize: 15,
+                              fontFamily: FONTS.semiBold,
+                              color: colors.text,
+                            }}
+                          >
                             {g.groupName}
                           </Text>
-                          <Text style={{ fontSize: 12, fontFamily: FONTS.regular, color: colors.textMuted, marginTop: 2 }}>
-                            {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontFamily: FONTS.regular,
+                              color: colors.textMuted,
+                              marginTop: 2,
+                            }}
+                          >
+                            {g.memberCount}{' '}
+                            {g.memberCount === 1 ? 'member' : 'members'}
                             {g.role === 'admin' ? ' · Admin' : ''}
                           </Text>
                         </TouchableOpacity>
@@ -661,9 +875,18 @@ export default function ProfileScreen() {
                           <TouchableOpacity
                             onPress={() => handleRenameGroup(g)}
                             hitSlop={8}
-                            style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 6,
+                            }}
                           >
-                            <Text style={{ fontSize: 13, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontFamily: FONTS.semiBold,
+                                color: COLORS.primary,
+                              }}
+                            >
                               Rename
                             </Text>
                           </TouchableOpacity>
@@ -687,7 +910,9 @@ export default function ProfileScreen() {
         {orgs.length > 0 && (
           <AnimatedEntry delay={135}>
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>YOUR ORGANIZATIONS</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+                YOUR ORGANIZATIONS
+              </Text>
               <GlassCard borderRadius={RADIUS.lg}>
                 <View style={{ gap: SPACING.sm }}>
                   {orgs.map((o) => (
@@ -711,17 +936,30 @@ export default function ProfileScreen() {
         {!isPremium && (
           <AnimatedEntry delay={120}>
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>PREMIUM</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+                PREMIUM
+              </Text>
               <GlassCard glowColor={COLORS.borderGlow}>
                 <View style={styles.premiumInner}>
                   <Text style={[styles.premiumTitle, { color: colors.text }]}>
                     Upgrade to Premium
                   </Text>
-                  <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
+                  <Text
+                    style={[styles.premiumDesc, { color: colors.textMuted }]}
+                  >
                     {`\u2022 Run up to ${limits?.maxBeacons ?? 3} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
                   </Text>
-                  <Text style={[styles.subscriptionInfo, { color: colors.textMuted }]}>
-                    TribeLife Premium is a monthly auto-renewable subscription at {PREMIUM_PRICE}. Payment is charged to your Apple ID account at confirmation. The subscription automatically renews unless canceled at least 24 hours before the end of the current period.
+                  <Text
+                    style={[
+                      styles.subscriptionInfo,
+                      { color: colors.textMuted },
+                    ]}
+                  >
+                    TribeLife Premium is a monthly auto-renewable subscription
+                    at {PREMIUM_PRICE}. Payment is charged to your Apple ID
+                    account at confirmation. The subscription automatically
+                    renews unless canceled at least 24 hours before the end of
+                    the current period.
                   </Text>
                   <PillButton
                     title={`Upgrade \u00B7 ${PREMIUM_PRICE}`}
@@ -733,17 +971,38 @@ export default function ProfileScreen() {
                     style={{ width: '100%' }}
                   />
                   <TouchableOpacity onPress={handleRestorePurchase}>
-                    <Text style={[styles.restoreText, { color: colors.textMuted }]}>
+                    <Text
+                      style={[styles.restoreText, { color: colors.textMuted }]}
+                    >
                       Restore purchase
                     </Text>
                   </TouchableOpacity>
                   <View style={styles.legalLinks}>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/terms')}>
-                      <Text style={[styles.legalLink, { color: COLORS.primary }]}>Terms of Use</Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        Linking.openURL('https://tribelife.app/terms')
+                      }
+                    >
+                      <Text
+                        style={[styles.legalLink, { color: COLORS.primary }]}
+                      >
+                        Terms of Use
+                      </Text>
                     </TouchableOpacity>
-                    <Text style={{ color: colors.textMuted }}> {'\u00B7'} </Text>
-                    <TouchableOpacity onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
-                      <Text style={[styles.legalLink, { color: COLORS.primary }]}>Privacy Policy</Text>
+                    <Text style={{ color: colors.textMuted }}>
+                      {' '}
+                      {'\u00B7'}{' '}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        Linking.openURL('https://tribelife.app/privacy')
+                      }
+                    >
+                      <Text
+                        style={[styles.legalLink, { color: COLORS.primary }]}
+                      >
+                        Privacy Policy
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -759,9 +1018,9 @@ export default function ProfileScreen() {
               <Text style={[styles.referralTitle, { color: colors.text }]}>
                 Invite Friends
               </Text>
-              <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+              {/* <Text style={[styles.referralCount, { color: colors.textMuted }]}>
                 {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
-              </Text>
+              </Text> */}
               <Text style={[styles.referralReward, { color: COLORS.primary }]}>
                 {premiumMonthsEarned > 0
                   ? `${premiumMonthsEarned} of 12 premium months earned!`
@@ -769,11 +1028,19 @@ export default function ProfileScreen() {
               </Text>
               {funnelData && (
                 <>
-                  <Text style={[styles.referralCount, { color: colors.textMuted }]}>
-                    Profile shares: {funnelData.bySource.profile_share?.joined ?? 0} joined → {funnelData.bySource.profile_share?.paid ?? 0} paid
+                  <Text
+                    style={[styles.referralCount, { color: colors.textMuted }]}
+                  >
+                    Profile shares:{' '}
+                    {funnelData.bySource.profile_share?.joined ?? 0} joined →{' '}
+                    {funnelData.bySource.profile_share?.paid ?? 0} paid
                   </Text>
-                  <Text style={[styles.referralCount, { color: colors.textMuted }]}>
-                    Group invites: {funnelData.bySource.group_invite?.joined ?? 0} joined → {funnelData.bySource.group_invite?.paid ?? 0} paid
+                  <Text
+                    style={[styles.referralCount, { color: colors.textMuted }]}
+                  >
+                    Group invites:{' '}
+                    {funnelData.bySource.group_invite?.joined ?? 0} joined →{' '}
+                    {funnelData.bySource.group_invite?.paid ?? 0} paid
                   </Text>
                 </>
               )}
@@ -793,7 +1060,9 @@ export default function ProfileScreen() {
             <SettingsRow
               label="Email"
               right={
-                <Text style={[styles.settingValue, { color: colors.textMuted }]}>
+                <Text
+                  style={[styles.settingValue, { color: colors.textMuted }]}
+                >
                   {user?.email}
                 </Text>
               }
@@ -801,7 +1070,9 @@ export default function ProfileScreen() {
             <SettingsRow
               label="Timezone"
               right={
-                <Text style={[styles.settingValue, { color: colors.textMuted }]}>
+                <Text
+                  style={[styles.settingValue, { color: colors.textMuted }]}
+                >
                   {user?.timezone ?? 'Not set'}
                 </Text>
               }
@@ -810,7 +1081,9 @@ export default function ProfileScreen() {
               style={[styles.row, { borderBottomColor: 'transparent' }]}
               onPress={() => router.push('/(app)/profile/blocked-users')}
             >
-              <Text style={[styles.rowLabel, { color: colors.text }]}>Blocked Users</Text>
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
+                Blocked Users
+              </Text>
               <ChevronIcon color={colors.textMuted} />
             </TouchableOpacity>
           </SettingsSection>
@@ -823,7 +1096,9 @@ export default function ProfileScreen() {
               style={[styles.row, { borderBottomColor: 'transparent' }]}
               onPress={() => router.push('/support')}
             >
-              <Text style={[styles.rowLabel, { color: colors.text }]}>Contact Support</Text>
+              <Text style={[styles.rowLabel, { color: colors.text }]}>
+                Contact Support
+              </Text>
               <ChevronIcon color={colors.textMuted} />
             </TouchableOpacity>
           </SettingsSection>
@@ -832,7 +1107,9 @@ export default function ProfileScreen() {
         {/* Session */}
         <AnimatedEntry delay={360}>
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>SESSION</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+              SESSION
+            </Text>
             <PillButton
               title="Log Out"
               onPress={handleLogout}
@@ -846,7 +1123,9 @@ export default function ProfileScreen() {
 
         <AnimatedEntry delay={420}>
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>DANGER ZONE</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+              DANGER ZONE
+            </Text>
             <PillButton
               title="Delete Account"
               onPress={handleDeleteAccount}
@@ -876,8 +1155,18 @@ export default function ProfileScreen() {
             activeOpacity={1}
             onPress={() => setRenameTarget(null)}
           />
-          <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <Text style={[renameStyles.title, { color: colors.text }]}>Rename Group</Text>
+          <View
+            style={[
+              renameStyles.card,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[renameStyles.title, { color: colors.text }]}>
+              Rename Group
+            </Text>
             <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
               Enter a new name for this group.
             </Text>
@@ -888,7 +1177,14 @@ export default function ProfileScreen() {
               placeholderTextColor={colors.textMuted}
               autoFocus
               maxLength={50}
-              style={[renameStyles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceGlass }]}
+              style={[
+                renameStyles.input,
+                {
+                  color: colors.text,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceGlass,
+                },
+              ]}
               onSubmitEditing={handleSaveRename}
               returnKeyType="done"
             />
@@ -898,17 +1194,27 @@ export default function ProfileScreen() {
                 style={[renameStyles.button, { borderColor: colors.border }]}
                 disabled={isSavingRename}
               >
-                <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+                <Text style={[renameStyles.buttonText, { color: colors.text }]}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSaveRename}
-                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                style={[
+                  renameStyles.button,
+                  {
+                    backgroundColor: COLORS.primary,
+                    borderColor: COLORS.primary,
+                  },
+                ]}
                 disabled={isSavingRename || !renameInput.trim()}
               >
                 {isSavingRename ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>
+                    Save
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -945,14 +1251,37 @@ export default function ProfileScreen() {
             }}
           />
           {confirmHandleVisible ? (
-            <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Text style={[renameStyles.title, { color: colors.text }]}>Confirm new handle</Text>
-              <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
-                Change your handle to <Text style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}>@{handleInput}</Text>?
-                You won't be able to change it again until {' '}
-                <Text style={{ color: colors.text, fontFamily: FONTS.semiBold }}>
-                  {new Date(Date.now() + HANDLE_COOLDOWN_MS).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                </Text>.
+            <View
+              style={[
+                renameStyles.card,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[renameStyles.title, { color: colors.text }]}>
+                Confirm new handle
+              </Text>
+              <Text
+                style={[renameStyles.subtitle, { color: colors.textMuted }]}
+              >
+                Change your handle to{' '}
+                <Text
+                  style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}
+                >
+                  @{handleInput}
+                </Text>
+                ? You won't be able to change it again until{' '}
+                <Text
+                  style={{ color: colors.text, fontFamily: FONTS.semiBold }}
+                >
+                  {new Date(Date.now() + HANDLE_COOLDOWN_MS).toLocaleDateString(
+                    undefined,
+                    { month: 'short', day: 'numeric', year: 'numeric' },
+                  )}
+                </Text>
+                .
               </Text>
               <View style={renameStyles.actions}>
                 <TouchableOpacity
@@ -960,29 +1289,68 @@ export default function ProfileScreen() {
                   style={[renameStyles.button, { borderColor: colors.border }]}
                   disabled={isSavingHandle}
                 >
-                  <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+                  <Text
+                    style={[renameStyles.buttonText, { color: colors.text }]}
+                  >
+                    Cancel
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleConfirmHandleSave}
-                  style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                  style={[
+                    renameStyles.button,
+                    {
+                      backgroundColor: COLORS.primary,
+                      borderColor: COLORS.primary,
+                    },
+                  ]}
                   disabled={isSavingHandle}
                 >
                   {isSavingHandle ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Confirm</Text>
+                    <Text style={[renameStyles.buttonText, { color: '#fff' }]}>
+                      Confirm
+                    </Text>
                   )}
                 </TouchableOpacity>
               </View>
             </View>
           ) : (
-            <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              <Text style={[renameStyles.title, { color: colors.text }]}>Change handle</Text>
-              <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+            <View
+              style={[
+                renameStyles.card,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[renameStyles.title, { color: colors.text }]}>
+                Change handle
+              </Text>
+              <Text
+                style={[renameStyles.subtitle, { color: colors.textMuted }]}
+              >
                 You can change your handle once every 30 days.
               </Text>
-              <View style={[handleEditStyles.inputRow, { borderColor: colors.border, backgroundColor: colors.surfaceGlass }]}>
-                <Text style={[handleEditStyles.atPrefix, { color: colors.textMuted }]}>@</Text>
+              <View
+                style={[
+                  handleEditStyles.inputRow,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.surfaceGlass,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    handleEditStyles.atPrefix,
+                    { color: colors.textMuted },
+                  ]}
+                >
+                  @
+                </Text>
                 <TextInput
                   value={handleInput}
                   onChangeText={handleHandleInputChange}
@@ -996,18 +1364,35 @@ export default function ProfileScreen() {
                 />
               </View>
               <View style={handleEditStyles.statusRow}>
-                <Text style={[handleEditStyles.statusText, { color: handleResultColor }]}>
+                <Text
+                  style={[
+                    handleEditStyles.statusText,
+                    { color: handleResultColor },
+                  ]}
+                >
                   {handleResultText || ' '}
                 </Text>
                 {isCheckingHandle && (
                   <View style={handleEditStyles.checkingInline}>
                     <ActivityIndicator size="small" color={colors.textMuted} />
-                    <Text style={[handleEditStyles.statusText, { color: colors.textMuted }]}>Checking…</Text>
+                    <Text
+                      style={[
+                        handleEditStyles.statusText,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      Checking…
+                    </Text>
                   </View>
                 )}
               </View>
               {handleSaveError ? (
-                <Text style={[handleEditStyles.statusText, { color: COLORS.error, paddingLeft: 4 }]}>
+                <Text
+                  style={[
+                    handleEditStyles.statusText,
+                    { color: COLORS.error, paddingLeft: 4 },
+                  ]}
+                >
                   {handleSaveError}
                 </Text>
               ) : null}
@@ -1016,22 +1401,110 @@ export default function ProfileScreen() {
                   onPress={() => setEditHandleVisible(false)}
                   style={[renameStyles.button, { borderColor: colors.border }]}
                 >
-                  <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+                  <Text
+                    style={[renameStyles.buttonText, { color: colors.text }]}
+                  >
+                    Cancel
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleRequestHandleSave}
                   style={[
                     renameStyles.button,
-                    { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-                    (handleResult !== 'available' || isCheckingHandle) && { opacity: 0.5 },
+                    {
+                      backgroundColor: COLORS.primary,
+                      borderColor: COLORS.primary,
+                    },
+                    (handleResult !== 'available' || isCheckingHandle) && {
+                      opacity: 0.5,
+                    },
                   ]}
                   disabled={handleResult !== 'available' || isCheckingHandle}
                 >
-                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>
+                    Save
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Bio editor modal */}
+      <Modal
+        visible={bioEditorVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBioEditorVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={renameStyles.backdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => { if (!isSavingBio) setBioEditorVisible(false); }}
+          />
+          <View
+            style={[
+              renameStyles.card,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[renameStyles.title, { color: colors.text }]}>Edit bio</Text>
+            <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+              Tell others a bit about yourself
+            </Text>
+            <TextInput
+              multiline
+              value={bioInput}
+              onChangeText={setBioInput}
+              placeholder="Write a short bio…"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              maxLength={280}
+              style={[
+                renameStyles.input,
+                {
+                  color: colors.text,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceGlass,
+                  minHeight: 96,
+                  textAlignVertical: 'top',
+                },
+              ]}
+            />
+            <Text style={{ alignSelf: 'flex-end', fontSize: 12, fontFamily: FONTS.regular, color: colors.textMuted }}>
+              {bioInput.length} / 280
+            </Text>
+            {bioSaveError ? (
+              <Text style={{ fontSize: 13, fontFamily: FONTS.medium, color: COLORS.error }}>
+                {bioSaveError}
+              </Text>
+            ) : null}
+            <View style={renameStyles.actions}>
+              <TouchableOpacity
+                onPress={() => setBioEditorVisible(false)}
+                style={[renameStyles.button, { borderColor: colors.border }]}
+                disabled={isSavingBio}
+              >
+                <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveBio}
+                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                disabled={isSavingBio}
+              >
+                {isSavingBio ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1048,18 +1521,39 @@ export default function ProfileScreen() {
             activeOpacity={1}
             onPress={() => setCooldownNoticeVisible(false)}
           />
-          <View style={[renameStyles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <Text style={[renameStyles.title, { color: colors.text }]}>Handle change locked</Text>
+          <View
+            style={[
+              renameStyles.card,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[renameStyles.title, { color: colors.text }]}>
+              Handle change locked
+            </Text>
             <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
               You can change your handle again on{' '}
-              <Text style={{ color: colors.text, fontFamily: FONTS.semiBold }}>{cooldownDateText}</Text>.
+              <Text style={{ color: colors.text, fontFamily: FONTS.semiBold }}>
+                {cooldownDateText}
+              </Text>
+              .
             </Text>
             <View style={renameStyles.actions}>
               <TouchableOpacity
                 onPress={() => setCooldownNoticeVisible(false)}
-                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                style={[
+                  renameStyles.button,
+                  {
+                    backgroundColor: COLORS.primary,
+                    borderColor: COLORS.primary,
+                  },
+                ]}
               >
-                <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Got it</Text>
+                <Text style={[renameStyles.buttonText, { color: '#fff' }]}>
+                  Got it
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1144,19 +1638,31 @@ const renameStyles = StyleSheet.create({
   buttonText: { fontSize: 14, fontFamily: FONTS.semiBold },
 });
 
-function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+function SettingsSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   const { colors } = useTheme();
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{title.toUpperCase()}</Text>
-      <GlassCard borderRadius={RADIUS.lg}>
-        {children}
-      </GlassCard>
+      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+        {title.toUpperCase()}
+      </Text>
+      <GlassCard borderRadius={RADIUS.lg}>{children}</GlassCard>
     </View>
   );
 }
 
-function SettingsRow({ label, right }: { label: string; right: React.ReactNode }) {
+function SettingsRow({
+  label,
+  right,
+}: {
+  label: string;
+  right: React.ReactNode;
+}) {
   const { colors } = useTheme();
   return (
     <View style={[styles.row, { borderBottomColor: colors.border }]}>
@@ -1176,10 +1682,20 @@ const styles = StyleSheet.create({
   },
   userName: { fontSize: 20, fontFamily: FONTS.semiBold },
   userHandle: { fontSize: 14, fontFamily: FONTS.medium },
-  handleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  handleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
   handleEditHint: { fontSize: 11, fontFamily: FONTS.medium },
   section: { gap: 6, marginBottom: SPACING.md },
-  sectionTitle: { fontSize: 11, fontFamily: FONTS.semiBold, letterSpacing: 1, paddingLeft: 4 },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+    letterSpacing: 1,
+    paddingLeft: 4,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1189,13 +1705,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: { fontSize: 15, fontFamily: FONTS.medium },
-  settingValue: { fontSize: 14, fontFamily: FONTS.regular, maxWidth: 200, textAlign: 'right' },
+  settingValue: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    maxWidth: 200,
+    textAlign: 'right',
+  },
   premiumInner: { gap: 10 },
   premiumTitle: { fontSize: 18, fontFamily: FONTS.bold },
   premiumDesc: { fontSize: 14, fontFamily: FONTS.regular, lineHeight: 22 },
   subscriptionInfo: { fontSize: 11, fontFamily: FONTS.regular, lineHeight: 16 },
   restoreText: { fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
-  legalLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   legalLink: { fontSize: 12, fontFamily: FONTS.medium },
   referralSection: {
     alignItems: 'center',
