@@ -230,8 +230,8 @@ export default function OnboardingScreen() {
                     <Text style={{ fontFamily: undefined }}>{'👋'}</Text>
                   </Text>
                 </View>
-                <Text style={[styles.title, { color: colors.text }]}>One last thing</Text>
-                <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+                <Text style={[styles.title, { color: COLORS.text }]}>One last thing</Text>
+                <Text style={[styles.subtitle, { color: COLORS.textMuted }]}>
                   Choose your community handle. This is how others will find and mention you.
                 </Text>
               </AnimatedEntry>
