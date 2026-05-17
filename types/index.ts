@@ -36,6 +36,7 @@ export interface Message {
   roomId?: string;
   conversationId?: number;
   createdAt: string;
+  editedAt?: string | null;
   mentions?: number[];
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;
@@ -152,6 +153,7 @@ export interface GlobeMessage {
   senderHandle: string;
   senderAvatar: string | null;
   createdAt: string;
+  editedAt?: string | null;
   slug: string;
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;

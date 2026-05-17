@@ -686,6 +686,7 @@ export default function DMThreadScreen() {
       senderHandle: user?.handle ?? '',
       conversationId,
       createdAt: new Date().toISOString(),
+      editedAt: null,
       replyToId: replyToId ?? null,
       replyTo: replyTo ?? null,
     };

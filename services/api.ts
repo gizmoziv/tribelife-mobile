@@ -171,6 +171,12 @@ export const chat = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetLanguage }),
     }),
+
+  editMessage: (messageId: number, content: string) =>
+    request<{ message: Message }>(`/api/chat/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    }),
 };
 
 // ── Chats (Phase 9 unified list) ───────────────────────────────────────────

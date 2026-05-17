@@ -190,6 +190,17 @@ export function onMessageRejected(cb: (data: { reason?: string }) => void): () =
   return () => socket?.off('message:rejected', cb);
 }
 
+export function onMessageEdited(cb: (data: {
+  messageId: number;
+  content: string;
+  editedAt: string;
+  roomId: string | null;
+  conversationId: number | null;
+}) => void): () => void {
+  socket?.on('message:edited', cb);
+  return () => socket?.off('message:edited', cb);
+}
+
 // ── Reactions ────────────────────────────────────────────────────────────────
 export function onReactionUpdate(cb: (data: {
   messageId: number;
