@@ -279,6 +279,64 @@ export interface ChevraListResponse {
   rooms: ChevraRow[];
 }
 
+// ── Phase 14: Chat Search — SearchResult discriminated union ───────────────
+// MIRROR: tribelife-backend/src/types/searchResult.ts — keep in sync.
+// Hand-mirrored shape (no shared types package — Phase 10 ChatNotification
+// precedent). Discriminator `source` mirrors ChatNotificationPayload exactly
+// so routeChatNotificationTap-style routing works for tap navigation (D-04).
+//
+// The `entityId` field is the canonical row identity from /api/chats:
+//   - dm/group:   entityId = conversationId (number)
+//   - globe_room: entityId = roomSlug        (string)
+//   - local_chat: entityId = timezoneIana    (string)
+export type SearchResult =
+  | {
+      source: 'dm';
+      messageId: number;
+      content: string;
+      createdAt: string;
+      senderHandle: string;
+      chatTitle: string;
+      entityId: number;
+      conversationId: number;
+    }
+  | {
+      source: 'group';
+      messageId: number;
+      content: string;
+      createdAt: string;
+      senderHandle: string;
+      chatTitle: string;
+      entityId: number;
+      conversationId: number;
+    }
+  | {
+      source: 'globe_room';
+      messageId: number;
+      content: string;
+      createdAt: string;
+      senderHandle: string;
+      chatTitle: string;
+      entityId: string;
+      roomSlug: string;
+    }
+  | {
+      source: 'local_chat';
+      messageId: number;
+      content: string;
+      createdAt: string;
+      senderHandle: string;
+      chatTitle: string;
+      entityId: string;
+      timezoneIana: string;
+    };
+
+// Paginated search response (D-02: cursor pagination on (createdAt, id)).
+export type SearchResponse = {
+  results: SearchResult[];
+  nextCursor: string | null;
+};
+
 // ── Phase 10: Notification Consolidation ──────────────────────────────────
 // Loose mirror of tribelife-backend/src/types/chatNotification.ts
 // ChatNotificationPayload (no shared types package — keep in sync manually
