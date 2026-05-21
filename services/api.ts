@@ -15,6 +15,7 @@ import type {
   NewsArticle,
   ReactionGroup,
   ChatsListResponse,
+  SearchResponse,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -152,15 +153,33 @@ export const chat = {
       body: JSON.stringify({ otherUserId }),
     }),
 
-  getConversationMessages: (conversationId: number, before?: string) =>
-    request<{ messages: Message[]; hasMore: boolean }>(
-      `/api/chat/conversations/${conversationId}/messages${before ? `?before=${before}` : ''}`
-    ),
+  getConversationMessages: (conversationId: number, opts?: { before?: string; aroundMessageId?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.before) params.set('before', opts.before);
+    if (opts?.aroundMessageId != null) {
+      params.set('aroundMessageId', String(opts.aroundMessageId));
+      params.set('before', '25');
+      params.set('after', '25');
+    }
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<{ messages: Message[]; hasMore: boolean }>(
+      `/api/chat/conversations/${conversationId}/messages${qs}`
+    );
+  },
 
-  getRoomMessages: (roomId: string, before?: string) =>
-    request<{ messages: Message[]; hasMore: boolean }>(
-      `/api/chat/room/${encodeURIComponent(roomId)}/messages${before ? `?before=${before}` : ''}`
-    ),
+  getRoomMessages: (roomId: string, opts?: { before?: string; aroundMessageId?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.before) params.set('before', opts.before);
+    if (opts?.aroundMessageId != null) {
+      params.set('aroundMessageId', String(opts.aroundMessageId));
+      params.set('before', '25');
+      params.set('after', '25');
+    }
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<{ messages: Message[]; hasMore: boolean }>(
+      `/api/chat/room/${encodeURIComponent(roomId)}/messages${qs}`
+    );
+  },
 
   hideConversation: (conversationId: number) =>
     request<{ ok: true }>(`/api/chat/conversations/${conversationId}/hide`, { method: 'PUT' }),
@@ -177,6 +196,17 @@ export const chat = {
       method: 'PATCH',
       body: JSON.stringify({ content }),
     }),
+
+  // Phase 14 SRCH-01/02: full-text search across all chats the caller has access to.
+  // Abortable via AbortController — signal is forwarded to fetch via RequestInit spread.
+  // 429 responses propagate as ApiError (status=429) for the caller to surface.
+  search: (q: string, cursor?: string, options?: { signal?: AbortSignal }) => {
+    const params = new URLSearchParams({ q: encodeURIComponent(q) });
+    if (cursor) params.set('cursor', encodeURIComponent(cursor));
+    return request<SearchResponse>(`/api/chat/search?${params.toString()}`, {
+      signal: options?.signal,
+    });
+  },
 };
 
 // ── Chats (Phase 9 unified list) ───────────────────────────────────────────
@@ -365,13 +395,27 @@ export const groupsApi = {
 
 // ── Globe ──────────────────────────────────────────────────────────────────
 export const globeApi = {
-  rooms: () =>
-    request<{ rooms: GlobeRoom[] }>('/api/globe/rooms'),
+  // Phase 14 SRCH-03: optional q for server-side Chevra title filtering.
+  // Backward-compatible — existing callers passing no args still work.
+  rooms: (opts?: { q?: string }) => {
+    const q = opts?.q?.trim();
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request<{ rooms: GlobeRoom[] }>(`/api/globe/rooms${qs}`);
+  },
 
-  messages: (slug: string, before?: string, limit = 50) =>
-    request<{ messages: GlobeMessage[]; hasMore: boolean }>(
-      `/api/globe/rooms/${slug}/messages?limit=${limit}${before ? `&before=${before}` : ''}`
-    ),
+  // Phase 14 D-04: aroundMessageId for tap-to-jump from search results.
+  messages: (slug: string, before?: string, limit = 50, aroundMessageId?: number) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (before) params.set('before', before);
+    if (aroundMessageId != null) {
+      params.set('aroundMessageId', String(aroundMessageId));
+      params.set('before', '25');
+      params.set('after', '25');
+    }
+    return request<{ messages: GlobeMessage[]; hasMore: boolean }>(
+      `/api/globe/rooms/${slug}/messages?${params.toString()}`
+    );
+  },
 
   unread: () =>
     request<{ unread: Record<string, number> }>('/api/globe/unread'),
