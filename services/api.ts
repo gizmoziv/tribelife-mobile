@@ -201,8 +201,8 @@ export const chat = {
   // Abortable via AbortController — signal is forwarded to fetch via RequestInit spread.
   // 429 responses propagate as ApiError (status=429) for the caller to surface.
   search: (q: string, cursor?: string, options?: { signal?: AbortSignal }) => {
-    const params = new URLSearchParams({ q: encodeURIComponent(q) });
-    if (cursor) params.set('cursor', encodeURIComponent(cursor));
+    const params = new URLSearchParams({ q });
+    if (cursor) params.set('cursor', cursor);
     return request<SearchResponse>(`/api/chat/search?${params.toString()}`, {
       signal: options?.signal,
     });
