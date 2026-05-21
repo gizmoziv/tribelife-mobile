@@ -53,8 +53,10 @@ export default function GlobeScreen() {
 
   const fetchChevra = useCallback(() => {
     setLoadingRooms(true);
+    // Phase 14 SRCH-03: pass debouncedQuery to server for title filtering.
+    // Empty/whitespace-only q omits the param (globeApi.rooms trims internally).
     globeApi
-      .rooms()
+      .rooms({ q: debouncedQuery })
       .then((response) => {
         const data = (response as ChevraListResponse).rooms;
 
@@ -82,13 +84,19 @@ export default function GlobeScreen() {
       })
       .catch(() => {})
       .finally(() => setLoadingRooms(false));
-  }, [setRooms, setLoadingRooms]);
+  }, [setRooms, setLoadingRooms, debouncedQuery]);
 
   useFocusEffect(
     useCallback(() => {
       fetchChevra();
     }, [fetchChevra]),
   );
+
+  // Phase 14 SRCH-03: refetch when debouncedQuery changes (server-side filter).
+  // useFocusEffect handles initial load; this handles query changes while focused.
+  useEffect(() => {
+    fetchChevra();
+  }, [debouncedQuery]);
 
   useEffect(() => {
     const cleanups: (() => void)[] = [];
@@ -144,20 +152,10 @@ export default function GlobeScreen() {
     [visibleGlobeRooms, visiblePublicGroups],
   );
 
-  const q = debouncedQuery.trim().toLowerCase();
-  const isSearching = q.length > 0;
-
-  const filteredRows = useMemo(
-    () =>
-      q
-        ? combinedRows.filter((r) =>
-            r.kind === 'globe_room'
-              ? r.displayName.toLowerCase().includes(q)
-              : r.name.toLowerCase().includes(q),
-          )
-        : combinedRows,
-    [combinedRows, q],
-  );
+  // Phase 14 SRCH-03: server now handles filtering via ?q=. combinedRows from
+  // the server response already reflect the query — no client-side .filter needed.
+  const isSearching = debouncedQuery.trim().length > 0;
+  const filteredRows = combinedRows;
 
   const renderItem = useCallback(
     ({ item }: { item: ChevraRow }) => (
