@@ -14,6 +14,7 @@ import {
   Alert,
   Pressable,
   AppState,
+  Animated,
 } from 'react-native';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
@@ -69,7 +70,7 @@ function SendIcon() {
 }
 
 export default function DMThreadScreen() {
-  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug, isMember: rawIsMember, isArchived: rawIsArchived } = useLocalSearchParams<{
+  const { conversationId: rawId, handle, isGroup: rawIsGroup, groupName: rawGroupName, inviteSlug: rawInviteSlug, isMember: rawIsMember, isArchived: rawIsArchived, aroundMessageId: rawAroundMessageId } = useLocalSearchParams<{
     conversationId: string;
     handle?: string;
     isGroup?: string;
@@ -77,7 +78,10 @@ export default function DMThreadScreen() {
     inviteSlug?: string;
     isMember?: string;
     isArchived?: string;
+    aroundMessageId?: string;
   }>();
+  // Phase 14 D-04: tap-to-jump from search results
+  const aroundMessageId = rawAroundMessageId ? Number(rawAroundMessageId) : undefined;
   const conversationId = parseInt(rawId);
   const isGroup = rawIsGroup === 'true';
   const groupName = rawGroupName ?? '';
@@ -130,6 +134,9 @@ export default function DMThreadScreen() {
   const hasScrolledRef = useRef(false);
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase 14 D-04: highlight flash state for tap-to-jump from search results
+  const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
+  const highlightAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
@@ -288,7 +295,8 @@ export default function DMThreadScreen() {
   }, [conversationId, isGroup]);
 
   useEffect(() => {
-    chat.getConversationMessages(conversationId).then(({ messages: msgs }) => {
+    // Phase 14 D-04: pass aroundMessageId for 51-row window fetch
+    chat.getConversationMessages(conversationId, aroundMessageId != null ? { aroundMessageId } : undefined).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
       if (!isGroup && !handle && msgs.length > 0) {
@@ -297,8 +305,32 @@ export default function DMThreadScreen() {
           navigation.setOptions({ title: `@${otherMsg.senderHandle} & You` });
         }
       }
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+      if (aroundMessageId != null) {
+        // Scroll to target message and flash it
+        const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
+        if (targetIndex >= 0) {
+          hasScrolledRef.current = true; // prevent scrollToEnd from firing
+          setTimeout(() => {
+            try {
+              flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
+            } catch {
+              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+            }
+          }, 0);
+          setTimeout(() => {
+            setFlashHighlightedId(aroundMessageId);
+            highlightAnim.setValue(1);
+            Animated.timing(highlightAnim, {
+              toValue: 0,
+              duration: 1200,
+              useNativeDriver: false,
+            }).start(() => setFlashHighlightedId(undefined));
+          }, 100);
+        }
+      } else {
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+      }
     }).catch(() => setIsLoading(false));
 
     joinConversation(conversationId);
@@ -741,15 +773,28 @@ export default function DMThreadScreen() {
         highlighted={item.id === highlightedId}
       />
     );
-    if (isReadOnlyPreview) return bubble;
+    // Phase 14 D-04: wrap matched bubble in Animated.View for highlight flash
+    const wrappedBubble = item.id === flashHighlightedId ? (
+      <Animated.View
+        style={{
+          backgroundColor: highlightAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [colors.background, colors.accentSoft],
+          }),
+        }}
+      >
+        {bubble}
+      </Animated.View>
+    ) : bubble;
+    if (isReadOnlyPreview) return wrappedBubble;
     return (
       <SwipeableMessage onSwipeComplete={() => {
         setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
       }}>
-        {bubble}
+        {wrappedBubble}
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors]);
 
   if (isLoading) {
     return (
@@ -780,7 +825,16 @@ export default function DMThreadScreen() {
               hasScrolledRef.current = true;
             }
           }}
-          onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
+          onScrollToIndexFailed={(info) => {
+            // Retry after FlatList has measured the rows
+            const offset = info.averageItemLength * info.index;
+            flatListRef.current?.scrollToOffset({ offset, animated: false });
+            setTimeout(() => {
+              try {
+                flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0.5 });
+              } catch { /* silent */ }
+            }, 200);
+          }}
         />
 
         {isTyping && (

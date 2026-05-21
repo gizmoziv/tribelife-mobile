@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  Animated,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -116,13 +117,14 @@ const AGE_GATE_HOURS = 24;
 // The Chats-stack mirror at app/(app)/chat/regional/[roomSlug].tsx overrides
 // backLabel="Chats" so back-pill matches the stack the user came from.
 export default function GlobeRoomChat() {
-  const { roomSlug } = useLocalSearchParams<{ roomSlug: string }>();
-  return <GlobeRoomScreen slug={roomSlug!} backLabel="Chevra" />;
+  const { roomSlug, aroundMessageId: rawAroundMessageId } = useLocalSearchParams<{ roomSlug: string; aroundMessageId?: string }>();
+  const aroundMessageId = rawAroundMessageId ? Number(rawAroundMessageId) : undefined;
+  return <GlobeRoomScreen slug={roomSlug!} backLabel="Chevra" aroundMessageId={aroundMessageId} />;
 }
 
 // Named export — accepts slug as a prop so other tab stacks (e.g. Chats)
 // can render a Globe room without crossing tab boundaries.
-export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; backLabel?: string }) {
+export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: { slug: string; backLabel?: string; aroundMessageId?: number }) {
   const router = useRouter();
   const keyboardBehavior = useKeyboardBehavior();
   const tabBarSpace = useTabBarSpace();
@@ -178,6 +180,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
   const hasInitialScrolled = useRef(false);
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase 14 D-04: highlight flash state for tap-to-jump from search results
+  const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
+  const highlightAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
@@ -270,15 +275,40 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
       .catch(() => {});
 
     // Load initial messages (keep chronological order -- newest last for inverted FlatList)
+    // Phase 14 D-04: pass aroundMessageId for 51-row window fetch
     globeApi
-      .messages(roomSlug)
+      .messages(roomSlug, undefined, 50, aroundMessageId)
       .then(({ messages: msgs, hasMore }) => {
         setMessages(msgs);
         if (!hasMore) {
           prependMessages([], hasMore);
         }
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+        if (aroundMessageId != null) {
+          // Scroll to target message and flash it
+          const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
+          if (targetIndex >= 0) {
+            hasInitialScrolled.current = true; // prevent scrollToEnd from firing
+            setTimeout(() => {
+              try {
+                flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
+              } catch {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+              }
+            }, 0);
+            setTimeout(() => {
+              setFlashHighlightedId(aroundMessageId);
+              highlightAnim.setValue(1);
+              Animated.timing(highlightAnim, {
+                toValue: 0,
+                duration: 1200,
+                useNativeDriver: false,
+              }).start(() => setFlashHighlightedId(undefined));
+            }, 100);
+          }
+        } else {
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
@@ -662,7 +692,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
   const renderMessage = useCallback(
     ({ item }: { item: GlobeMessage }) => {
       const isMe = item.senderId === user?.id;
-      return (
+      const isFlash = item.id === flashHighlightedId;
+      const bubble = (
         <SwipeableMessage
           enabled={effectiveIsMember}
           onSwipeComplete={() => {
@@ -683,8 +714,23 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel }: { slug: string; b
           />
         </SwipeableMessage>
       );
+      if (isFlash) {
+        return (
+          <Animated.View
+            style={{
+              backgroundColor: highlightAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [colors.background, colors.accentSoft ?? colors.primaryGlow],
+              }),
+            }}
+          >
+            {bubble}
+          </Animated.View>
+        );
+      }
+      return bubble;
     },
-    [user?.id, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage],
+    [user?.id, flashHighlightedId, effectiveIsMember, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage, highlightAnim, colors],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────

@@ -20,7 +20,7 @@ import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
-import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
+import { useRouter, useFocusEffect, useNavigation, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi, notificationsApi, chats } from '@/services/api';
@@ -114,6 +114,8 @@ export default function LocalChatScreen() {
   const keyboardBehavior = useKeyboardBehavior();
   const router = useRouter();
   const navigation = useNavigation();
+  const { aroundMessageId: rawAroundMessageId } = useLocalSearchParams<{ aroundMessageId?: string }>();
+  const aroundMessageId = rawAroundMessageId ? Number(rawAroundMessageId) : undefined;
 
   // Hide the parent Tabs header while this screen is mounted so we only show
   // the Stack header (mirrors [conversationId].tsx and globe/[roomSlug].tsx).
@@ -144,6 +146,9 @@ export default function LocalChatScreen() {
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Phase 14 D-04: highlight flash state for tap-to-jump from search results
+  const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
+  const highlightAnim = useRef(new Animated.Value(0)).current;
 
   const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
   const zoneName = timezoneToZoneName(user?.timezone ?? 'UTC');
@@ -198,11 +203,37 @@ export default function LocalChatScreen() {
   );
 
   useEffect(() => {
-    chat.getRoomMessages(roomId).then(({ messages: msgs }) => {
+    chat.getRoomMessages(roomId, aroundMessageId != null ? { aroundMessageId } : undefined).then(({ messages: msgs }) => {
       setMessages(msgs);
       setIsLoading(false);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+      if (aroundMessageId != null) {
+        const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
+        if (targetIndex >= 0) {
+          hasScrolledRef.current = true; // prevent scrollToEnd from firing
+          setTimeout(() => {
+            try {
+              flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
+            } catch {
+              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+            }
+          }, 0);
+          setTimeout(() => {
+            setFlashHighlightedId(aroundMessageId);
+            highlightAnim.setValue(1);
+            Animated.timing(highlightAnim, {
+              toValue: 0,
+              duration: 1200,
+              useNativeDriver: false,
+            }).start(() => setFlashHighlightedId(undefined));
+          }, 100);
+        } else {
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+        }
+      } else {
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+      }
     }).catch(() => setIsLoading(false));
 
     const cleanups: (() => void)[] = [];
@@ -525,7 +556,8 @@ export default function LocalChatScreen() {
 
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
-    return (
+    const isFlash = item.id === flashHighlightedId;
+    const bubble = (
       <SwipeableMessage onSwipeComplete={() => {
         setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
       }}>
@@ -543,7 +575,22 @@ export default function LocalChatScreen() {
         />
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage]);
+    if (isFlash) {
+      return (
+        <Animated.View
+          style={{
+            backgroundColor: highlightAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [colors.background, colors.accentSoft ?? colors.primaryGlow],
+            }),
+          }}
+        >
+          {bubble}
+        </Animated.View>
+      );
+    }
+    return bubble;
+  }, [user?.id, flashHighlightedId, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage, highlightAnim, colors]);
 
   if (isLoading) {
     return (
