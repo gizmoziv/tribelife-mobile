@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  ScrollView,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +28,9 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { chat, moderationApi, reactionsApi, groupsApi, notificationsApi } from '@/services/api';
+import type { ApiError } from '@/services/api';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import type { SearchResult } from '@/types';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
@@ -78,6 +82,7 @@ function SendIcon() {
 
 export default function ChatsScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   // Phase 10 D-07: useChatsStore is the single source of truth for the
   // Chats screen rows + per-row unread counts. Replace the local
   // useState fetch with a Zustand subscription.
@@ -86,6 +91,13 @@ export default function ChatsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
+
+  // Phase 14 SRCH-02: message search state
+  const [messageResults, setMessageResults] = useState<SearchResult[]>([]);
+  const [searchCursor, setSearchCursor] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isPaginating, setIsPaginating] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Hydrate on focus (so reads from inside a DM/group/room pop the user
   // back here with fresh server-authoritative unreadCount). The store's
@@ -101,6 +113,77 @@ export default function ChatsScreen() {
     const handle = setTimeout(() => setDebouncedQuery(searchQuery), 200);
     return () => clearTimeout(handle);
   }, [searchQuery]);
+
+  // Phase 14 SRCH-02: message search effect — fires when debouncedQuery >= 3 chars.
+  // Each keystroke aborts the previous in-flight request via AbortController.
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (q.length < 3) {
+      setMessageResults([]);
+      setSearchCursor(null);
+      return;
+    }
+
+    // Abort previous request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setIsSearching(true);
+    chat.search(q, undefined, { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        setMessageResults(res.results);
+        setSearchCursor(res.nextCursor ?? null);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        const apiErr = err as ApiError;
+        if (apiErr?.status === 429) {
+          Alert.alert('Search unavailable', 'Too many searches. Please wait a moment and try again.');
+        } else {
+          console.warn('[search]', err);
+        }
+        setMessageResults([]);
+        setSearchCursor(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsSearching(false);
+        }
+      });
+
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [debouncedQuery]);
+
+  // Phase 14 SRCH-02: load more results (next page).
+  const handleLoadMore = useCallback(() => {
+    const q = debouncedQuery.trim();
+    if (!searchCursor || isPaginating || q.length < 3) return;
+
+    const controller = new AbortController();
+    setIsPaginating(true);
+    chat.search(q, searchCursor, { signal: controller.signal })
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        setMessageResults((prev) => [...prev, ...res.results]);
+        setSearchCursor(res.nextCursor ?? null);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        const apiErr = err as ApiError;
+        if (apiErr?.status === 429) {
+          Alert.alert('Search unavailable', 'Too many searches. Please wait a moment and try again.');
+        } else {
+          console.warn('[search paginate]', err);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsPaginating(false);
+      });
+  }, [debouncedQuery, searchCursor, isPaginating]);
 
   // Filtered view by title (case-insensitive substring on the row title only).
   // Title derivation matches ChatsListRow:
@@ -137,6 +220,133 @@ export default function ChatsScreen() {
 
   if (isLoading) return <LoadingState />;
 
+  const trimmedQuery = debouncedQuery.trim();
+  const isActiveSearch = trimmedQuery.length > 0;
+  const isMessageSearch = trimmedQuery.length >= 3;
+
+  // Determine empty state: both sections empty and a query is present
+  const bothEmpty = filteredRows.length === 0 && messageResults.length === 0 && !isSearching;
+
+  // Show the two-section search layout when there is any query
+  // (Title matches always shows for any length; Messages section only >= 3 chars)
+  if (isActiveSearch) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={[styles.searchInput, {
+              backgroundColor: colors.surfaceGlass,
+              color: colors.text,
+              borderColor: colors.border,
+            }]}
+            placeholder="Search chats"
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+        </View>
+        {bothEmpty && !isSearching ? (
+          <View style={styles.emptyMatches}>
+            <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
+              {'No matches for "' + debouncedQuery + '"'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingVertical: SPACING.sm }}
+          >
+            {/* Title matches section */}
+            {filteredRows.length > 0 && (
+              <>
+                <Text style={[styles.searchSectionLabel, { color: colors.textMuted }]}>
+                  Title matches
+                </Text>
+                {filteredRows.map((row) => (
+                  <ChatsListRow key={chatsRowKey(row)} row={row} colors={colors} router={router} />
+                ))}
+              </>
+            )}
+
+            {/* Messages section — only shown when query >= 3 chars */}
+            {isMessageSearch && (
+              <>
+                {(isSearching || messageResults.length > 0) && (
+                  <Text style={[styles.searchSectionLabel, { color: colors.textMuted }]}>
+                    Messages
+                  </Text>
+                )}
+                {isSearching && messageResults.length === 0 ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.primary}
+                    style={{ marginVertical: 16 }}
+                  />
+                ) : (
+                  <>
+                    {messageResults.map((result) => (
+                      <MessageResultRow
+                        key={`msg-${result.messageId}`}
+                        result={result}
+                        queryString={trimmedQuery}
+                        colors={colors}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          if (result.source === 'dm' || result.source === 'group') {
+                            router.push({
+                              pathname: '/(app)/chat/[conversationId]',
+                              params: {
+                                conversationId: String(result.conversationId),
+                                aroundMessageId: String(result.messageId),
+                              },
+                            });
+                          } else if (result.source === 'globe_room') {
+                            router.push({
+                              pathname: '/(app)/globe/[roomSlug]',
+                              params: {
+                                roomSlug: result.roomSlug,
+                                aroundMessageId: String(result.messageId),
+                              },
+                            });
+                          } else if (result.source === 'local_chat') {
+                            router.push({
+                              pathname: '/(app)/chat/local',
+                              params: {
+                                aroundMessageId: String(result.messageId),
+                              },
+                            });
+                          }
+                        }}
+                      />
+                    ))}
+                    {searchCursor !== null && (
+                      <TouchableOpacity
+                        onPress={handleLoadMore}
+                        disabled={isPaginating}
+                        style={styles.loadMoreButton}
+                      >
+                        {isPaginating ? (
+                          <ActivityIndicator size="small" color={COLORS.primary} />
+                        ) : (
+                          <Text style={[styles.loadMoreText, { color: colors.textMuted }]}>
+                            Load more results
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.searchRow}>
@@ -155,15 +365,7 @@ export default function ChatsScreen() {
           returnKeyType="search"
         />
       </View>
-      {filteredRows.length === 0 && debouncedQuery.trim().length > 0 ? (
-        <View style={styles.emptyMatches}>
-          <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
-            {'No matches for “' + debouncedQuery + '”'}
-          </Text>
-        </View>
-      ) : (
-        <ChatsList data={filteredRows} flatListRef={flatListRef} />
-      )}
+      <ChatsList data={filteredRows} flatListRef={flatListRef} />
     </SafeAreaView>
   );
 }
@@ -177,6 +379,82 @@ function chatsRowTitle(row: ChatsRow): string {
     case 'group': return row.name;
     case 'globe_room': return row.displayName;
   }
+}
+
+// ── Phase 14: Snippet helper (D-05) ──────────────────────────────────────
+// Returns a 80-char window centred on the first case-insensitive match of q.
+// Leading/trailing ellipsis added when the window is truncated.
+// On no-match (defensive): { before: '', match: '', after: content.slice(0, 80) }.
+function snippet(content: string, q: string): { before: string; match: string; after: string } {
+  const idx = content.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) {
+    return { before: '', match: '', after: content.slice(0, 80) };
+  }
+
+  const WINDOW = 80;
+  const matchLen = q.length;
+  const half = Math.floor((WINDOW - matchLen) / 2);
+
+  let start = Math.max(0, idx - half);
+  let end = Math.min(content.length, idx + matchLen + (WINDOW - matchLen - (idx - start)));
+
+  // Re-anchor if we hit the end boundary first
+  if (end === content.length) {
+    start = Math.max(0, end - WINDOW);
+  }
+
+  const before = (start > 0 ? '…' : '') + content.slice(start, idx);
+  const match = content.slice(idx, idx + matchLen);
+  const after = content.slice(idx + matchLen, end) + (end < content.length ? '…' : '');
+
+  return { before, match, after };
+}
+
+// ── Phase 14: MessageResultRow (SRCH-02) ─────────────────────────────────
+// Inline component matching the existing ChatsListRow pattern.
+// Container reuses styles.chatsRow directly (no redeclaration).
+function MessageResultRow({
+  result,
+  queryString,
+  colors,
+  onPress,
+}: {
+  result: SearchResult;
+  queryString: string;
+  colors: ReturnType<typeof useTheme>['colors'];
+  onPress: () => void;
+}) {
+  const { before, match, after } = snippet(result.content, queryString);
+  const relTime = formatRelativeTime(result.createdAt);
+
+  return (
+    <TouchableOpacity
+      style={[styles.chatsRow, { backgroundColor: colors.surfaceGlass }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <AvatarCircle name={result.senderHandle} size={40} showRing={false} />
+      <View style={{ flex: 1 }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontSize: 15, fontFamily: FONTS.semiBold, color: colors.text }}
+        >
+          {`@${result.senderHandle} · ${result.chatTitle} · ${relTime}`}
+        </Text>
+        <Text numberOfLines={2} style={{ marginTop: 2 }}>
+          <Text style={{ fontSize: 14, fontFamily: FONTS.regular, color: colors.textMuted }}>
+            {before}
+          </Text>
+          <Text style={{ fontSize: 14, fontFamily: FONTS.regular, fontWeight: '700', color: colors.accent }}>
+            {match}
+          </Text>
+          <Text style={{ fontSize: 14, fontFamily: FONTS.regular, color: colors.textMuted }}>
+            {after}
+          </Text>
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 }
 
 // ── Unified Chats List ────────────────────────────────────────────────────
@@ -1497,6 +1775,27 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: RADIUS.md,
     ...SHADOWS.sm,
+  },
+  // Phase 14 SRCH-02: section label between Title matches / Messages sections
+  searchSectionLabel: {
+    fontSize: 12,
+    fontFamily: FONTS.semiBold,
+    textTransform: 'uppercase',
+    paddingHorizontal: SPACING.page,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  // Phase 14 SRCH-02: "Load more results" pagination button
+  loadMoreButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: SPACING.page,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
   },
   chatsRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   chatsRowTitle: { fontSize: 15, fontFamily: FONTS.semiBold },
