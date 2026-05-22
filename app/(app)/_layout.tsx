@@ -319,19 +319,21 @@ export default function AppLayout() {
           headerTitle: 'Chats',
         }}
         listeners={({ navigation }) => ({
-          // D-07 + Phase 12: tap on Chats while already on this tab should
-          // pop back to the list — but ONLY when the user is currently on
-          // a chat sub-screen (e.g. chat/[conversationId] reached from
-          // user/[handle]). When already on chat/index we fall through to
-          // clearAndScrollToTop without dispatching router.replace, which
-          // would otherwise re-mount the list and re-fire hydrate() on
-          // every harmless tab re-tap.
+          // D-07 + Phase 12 + Phase 14 Bug 1: iOS-style double-tap behaviour.
+          //  - First tap from a chat sub-screen (chat/[id], chat/local, …):
+          //    navigate back to /chat WITHOUT clearing the search query the
+          //    user had before they entered the chat. The chat/index screen
+          //    stays mounted in the stack so its searchQuery state is
+          //    preserved automatically.
+          //  - Second tap (already on /chat): THEN clear search and scroll to
+          //    top. Matches iOS convention for "tap active tab to reset".
           tabPress: (e) => {
             if (!navigation.isFocused()) return;
             const onSubScreen = !!pathname && pathname.startsWith('/chat/');
             if (onSubScreen) {
               e.preventDefault();
               router.replace('/(app)/chat');
+              return;
             }
             useChatsListRefStore.getState().clearAndScrollToTop();
           },
