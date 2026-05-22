@@ -195,8 +195,8 @@ export default function ChatsScreen() {
     const q = debouncedQuery.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) => {
-      const title = chatsRowTitle(row);
-      return title.toLowerCase().includes(q);
+      const tokens = chatsRowSearchTokens(row);
+      return tokens.includes(q);
     });
   }, [rows, debouncedQuery]);
 
@@ -259,11 +259,11 @@ export default function ChatsScreen() {
             keyboardDismissMode="on-drag"
             contentContainerStyle={{ paddingVertical: SPACING.sm }}
           >
-            {/* Title matches section */}
+            {/* Chats section (matches the chat's title/badge — tap goes to the chat's latest messages) */}
             {filteredRows.length > 0 && (
               <>
                 <Text style={[styles.searchSectionLabel, { color: colors.textMuted }]}>
-                  Title matches
+                  Chats
                 </Text>
                 {filteredRows.map((row) => (
                   <ChatsListRow key={chatsRowKey(row)} row={row} colors={colors} router={router} />
@@ -379,6 +379,16 @@ function chatsRowTitle(row: ChatsRow): string {
     case 'group': return row.name;
     case 'globe_room': return row.displayName;
   }
+}
+
+// Lowercased searchable tokens for the Chats-section filter. Wider than the
+// display title so users can search by the badge/pill label they see on the
+// row (e.g. "local chat" hits the <LocalPill> on the local_chat row even
+// though its display title is the timezone name).
+function chatsRowSearchTokens(row: ChatsRow): string {
+  const title = chatsRowTitle(row).toLowerCase();
+  if (row.type === 'local_chat') return `${title} local chat`;
+  return title;
 }
 
 // ── Phase 14: Snippet helper (D-05) ──────────────────────────────────────
