@@ -43,6 +43,11 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
   const title = asStr(data.title) ?? '';
   const body = asStr(data.body) ?? '';
   const senderHandle = asStr(data.senderHandle) ?? '';
+  // Phase 14 D-04: optional message id forwarded through to the tap router
+  // so it can deep-link via aroundMessageId. asNum returns null for missing
+  // payloads (older clients / non-chat notifications).
+  const messageId = asNum(data.messageId);
+  const withMsgId = messageId !== null ? { messageId } : {};
 
   // ── Already new-shape — pass through ─────────────────────────────────
   if (typeof data.source === 'string') {
@@ -58,6 +63,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     if (src === 'group') {
@@ -73,6 +79,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     if (src === 'globe_room') {
@@ -86,6 +93,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     if (src === 'local_chat') {
@@ -99,6 +107,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     return null;
@@ -128,6 +137,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     return {
@@ -138,6 +148,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
       title,
       body,
       senderHandle,
+      ...withMsgId,
     };
   }
 
@@ -153,6 +164,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     // Timezone-room mention — `data.roomId` is `'timezone:America/New_York'`
@@ -168,6 +180,7 @@ export function adaptChatNotification(raw: unknown): ChatNotification | null {
         title,
         body,
         senderHandle,
+        ...withMsgId,
       };
     }
     return null;

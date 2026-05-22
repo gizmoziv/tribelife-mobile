@@ -353,6 +353,9 @@ export interface ChatNotificationCommon {
   title: string;
   body: string;
   senderHandle: string;
+  // Phase 14: optional message id so notification taps can deep-link to the
+  // triggering message via `aroundMessageId` (mirrors backend ChatNotificationCommon).
+  messageId?: number;
 }
 
 export type ChatNotification =

@@ -20,6 +20,10 @@ export function routeChatNotificationTap(
   data: ChatNotification,
   router: Pick<Router, 'navigate' | 'push'>,
 ): void {
+  // Phase 14 D-04: when the payload carries a messageId, pass it as
+  // `aroundMessageId` so the destination chat screen scrolls to and flashes
+  // the triggering message instead of opening at the newest message.
+  const around = data.messageId != null ? { aroundMessageId: String(data.messageId) } : {};
   switch (data.source) {
     case 'dm':
       router.navigate({
@@ -27,6 +31,7 @@ export function routeChatNotificationTap(
         params: {
           conversationId: String(data.conversationId),
           ...(data.senderHandle ? { handle: String(data.senderHandle) } : {}),
+          ...around,
         },
       });
       return;
@@ -38,17 +43,22 @@ export function routeChatNotificationTap(
           ...(data.senderHandle ? { handle: String(data.senderHandle) } : {}),
           isGroup: 'true',
           groupName: String(data.groupName ?? ''),
+          ...around,
         },
       });
       return;
     case 'globe_room':
       router.push({
         pathname: '/(app)/globe/[roomSlug]',
-        params: { roomSlug: data.roomSlug },
+        params: { roomSlug: data.roomSlug, ...around },
       });
       return;
     case 'local_chat':
-      router.push('/(app)/chat/local');
+      if (data.messageId != null) {
+        router.push({ pathname: '/(app)/chat/local', params: { aroundMessageId: String(data.messageId) } });
+      } else {
+        router.push('/(app)/chat/local');
+      }
       return;
   }
 }
