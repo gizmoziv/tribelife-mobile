@@ -306,17 +306,19 @@ export default function DMThreadScreen() {
         }
       }
       if (aroundMessageId != null) {
-        // Scroll to target message and flash it
+        // Scroll to target message and flash it. FlatList needs a layout
+        // pass before scrollToIndex can resolve; retry on failure.
         const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
         if (targetIndex >= 0) {
           hasScrolledRef.current = true; // prevent scrollToEnd from firing
-          setTimeout(() => {
+          const attemptScroll = (attempt = 0) => {
             try {
               flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
             } catch {
-              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+              if (attempt < 5) setTimeout(() => attemptScroll(attempt + 1), 120);
             }
-          }, 0);
+          };
+          setTimeout(() => attemptScroll(), 100);
           setTimeout(() => {
             setFlashHighlightedId(aroundMessageId);
             highlightAnim.setValue(1);
@@ -325,7 +327,7 @@ export default function DMThreadScreen() {
               duration: 1200,
               useNativeDriver: false,
             }).start(() => setFlashHighlightedId(undefined));
-          }, 100);
+          }, 250);
         }
       } else {
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);

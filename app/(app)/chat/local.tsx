@@ -210,13 +210,17 @@ export default function LocalChatScreen() {
         const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
         if (targetIndex >= 0) {
           hasScrolledRef.current = true; // prevent scrollToEnd from firing
-          setTimeout(() => {
+          // FlatList needs at least one layout pass before scrollToIndex can
+          // resolve. Retry up to 5 times in case items below targetIndex
+          // haven't been measured yet.
+          const attemptScroll = (attempt = 0) => {
             try {
               flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
             } catch {
-              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+              if (attempt < 5) setTimeout(() => attemptScroll(attempt + 1), 120);
             }
-          }, 0);
+          };
+          setTimeout(() => attemptScroll(), 100);
           setTimeout(() => {
             setFlashHighlightedId(aroundMessageId);
             highlightAnim.setValue(1);
@@ -225,7 +229,7 @@ export default function LocalChatScreen() {
               duration: 1200,
               useNativeDriver: false,
             }).start(() => setFlashHighlightedId(undefined));
-          }, 100);
+          }, 250);
         } else {
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
@@ -629,7 +633,14 @@ export default function LocalChatScreen() {
             }
           }}
           onScrollToIndexFailed={(info) => {
-            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            // Approximate scroll first so the target index becomes viewable,
+            // then re-attempt scrollToIndex once items have been measured.
+            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => {
+              try {
+                flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0.5 });
+              } catch { /* silent */ }
+            }, 200);
           }}
         />
 

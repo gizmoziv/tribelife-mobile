@@ -284,17 +284,23 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           prependMessages([], hasMore);
         }
         if (aroundMessageId != null) {
-          // Scroll to target message and flash it
+          // Scroll to target message and flash it. FlatList needs a layout
+          // pass before scrollToIndex can resolve; retry on failure.
           const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
           if (targetIndex >= 0) {
             hasInitialScrolled.current = true; // prevent scrollToEnd from firing
-            setTimeout(() => {
+            // Mark "not at bottom" so onContentSizeChange's `else if (isAtBottom)`
+            // branch doesn't re-scroll to end after our scrollToIndex. handleScroll
+            // will re-derive the real value once layout settles.
+            setIsAtBottom(false);
+            const attemptScroll = (attempt = 0) => {
               try {
                 flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
               } catch {
-                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+                if (attempt < 5) setTimeout(() => attemptScroll(attempt + 1), 120);
               }
-            }, 0);
+            };
+            setTimeout(() => attemptScroll(), 100);
             setTimeout(() => {
               setFlashHighlightedId(aroundMessageId);
               highlightAnim.setValue(1);
@@ -303,7 +309,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                 duration: 1200,
                 useNativeDriver: false,
               }).start(() => setFlashHighlightedId(undefined));
-            }, 100);
+            }, 250);
           }
         } else {
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
@@ -827,7 +833,16 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           onScroll={handleScroll}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
-          onScrollToIndexFailed={(info) => { flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true }); }}
+          onScrollToIndexFailed={(info) => {
+            // Approximate scroll first to bring the target into the
+            // render window, then re-attempt scrollToIndex for precise centering.
+            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            setTimeout(() => {
+              try {
+                flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0.5 });
+              } catch { /* silent */ }
+            }, 200);
+          }}
           onEndReachedThreshold={0.3}
           maxToRenderPerBatch={15}
           windowSize={10}
