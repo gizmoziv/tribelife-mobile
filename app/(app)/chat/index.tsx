@@ -233,20 +233,33 @@ export default function ChatsScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.searchRow}>
-          <TextInput
-            style={[styles.searchInput, {
-              backgroundColor: colors.surfaceGlass,
-              color: colors.text,
-              borderColor: colors.border,
-            }]}
-            placeholder="Search chats"
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-          />
+          <View style={styles.searchInputWrapper}>
+            <TextInput
+              style={[styles.searchInput, styles.searchInputWithClear, {
+                backgroundColor: colors.surfaceGlass,
+                color: colors.text,
+                borderColor: colors.border,
+              }]}
+              placeholder="Search chats"
+              placeholderTextColor={colors.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                style={styles.searchClearButton}
+                hitSlop={10}
+                accessibilityLabel="Clear search"
+                accessibilityRole="button"
+              >
+                <Text style={[styles.searchClearText, { color: colors.textMuted }]}>×</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         {bothEmpty && !isSearching ? (
           <View style={styles.emptyMatches}>
@@ -296,11 +309,20 @@ export default function ChatsScreen() {
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                           if (result.source === 'dm' || result.source === 'group') {
+                            // The chat detail screen renders its header from
+                            // isGroup/groupName/handle params — without them
+                            // the title falls back to the route placeholder
+                            // `[conversationId]`. chatTitle from server is the
+                            // group name for groups, `@otherHandle` for DMs.
+                            const isGroupResult = result.source === 'group';
                             router.push({
                               pathname: '/(app)/chat/[conversationId]',
                               params: {
                                 conversationId: String(result.conversationId),
                                 aroundMessageId: String(result.messageId),
+                                ...(isGroupResult
+                                  ? { isGroup: 'true', groupName: result.chatTitle }
+                                  : { handle: result.chatTitle.replace(/^@/, '') }),
                               },
                             });
                           } else if (result.source === 'globe_room') {
@@ -350,20 +372,33 @@ export default function ChatsScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.searchRow}>
-        <TextInput
-          style={[styles.searchInput, {
-            backgroundColor: colors.surfaceGlass,
-            color: colors.text,
-            borderColor: colors.border,
-          }]}
-          placeholder="Search chats"
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
+        <View style={styles.searchInputWrapper}>
+          <TextInput
+            style={[styles.searchInput, styles.searchInputWithClear, {
+              backgroundColor: colors.surfaceGlass,
+              color: colors.text,
+              borderColor: colors.border,
+            }]}
+            placeholder="Search chats"
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.searchClearButton}
+              hitSlop={10}
+              accessibilityLabel="Clear search"
+              accessibilityRole="button"
+            >
+              <Text style={[styles.searchClearText, { color: colors.textMuted }]}>×</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       <ChatsList data={filteredRows} flatListRef={flatListRef} />
     </SafeAreaView>
@@ -392,17 +427,30 @@ function chatsRowSearchTokens(row: ChatsRow): string {
 }
 
 // ── Phase 14: Snippet helper (D-05) ──────────────────────────────────────
-// Returns a 80-char window centred on the first case-insensitive match of q.
-// Leading/trailing ellipsis added when the window is truncated.
-// On no-match (defensive): { before: '', match: '', after: content.slice(0, 80) }.
+// Returns a 80-char window centred on the first case-insensitive match.
+// Multi-term queries: tokenize on whitespace and anchor the snippet on the
+// earliest-matching term so "hello world" centers around the "Hello" in
+// "Hello Great World". Only that anchor term is highlighted; secondary
+// terms in the snippet are shown unhighlighted (full-multi-highlight would
+// require returning a span list — deferred).
 function snippet(content: string, q: string): { before: string; match: string; after: string } {
-  const idx = content.toLowerCase().indexOf(q.toLowerCase());
+  const lower = content.toLowerCase();
+  const terms = q.trim().split(/\s+/).filter((t) => t.length > 0);
+  let idx = -1;
+  let matchLen = 0;
+  for (const t of terms) {
+    const i = lower.indexOf(t.toLowerCase());
+    if (i !== -1 && (idx === -1 || i < idx)) {
+      idx = i;
+      matchLen = t.length;
+    }
+  }
+
   if (idx === -1) {
     return { before: '', match: '', after: content.slice(0, 80) };
   }
 
   const WINDOW = 80;
-  const matchLen = q.length;
   const half = Math.floor((WINDOW - matchLen) / 2);
 
   let start = Math.max(0, idx - half);
@@ -1763,6 +1811,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 15,
     fontFamily: FONTS.regular,
+  },
+  // Phase 14 polish: clear-X button overlay on search inputs
+  searchInputWrapper: {
+    position: 'relative',
+  },
+  searchInputWithClear: {
+    paddingRight: 40,
+  },
+  searchClearButton: {
+    position: 'absolute',
+    right: 8,
+    top: 0,
+    height: 44,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchClearText: {
+    fontSize: 24,
+    fontFamily: FONTS.regular,
+    lineHeight: 26,
   },
   emptyMatches: {
     flex: 1,

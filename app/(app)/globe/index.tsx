@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -211,23 +212,37 @@ export default function GlobeScreen() {
     >
       <Stack.Screen options={{ title: 'Community', headerBackTitle: 'Back' }} />
       <View style={styles.searchRow}>
-        <TextInput
-          style={[
-            styles.searchInput,
-            {
-              backgroundColor: colors.surfaceGlass,
-              color: colors.text,
-              borderColor: colors.border,
-            },
-          ]}
-          placeholder="Search communities"
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
+        <View style={styles.searchInputWrapper}>
+          <TextInput
+            style={[
+              styles.searchInput,
+              styles.searchInputWithClear,
+              {
+                backgroundColor: colors.surfaceGlass,
+                color: colors.text,
+                borderColor: colors.border,
+              },
+            ]}
+            placeholder="Search communities"
+            placeholderTextColor={colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.searchClearButton}
+              hitSlop={10}
+              accessibilityLabel="Clear search"
+              accessibilityRole="button"
+            >
+              <Text style={[styles.searchClearText, { color: colors.textMuted }]}>×</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       {filteredRows.length === 0 && isSearching ? (
         <View style={styles.emptyMatches}>
@@ -275,6 +290,27 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     fontFamily: FONTS.regular,
     fontSize: 14,
+  },
+  // Phase 14 polish: clear-X button overlay on Chevra search input
+  searchInputWrapper: {
+    position: 'relative',
+  },
+  searchInputWithClear: {
+    paddingRight: 36,
+  },
+  searchClearButton: {
+    position: 'absolute',
+    right: 6,
+    top: 0,
+    height: 40,
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchClearText: {
+    fontSize: 22,
+    fontFamily: FONTS.regular,
+    lineHeight: 24,
   },
   emptyMatches: {
     flex: 1,
