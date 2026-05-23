@@ -313,20 +313,6 @@ function RootLayoutInner() {
   useEffect(() => {
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data;
-      // Phase 14: diagnostic log for Bug 4 investigation. Logs the raw push
-      // data payload + adapter result so we can tell whether routing fell
-      // through to the default Chats tab because the payload was missing
-      // `source`/identity fields (adapter returns null) or for some other
-      // reason. Safe — no PII (title/body excluded; only routing keys).
-      console.log('[notif-tap]', JSON.stringify({
-        type: data?.type,
-        source: (data as { source?: unknown })?.source,
-        conversationId: (data as { conversationId?: unknown })?.conversationId,
-        roomSlug: (data as { roomSlug?: unknown })?.roomSlug,
-        timezoneIana: (data as { timezoneIana?: unknown })?.timezoneIana,
-        messageId: (data as { messageId?: unknown })?.messageId,
-        notificationId: (data as { notificationId?: unknown })?.notificationId,
-      }));
       // Auto-mark-as-read the tapped notification
       const notifId = typeof data?.notificationId === 'number'
         ? data.notificationId
@@ -337,7 +323,6 @@ function RootLayoutInner() {
       }
       // Phase 10 D-04 + D-05: adapter handles new + legacy chat shapes.
       const adapted = adaptChatNotification(data);
-      console.log('[notif-tap] adapted →', adapted ? adapted.source : 'null');
       if (adapted) {
         routeChatNotificationTap(adapted, router);
         return;
