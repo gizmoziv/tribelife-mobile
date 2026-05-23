@@ -178,6 +178,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasInitialScrolled = useRef(false);
+  // Phase 14: stay snapped to bottom for 1.5s after mount while async layout
+  // shifts settle (avatars, reactions, reply previews).
+  const mountedAtRef = useRef<number>(Date.now());
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
@@ -250,6 +253,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     setActiveRoom(roomSlug);
     setLoadingMessages(true);
     hasInitialScrolled.current = false;
+    mountedAtRef.current = Date.now(); // restart the snap-to-bottom window
 
     // Mark room as read on entry
     globeApi.markRead(roomSlug).catch(() => {});
@@ -265,11 +269,18 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
 
     // Clear mention notifications scoped to this Globe room so the bell +
     // summary don't keep counting an @-mention the user has now seen.
+    // Refetch summary after markManyRead — Phase 14: fresh chat:notification
+    // mentions don't always land in the local notifications[] array, so the
+    // store's per-type summary-delta math under-decrements; the server is
+    // authoritative for bell-bucket counts.
     notificationsApi
       .readContext({ roomId: `globe:${roomSlug}` })
       .then(({ markedRead }) => {
         if (markedRead.length > 0) {
           useNotificationStore.getState().markManyRead(markedRead);
+          notificationsApi.summary()
+            .then((s) => useNotificationStore.getState().setSummary(s))
+            .catch(() => {});
         }
       })
       .catch(() => {});
@@ -823,9 +834,15 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => {
+            // Phase 14: re-snap to bottom for 1.5s after mount while async
+            // layout shifts (avatars, reactions, reply previews) settle.
+            // hasInitialScrolled gets pre-set by the aroundMessageId path to
+            // suppress this so a deep-link doesn't get fought.
             if (!hasInitialScrolled.current) {
               flatListRef.current?.scrollToEnd({ animated: false });
-              hasInitialScrolled.current = true;
+              if (Date.now() - mountedAtRef.current > 1500) {
+                hasInitialScrolled.current = true;
+              }
             } else if (isAtBottom) {
               flatListRef.current?.scrollToEnd({ animated: false });
             }

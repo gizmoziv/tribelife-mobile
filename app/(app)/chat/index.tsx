@@ -853,6 +853,11 @@ function LocalChatPanel() {
       .then(({ markedRead }) => {
         if (markedRead.length > 0) {
           useNotificationStore.getState().markManyRead(markedRead);
+          // Phase 14: refetch summary — fresh chat:notification mentions
+          // aren't always in the local notifications[] array.
+          notificationsApi.summary()
+            .then((s) => useNotificationStore.getState().setSummary(s))
+            .catch(() => {});
         }
       })
       .catch(() => { /* silent */ });

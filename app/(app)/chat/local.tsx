@@ -143,6 +143,10 @@ export default function LocalChatScreen() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
+  // Phase 14: row heights settle async (avatars, reactions). Stay snapped to
+  // bottom for the first 1.5s after mount so we land on the actual newest
+  // message rather than 5–10 rows above it.
+  const mountedAtRef = useRef<number>(Date.now());
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -165,6 +169,11 @@ export default function LocalChatScreen() {
       .then(({ markedRead }) => {
         if (markedRead.length > 0) {
           useNotificationStore.getState().markManyRead(markedRead);
+          // Phase 14: refetch summary — fresh chat:notification mentions
+          // aren't always in the local notifications[] array.
+          notificationsApi.summary()
+            .then((s) => useNotificationStore.getState().setSummary(s))
+            .catch(() => {});
         }
       })
       .catch(() => { /* silent */ });
@@ -627,8 +636,13 @@ export default function LocalChatScreen() {
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => {
-            if (!hasScrolledRef.current && messages.length > 0) {
-              flatListRef.current?.scrollToEnd({ animated: false });
+            // Phase 14: re-snap to bottom for 1.5s after mount while async
+            // layout shifts (avatars, reactions, reply previews) settle.
+            // hasScrolledRef gets pre-set by the aroundMessageId path to
+            // suppress this so a deep-link doesn't get fought.
+            if (hasScrolledRef.current || messages.length === 0) return;
+            flatListRef.current?.scrollToEnd({ animated: false });
+            if (Date.now() - mountedAtRef.current > 1500) {
               hasScrolledRef.current = true;
             }
           }}

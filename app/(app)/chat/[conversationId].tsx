@@ -132,6 +132,13 @@ export default function DMThreadScreen() {
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
+  // Phase 14 bug: row heights settle async (image avatars, reaction strips,
+  // reply previews). onContentSizeChange's "scroll once" pattern leaves the
+  // user 5–10 rows above the actual newest message. Track mount time so we
+  // can keep snapping to bottom for the first 1.5s while layout stabilizes.
+  // The around-message path is unaffected because it sets hasScrolledRef
+  // before this window opens.
+  const mountedAtRef = useRef<number>(Date.now());
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
@@ -273,6 +280,12 @@ export default function DMThreadScreen() {
       .then(({ markedRead }) => {
         if (markedRead.length > 0) {
           useNotificationStore.getState().markManyRead(markedRead);
+          // Phase 14: refetch summary — fresh chat:notification mentions
+          // aren't always in the local notifications[] array, so the
+          // store's per-type bucket math under-decrements. Server truth.
+          notificationsApi.summary()
+            .then((s) => useNotificationStore.getState().setSummary(s))
+            .catch(() => {});
         }
       })
       .catch(() => { /* silent — bell will recover on next list refetch */ });
@@ -822,8 +835,14 @@ export default function DMThreadScreen() {
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => {
-            if (!hasScrolledRef.current) {
-              flatListRef.current?.scrollToEnd({ animated: false });
+            // Re-snap to bottom for 1.5s after mount so async layout shifts
+            // (avatars, reactions, reply previews) don't leave the user
+            // above the newest message. hasScrolledRef is set by the
+            // aroundMessageId path to suppress this — that path scrolls to
+            // its target and we don't want to fight it.
+            if (hasScrolledRef.current) return;
+            flatListRef.current?.scrollToEnd({ animated: false });
+            if (Date.now() - mountedAtRef.current > 1500) {
               hasScrolledRef.current = true;
             }
           }}
