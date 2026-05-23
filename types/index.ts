@@ -273,6 +273,16 @@ export type ChevraRow =
       memberCount: number;
       lastMessage: { senderHandle: string; content: string; createdAt: string } | null;
       isMember: boolean;
+    }
+  // Phase 15 D-10 + TZRM-02: discovery surface for timezone rooms — paywall flag for free callers, isMember for joined non-native filter on premium
+  | {
+      kind: 'timezone_room';
+      slug: string;
+      displayName: string;
+      memberCount: number;
+      lastMessage: { content: string; createdAt: string; senderHandle: string } | null;
+      isMember: boolean;
+      paywalled: boolean;
     };
 
 export interface ChevraListResponse {

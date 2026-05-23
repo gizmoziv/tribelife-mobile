@@ -16,8 +16,15 @@ import { RegionTile } from '@/components/ui/RegionTile';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import type { ChevraRow } from '@/types';
 
+// Plan 15-04 (TZRM-02): the new `timezone_room` ChevraRow variant is filtered
+// out by the parent (`globe/index.tsx#combinedRows`) and rendered by Plan
+// 15-05's dedicated tile. ChevraCommunityTile renders only globe_room + group
+// variants today — narrow the prop type here so the discriminator unions on
+// `participantCount` / `conversationId` continue to work as before.
+type ChevraGlobeOrGroup = Extract<ChevraRow, { kind: 'globe_room' } | { kind: 'group' }>;
+
 type ChevraCommunityTileProps = {
-  item: ChevraRow;
+  item: ChevraGlobeOrGroup;
   width: number;
   onPress: () => void;
 };

@@ -145,10 +145,16 @@ export default function GlobeScreen() {
     [publicGroupRows],
   );
 
+  // Plan 15-04: combinedRows currently surfaces globe_room + group only. The
+  // new `timezone_room` ChevraRow variant (TZRM-02) is filtered out here and
+  // will be rendered by Plan 15-05's dedicated timezone-room tile + section.
+  type ChevraGlobeOrGroup = Extract<ChevraRow, { kind: 'globe_room' } | { kind: 'group' }>;
   const combinedRows = useMemo(
-    (): ChevraRow[] => [
+    (): ChevraGlobeOrGroup[] => [
       ...visibleGlobeRooms.map((r) => ({ kind: 'globe_room' as const, ...r })),
-      ...visiblePublicGroups,
+      ...visiblePublicGroups.filter(
+        (r): r is Extract<ChevraRow, { kind: 'group' }> => r.kind === 'group',
+      ),
     ],
     [visibleGlobeRooms, visiblePublicGroups],
   );
@@ -159,7 +165,7 @@ export default function GlobeScreen() {
   const filteredRows = combinedRows;
 
   const renderItem = useCallback(
-    ({ item }: { item: ChevraRow }) => (
+    ({ item }: { item: ChevraGlobeOrGroup }) => (
       <ChevraCommunityTile
         item={item}
         width={tileWidth}
@@ -186,7 +192,7 @@ export default function GlobeScreen() {
   );
 
   const keyExtractor = useCallback(
-    (item: ChevraRow) =>
+    (item: ChevraGlobeOrGroup) =>
       item.kind === 'globe_room'
         ? `globe_${item.slug}`
         : `group_${item.conversationId}`,
