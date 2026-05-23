@@ -56,6 +56,7 @@ import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/Men
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
+import { getZoneForTimezone } from '@/utils/timezoneZones';
 import type { Message } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
@@ -154,7 +155,10 @@ export default function LocalChatScreen() {
   const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
   const highlightAnim = useRef(new Animated.Value(0)).current;
 
-  const roomId = `timezone:${user?.timezone ?? 'UTC'}`;
+  // Phase 15 (D-01): subscribe to the consolidated zone room (e.g.
+  // timezone:eastern-time) so users in NY/Detroit/Toronto see each other's
+  // messages. `user?.timezone` is still raw IANA — translated here.
+  const roomId = `timezone:${getZoneForTimezone(user?.timezone ?? 'UTC')}`;
   const zoneName = timezoneToZoneName(user?.timezone ?? 'UTC');
 
   useEffect(() => {
