@@ -427,45 +427,91 @@ function chatsRowSearchTokens(row: ChatsRow): string {
 }
 
 // ── Phase 14: Snippet helper (D-05) ──────────────────────────────────────
-// Returns a 80-char window centred on the first case-insensitive match.
-// Multi-term queries: tokenize on whitespace and anchor the snippet on the
-// earliest-matching term so "hello world" centers around the "Hello" in
-// "Hello Great World". Only that anchor term is highlighted; secondary
-// terms in the snippet are shown unhighlighted (full-multi-highlight would
-// require returning a span list — deferred).
-function snippet(content: string, q: string): { before: string; match: string; after: string } {
+// Returns an 80-char window centred on the earliest matching query term as a
+// list of {text, highlighted} spans so the renderer can bold+colour every
+// match — not just the anchor term. Multi-term queries tokenize on whitespace
+// (e.g. "hello world" against "Hello Great World" highlights BOTH "Hello"
+// AND "World").
+//
+// Centring rules:
+//   - Anchor on the earliest case-insensitive match of any term.
+//   - Window is 80 chars wide, anchored half-before the match if possible.
+//   - Leading '…' if the window doesn't start at 0; trailing '…' if it
+//     doesn't end at content.length.
+//   - No match → returns the first 80 chars unhighlighted (defensive).
+export type SnippetSpan = { text: string; highlighted: boolean };
+
+function snippet(content: string, q: string): SnippetSpan[] {
   const lower = content.toLowerCase();
-  const terms = q.trim().split(/\s+/).filter((t) => t.length > 0);
-  let idx = -1;
-  let matchLen = 0;
+  const terms = Array.from(
+    new Set(q.trim().split(/\s+/).filter((t) => t.length > 0).map((t) => t.toLowerCase())),
+  );
+  if (terms.length === 0) {
+    return [{ text: content.slice(0, 80), highlighted: false }];
+  }
+
+  // Find earliest match → anchors the snippet window
+  let anchorIdx = -1;
+  let anchorLen = 0;
   for (const t of terms) {
-    const i = lower.indexOf(t.toLowerCase());
-    if (i !== -1 && (idx === -1 || i < idx)) {
-      idx = i;
-      matchLen = t.length;
+    const i = lower.indexOf(t);
+    if (i !== -1 && (anchorIdx === -1 || i < anchorIdx)) {
+      anchorIdx = i;
+      anchorLen = t.length;
     }
   }
 
-  if (idx === -1) {
-    return { before: '', match: '', after: content.slice(0, 80) };
+  if (anchorIdx === -1) {
+    return [{ text: content.slice(0, 80), highlighted: false }];
   }
 
   const WINDOW = 80;
-  const half = Math.floor((WINDOW - matchLen) / 2);
-
-  let start = Math.max(0, idx - half);
-  let end = Math.min(content.length, idx + matchLen + (WINDOW - matchLen - (idx - start)));
-
-  // Re-anchor if we hit the end boundary first
+  const half = Math.floor((WINDOW - anchorLen) / 2);
+  let start = Math.max(0, anchorIdx - half);
+  let end = Math.min(content.length, anchorIdx + anchorLen + (WINDOW - anchorLen - (anchorIdx - start)));
   if (end === content.length) {
     start = Math.max(0, end - WINDOW);
   }
 
-  const before = (start > 0 ? '…' : '') + content.slice(start, idx);
-  const match = content.slice(idx, idx + matchLen);
-  const after = content.slice(idx + matchLen, end) + (end < content.length ? '…' : '');
+  // Find every term occurrence within [start, end]
+  type Range = { from: number; to: number };
+  const ranges: Range[] = [];
+  for (const t of terms) {
+    let from = lower.indexOf(t, start);
+    while (from !== -1 && from < end) {
+      ranges.push({ from, to: Math.min(from + t.length, end) });
+      from = lower.indexOf(t, from + t.length);
+    }
+  }
+  // Merge overlapping ranges
+  ranges.sort((a, b) => a.from - b.from);
+  const merged: Range[] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.from <= last.to) {
+      last.to = Math.max(last.to, r.to);
+    } else {
+      merged.push({ from: r.from, to: r.to });
+    }
+  }
 
-  return { before, match, after };
+  // Walk [start, end] and emit alternating spans
+  const spans: SnippetSpan[] = [];
+  if (start > 0) spans.push({ text: '…', highlighted: false });
+  let cursor = start;
+  for (const r of merged) {
+    if (r.from > cursor) {
+      spans.push({ text: content.slice(cursor, r.from), highlighted: false });
+    }
+    spans.push({ text: content.slice(r.from, r.to), highlighted: true });
+    cursor = r.to;
+  }
+  if (cursor < end) {
+    spans.push({ text: content.slice(cursor, end), highlighted: false });
+  }
+  if (end < content.length) spans.push({ text: '…', highlighted: false });
+
+  return spans;
 }
 
 // ── Phase 14: MessageResultRow (SRCH-02) ─────────────────────────────────
@@ -482,7 +528,7 @@ function MessageResultRow({
   colors: ReturnType<typeof useTheme>['colors'];
   onPress: () => void;
 }) {
-  const { before, match, after } = snippet(result.content, queryString);
+  const spans = snippet(result.content, queryString);
   const relTime = formatRelativeTime(result.createdAt);
 
   return (
@@ -500,15 +546,23 @@ function MessageResultRow({
           {`@${result.senderHandle} · ${result.chatTitle} · ${relTime}`}
         </Text>
         <Text numberOfLines={2} style={{ marginTop: 2 }}>
-          <Text style={{ fontSize: 14, fontFamily: FONTS.regular, color: colors.textMuted }}>
-            {before}
-          </Text>
-          <Text style={{ fontSize: 14, fontFamily: FONTS.regular, fontWeight: '700', color: colors.accent }}>
-            {match}
-          </Text>
-          <Text style={{ fontSize: 14, fontFamily: FONTS.regular, color: colors.textMuted }}>
-            {after}
-          </Text>
+          {spans.map((s, i) =>
+            s.highlighted ? (
+              <Text
+                key={i}
+                style={{ fontSize: 14, fontFamily: FONTS.regular, fontWeight: '700', color: colors.accent }}
+              >
+                {s.text}
+              </Text>
+            ) : (
+              <Text
+                key={i}
+                style={{ fontSize: 14, fontFamily: FONTS.regular, color: colors.textMuted }}
+              >
+                {s.text}
+              </Text>
+            ),
+          )}
         </Text>
       </View>
     </TouchableOpacity>

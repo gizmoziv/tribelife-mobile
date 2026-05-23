@@ -331,8 +331,18 @@ export default function AppLayout() {
             if (!navigation.isFocused()) return;
             const onSubScreen = !!pathname && pathname.startsWith('/chat/');
             if (onSubScreen) {
+              // Phase 14 Bug 1: do NOT use router.replace — that rebuilds the
+              // /chat route and unmounts ChatsScreen, wiping the user's
+              // search query. router.back() pops the stack so chat/index
+              // (still mounted) gets focus with its searchQuery intact.
+              // Falls back to a navigate if the stack happens to be empty
+              // (e.g. deep-link cold-start).
               e.preventDefault();
-              router.replace('/(app)/chat');
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.navigate('/(app)/chat');
+              }
               return;
             }
             useChatsListRefStore.getState().clearAndScrollToTop();

@@ -101,15 +101,20 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       };
     }),
 
+  // Mark a batch of notification ids as read. The IDs come from the server
+  // (via /api/notifications/read-context) which has already cleared them in
+  // the DB. Decrement unreadCount by ids.length — server is authoritative.
+  // Phase 14 fix: previously only decremented for IDs found in the local
+  // notifications[] array, which skipped fresh chat:notification mention
+  // bumps that hadn't yet been hydrated into the array (bell stayed stuck
+  // until app foreground triggered a /notifications fetch).
   markManyRead: (ids) =>
     set((state) => {
       if (ids.length === 0) return state;
       const idSet = new Set(ids);
-      let decremented = 0;
       const summaryDelta: Partial<Record<keyof NotificationSummary, number>> = {};
       const next = state.notifications.map((n) => {
         if (idSet.has(n.id) && !n.isRead) {
-          decremented++;
           const key = summaryKeyForType[n.type];
           if (key) summaryDelta[key] = (summaryDelta[key] ?? 0) + 1;
           return { ...n, isRead: true };
@@ -122,7 +127,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       });
       return {
         notifications: next,
-        unreadCount: Math.max(0, state.unreadCount - decremented),
+        unreadCount: Math.max(0, state.unreadCount - ids.length),
         summary: nextSummary,
       };
     }),
