@@ -3,6 +3,7 @@ import { API_URL } from '@/constants';
 import { getToken } from './api';
 import type { Message } from '@/types';
 import { useAuthStore } from '@/store/authStore';
+import { useChatsStore } from '@/store/chatsStore';
 
 let socket: Socket | null = null;
 let connecting: Promise<Socket | null> | null = null;
@@ -64,6 +65,11 @@ export async function connectSocket(): Promise<Socket | null> {
     s.on('caps:invalidated', (data: { reason?: string }) => {
       console.log('[caps:invalidated] received', data);
       useAuthStore.getState().refreshCapabilities();
+      // Phase 15 D-09: also re-hydrate the Chats list so the server's new
+      // caps-aware /api/chats filter is reflected immediately. On downgrade
+      // this drops non-native timezone_room rows from the UI; on re-upgrade
+      // it surfaces them again (membership rows are preserved server-side).
+      useChatsStore.getState().hydrate();
     });
 
     socket = s;
