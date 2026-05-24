@@ -357,9 +357,14 @@ export default function LocalChatScreen() {
   // change with the layout shift. The keyboardVisible state used by the
   // composer subcomponent lives there separately — this listener is
   // scoped to the main screen so it has access to flatListRef.
+  //
+  // Two-pass scroll: the first call fires before Android's
+  // `behavior='height'` KAV finishes shrinking; the 100ms-delayed second
+  // call lands on the real post-shrink bottom.
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
       flatListRef.current?.scrollToEnd({ animated: true });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
     });
     return () => { showSub.remove(); };
   }, []);

@@ -215,9 +215,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
-      // Snap to bottom so the newest messages stay visible above the
-      // keyboard instead of being pushed under it (WhatsApp/iMessage behavior).
+      // Two-pass scroll-to-end matches Android's `behavior='height'` KAV
+      // timing — the first call fires before the view shrinks; the
+      // 100ms-delayed second call lands on the real post-shrink bottom.
       flatListRef.current?.scrollToEnd({ animated: true });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };

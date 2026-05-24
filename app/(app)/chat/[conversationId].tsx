@@ -107,7 +107,15 @@ export default function DMThreadScreen() {
       // Match WhatsApp/iMessage: when the keyboard rises, snap the message
       // list to the bottom so the latest messages stay visible above the
       // keyboard instead of being pushed under it.
+      //
+      // Two-pass scroll handles Android's `behavior='height'` KAV: the
+      // first call fires before the view finishes shrinking (so the
+      // "bottom" it scrolls to is the pre-shrink bottom), and the second
+      // call after a tick lands on the real post-shrink bottom. iOS uses
+      // `behavior='padding'` which settles synchronously, but the double
+      // call is harmless there.
       flatListRef.current?.scrollToEnd({ animated: true });
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
