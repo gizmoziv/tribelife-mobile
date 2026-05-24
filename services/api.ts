@@ -434,6 +434,17 @@ export const globeApi = {
       method: 'POST',
     }),
 
+  // Phase 15 (TZRM-01): alias for `join` — semantically explicit for the
+  // Chevra timezone-room join handler. Backend POST /api/globe/rooms/:slug/join
+  // is the SAME endpoint (Plan 15-03 Task 1 extended dispatch to accept
+  // timezone-room slugs). On 403 capabilityViolation, api.ts's existing retry
+  // path refreshes caps once then re-fires; if still 403 the caller sees the
+  // ApiError and surfaces the UpgradeModal as a defensive fallback.
+  joinRoom: (slug: string) =>
+    request<{ ok: true; isMember: true }>(`/api/globe/rooms/${slug}/join`, {
+      method: 'POST',
+    }),
+
   leave: (slug: string) =>
     request<{ ok: true; isMember: false }>(`/api/globe/rooms/${slug}/join`, {
       method: 'DELETE',
