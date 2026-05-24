@@ -413,6 +413,7 @@ function chatsRowTitle(row: ChatsRow): string {
     case 'dm': return '@' + row.partner.handle;
     case 'group': return row.name;
     case 'globe_room': return row.displayName;
+    case 'timezone_room': return row.displayName;
   }
 }
 
@@ -423,6 +424,10 @@ function chatsRowTitle(row: ChatsRow): string {
 function chatsRowSearchTokens(row: ChatsRow): string {
   const title = chatsRowTitle(row).toLowerCase();
   if (row.type === 'local_chat') return `${title} local chat`;
+  // Phase 15 (TZRM-01): joined non-native timezone rooms surface in search via
+  // their display name + the "timezone room" token (mirrors the LOCAL pill
+  // pattern so "timezone" also returns the row).
+  if (row.type === 'timezone_room') return `${title} timezone room`;
   return title;
 }
 
@@ -607,6 +612,9 @@ function chatsRowKey(row: ChatsRow): string {
     case 'dm': return 'dm-' + row.conversationId;
     case 'group': return 'group-' + row.conversationId;
     case 'globe_room': return 'globe_room-' + row.roomSlug;
+    // Phase 15 (TZRM-01): one row per joined non-native timezone room. zone
+    // slug is unique per zone (e.g. 'pacific-time', 'eastern-time').
+    case 'timezone_room': return 'timezone_room-' + row.zoneSlug;
   }
 }
 
@@ -636,6 +644,15 @@ function ChatsListRow({
     // back-press returns to the Chats list (not the Community tab).
     if (row.type === 'globe_room') {
       router.push('/(app)/chat/regional/' + row.roomSlug);
+      return;
+    }
+    // Phase 15 (TZRM-01): joined non-native timezone room → existing
+    // globe/[roomSlug] chat screen (the slug IS the zone slug, e.g.
+    // 'eastern-time'). The globe chat screen's socket subscribe + GET
+    // /messages path already works post-Plan-15-03 because backend dispatch
+    // accepts timezone-slugs.
+    if (row.type === 'timezone_room') {
+      router.push('/(app)/globe/' + row.zoneSlug);
       return;
     }
     // DM and Group rows route to the existing conversation screen.
@@ -674,6 +691,15 @@ function ChatsListRow({
     title = row.displayName;
     subtitle = row.lastMessage?.preview ?? 'Regional community';
     // showLock stays `false` — Globe rooms aren't private (Phase 9 D-05 only applies to groups).
+  } else if (row.type === 'timezone_room') {
+    // Phase 15 (TZRM-01): joined non-native timezone room. RegionTile takes
+    // any slug — for timezone slugs (e.g. 'eastern-time') it falls back to
+    // the default '··' abbreviation since GLOBE_ROOM_VISUALS only holds the
+    // 7 globe rooms. UI polish for timezone-specific abbreviations is
+    // additive (not in Plan 15-05 scope).
+    leadingIcon = <RegionTile slug={row.zoneSlug} size={44} />;
+    title = row.displayName;
+    subtitle = row.lastMessage?.preview ?? 'Timezone community';
   } else if (row.type === 'dm') {
     leadingIcon = (
       <AvatarCircle
