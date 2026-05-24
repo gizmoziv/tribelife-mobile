@@ -26,7 +26,7 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDirectMessage } from '@/services/socket';
 import { useChatsStore } from '@/store/chatsStore';
 import { adaptChatNotification } from '@/services/chatNotificationAdapter';
-import { routeChatNotificationTap } from '@/services/notificationRouting';
+import { routeChatNotificationTap, getPostLoginLandingRoute } from '@/services/notificationRouting';
 import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
 import { checkVersion, type VersionCheckResult } from '@/services/version';
 import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
@@ -87,12 +87,20 @@ async function recoverAttributionFromClipboard() {
 
     let ref: string | null = null;
     let source: 'handle_code' | 'profile_share' | 'group_invite' | null = null;
+    // Deferred deep link target — the slug or handle the interstitial captured.
+    // Persisted alongside the attribution so the auth-restore branch in this
+    // file (pendingGroupSlug) can auto-navigate to the join screen after the
+    // user finishes onboarding from a fresh App Store install.
+    let pendingGroupSlug: string | null = null;
+    let pendingProfileHandle: string | null = null;
     if (matchG) {
       ref = matchG[1].toLowerCase();
       source = 'group_invite';
+      pendingGroupSlug = matchG[2];
     } else if (matchU) {
       ref = matchU[1].toLowerCase();
       source = 'profile_share';
+      pendingProfileHandle = matchU[2];
     } else if (match) {
       ref = match[1].toLowerCase();
       source = 'handle_code';
@@ -102,6 +110,12 @@ async function recoverAttributionFromClipboard() {
 
     await AsyncStorage.setItem('attributionRef', ref);
     await AsyncStorage.setItem('attributionSource', source);
+    if (pendingGroupSlug) {
+      await AsyncStorage.setItem('pendingGroupSlug', pendingGroupSlug);
+    }
+    if (pendingProfileHandle) {
+      await AsyncStorage.setItem('pendingProfileHandle', pendingProfileHandle);
+    }
 
     // Clear the clipboard so the user doesn't accidentally paste it elsewhere
     await Clipboard.setStringAsync('');
@@ -181,11 +195,18 @@ function RootLayoutInner() {
           const { user, needsOnboarding, capabilities } = await auth.me(deviceTimezone);
           await setAuth(token, user, capabilities, needsOnboarding);
 
+          // Tracks whether a deep link (pending group invite or cold-start push
+          // tap) consumed the initial nav slot. If still false after both
+          // branches below, we fall back to checking for unread beacon
+          // matches and routing the user to the Matches tab.
+          let deepLinkHandled = false;
+
           // Handle pending group invite from deep link (saved pre-auth)
           const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
           if (pendingGroupSlug) {
             await AsyncStorage.removeItem('pendingGroupSlug');
             setTimeout(() => router.push(`/g/${pendingGroupSlug}`), 500);
+            deepLinkHandled = true;
           }
 
           // Connect socket
@@ -253,19 +274,35 @@ function RootLayoutInner() {
             const adapted = adaptChatNotification(nData);
             if (adapted) {
               setTimeout(() => routeChatNotificationTap(adapted, router), 500);
+              deepLinkHandled = true;
             } else if (nData?.type === 'beacon_match') {
               setTimeout(() => router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } }), 500);
+              deepLinkHandled = true;
             } else if (nData?.type === 'news_breaking') {
               setTimeout(() => router.push({
                 pathname: '/(app)/news',
                 params: nData?.articleId ? { highlightArticleId: String(nData.articleId) } : {},
               }), 500);
+              deepLinkHandled = true;
             } else if (nData?.type === 'org_invite' && nData?.token) {
               setTimeout(() => router.push({
                 pathname: '/org/invite/[token]',
                 params: { token: String(nData.token) },
               }), 500);
+              deepLinkHandled = true;
             }
+          }
+
+          // No deep link took the user somewhere specific — if there's an
+          // unread daily-matcher result waiting, surface the Matches tab
+          // instead of the default beacon list. Mirrors the welcome.tsx
+          // re-login flow so both entry paths behave the same.
+          if (!deepLinkHandled) {
+            getPostLoginLandingRoute().then((landing) => {
+              if (landing.params?.tab === 'matches') {
+                router.replace(landing);
+              }
+            });
           }
 
           return () => {
@@ -375,6 +412,18 @@ function RootLayoutInner() {
         // from missed socket events while backgrounded. Store-internal
         // _hydrating flag dedupes rapid AppState toggles.
         useChatsStore.getState().hydrate();
+        // Refresh notification summary on foreground. If the unread
+        // beacon-match count grew while the app was backgrounded (e.g., the
+        // daily matcher ran while the user was away), bump them to the
+        // Matches tab. Only-on-growth gate avoids yanking users who already
+        // saw the count and just toggled away briefly.
+        const prevBeaconMatches = useNotificationStore.getState().summary.beaconMatches;
+        notificationsApi.summary().then((s) => {
+          useNotificationStore.getState().setSummary(s);
+          if (s.beaconMatches > prevBeaconMatches && s.beaconMatches > 0) {
+            router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
+          }
+        }).catch(() => {});
       }
       // Phase 6 / D-09 — re-run version check on every foreground transition.
       // If the operator bumped the floor while the app was backgrounded, the
