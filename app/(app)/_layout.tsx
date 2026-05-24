@@ -253,9 +253,11 @@ export default function AppLayout() {
           bottom: insets.bottom + 12,
           left: SPACING.page,
           right: SPACING.page,
-          backgroundColor: isDark
-            ? 'rgba(15,20,35,0.92)'
-            : 'rgba(255,255,255,0.92)',
+          // Fully opaque so chat-list rows and other content don't bleed
+          // through behind the tab bar (the 0.92 alpha was leaking dark
+          // chevra cards on iOS and making the Android system-nav buttons
+          // hard to see against the chat content underneath).
+          backgroundColor: isDark ? '#0F1423' : '#FFFFFF',
           borderTopWidth: 0,
           borderRadius: RADIUS.xl,
           height: 70,
