@@ -351,6 +351,19 @@ export default function LocalChatScreen() {
     };
   }, [roomId]);
 
+  // Keep the newest messages visible above the keyboard (WhatsApp/iMessage
+  // behavior). Without this, opening the keyboard pushes the latest
+  // messages under it because the FlatList's scroll position doesn't
+  // change with the layout shift. The keyboardVisible state used by the
+  // composer subcomponent lives there separately — this listener is
+  // scoped to the main screen so it has access to flatListRef.
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => { showSub.remove(); };
+  }, []);
+
   // ── Real-time reaction updates ──────────────────────────────────────────
   useEffect(() => {
     const offReaction = onReactionUpdate((data) => {

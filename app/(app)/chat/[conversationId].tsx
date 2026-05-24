@@ -102,7 +102,13 @@ export default function DMThreadScreen() {
   const [isJoining, setIsJoining] = useState<boolean>(false);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+      // Match WhatsApp/iMessage: when the keyboard rises, snap the message
+      // list to the bottom so the latest messages stay visible above the
+      // keyboard instead of being pushed under it.
+      flatListRef.current?.scrollToEnd({ animated: true });
+    });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);

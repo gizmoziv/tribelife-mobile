@@ -213,7 +213,12 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     AsyncStorage.setItem(welcomeDismissKey, '1').catch(() => {});
   }, [welcomeDismissKey]);
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+      // Snap to bottom so the newest messages stay visible above the
+      // keyboard instead of being pushed under it (WhatsApp/iMessage behavior).
+      flatListRef.current?.scrollToEnd({ animated: true });
+    });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
