@@ -22,6 +22,11 @@ interface PillToggleProps {
   // hides the badge. Used by ChatScreen to surface DM vs local unread counts
   // on the per-panel pills so users see activity in the inactive tab.
   badges?: (number | undefined)[];
+  // Reduced vertical padding + font size variant. Used on the Chats screen
+  // filter bar where the pills sit between the search input and the list
+  // and need to take less vertical real-estate than the default tab-style
+  // use of this component on org / beacon / chat-panel screens.
+  compact?: boolean;
 }
 
 export function PillToggle({
@@ -31,6 +36,7 @@ export function PillToggle({
   activeColor = COLORS.primary,
   style,
   badges,
+  compact = false,
 }: PillToggleProps) {
   const { colors } = useTheme();
   const translateX = useRef(new Animated.Value(0)).current;
@@ -62,6 +68,7 @@ export function PillToggle({
     <View
       style={[
         styles.container,
+        compact && styles.containerCompact,
         { backgroundColor: colors.surfaceGlass },
         style,
       ]}
@@ -70,6 +77,7 @@ export function PillToggle({
       <Animated.View
         style={[
           styles.indicator,
+          compact && styles.indicatorCompact,
           {
             backgroundColor: activeColor,
             width: `${100 / options.length}%` as any,
@@ -82,12 +90,13 @@ export function PillToggle({
         return (
           <Pressable
             key={option}
-            style={styles.option}
+            style={[styles.option, compact && styles.optionCompact]}
             onPress={() => handleSelect(index)}
           >
             <Text
               style={[
                 styles.optionText,
+                compact && styles.optionTextCompact,
                 {
                   color: index === activeIndex ? '#FFFFFF' : colors.textMuted,
                   fontFamily: index === activeIndex ? FONTS.semiBold : FONTS.medium,
@@ -117,11 +126,18 @@ const styles = StyleSheet.create({
     padding: 4,
     position: 'relative',
   },
+  containerCompact: {
+    padding: 3,
+  },
   indicator: {
     position: 'absolute',
     top: 4,
     bottom: 4,
     borderRadius: 9999,
+  },
+  indicatorCompact: {
+    top: 3,
+    bottom: 3,
   },
   option: {
     flex: 1,
@@ -131,8 +147,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
+  optionCompact: {
+    paddingVertical: 6,
+  },
   optionText: {
     fontSize: 14,
+  },
+  optionTextCompact: {
+    fontSize: 13,
   },
   badge: {
     marginLeft: 6,

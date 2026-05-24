@@ -466,6 +466,8 @@ export default function ChatsScreen() {
           activeIndex={pillFilter === 'all' ? 0 : pillFilter === 'unread' ? 1 : pillFilter === 'groups' ? 2 : 3}
           onSelect={(i) => setPillFilter(i === 0 ? 'all' : i === 1 ? 'unread' : i === 2 ? 'groups' : 'dms')}
           badges={[undefined, unreadConvCount > 0 ? unreadConvCount : undefined, undefined, undefined]}
+          compact
+          activeColor="rgba(129, 140, 248, 0.6)"
         />
       </View>
       <ChatsList data={filteredRows} flatListRef={flatListRef} />
