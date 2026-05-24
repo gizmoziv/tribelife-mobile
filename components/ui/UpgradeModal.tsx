@@ -61,14 +61,20 @@ export function UpgradeModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      {/* Backdrop — tap to dismiss */}
+      {/* Backdrop — tap to dismiss. Heavy dim so the focus is unambiguous;
+          the previous 0.5 alpha let chevra cards stay visible through the
+          card itself (combined with colors.surface being a 6%-opaque tint
+          rather than a solid surface). */}
       <Pressable style={styles.backdrop} onPress={onClose}>
-        {/* Card — stopPropagation so tapping the card doesn't close */}
+        {/* Card — stopPropagation so tapping the card doesn't close. Uses
+            colors.background (opaque #0A0E1A / #F8FAFB) plus a 1px border
+            instead of colors.surface (which is a 6% / 3% alpha tint) so
+            the card reads as an opaque sheet against the dimmed backdrop. */}
         <Pressable
           style={[
             styles.card,
             SHADOWS.lg,
-            { backgroundColor: colors.surface },
+            { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 },
           ]}
           onPress={(e) => e.stopPropagation()}
         >
@@ -123,7 +129,7 @@ export default UpgradeModal;
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: SPACING.page,
