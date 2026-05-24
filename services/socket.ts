@@ -21,7 +21,9 @@ export async function connectSocket(): Promise<Socket | null> {
 
     const s = io(API_URL, {
       auth: { token },
-      transports: ['websocket'],   // websocket-only: eliminates polling handshake + sticky-session requirement
+      // Prod: websocket-only — eliminates polling handshake + LB sticky-session requirement.
+      // Dev: allow polling fallback — Android emulator's 10.0.2.2 NAT is flaky on raw WS upgrades.
+      transports: __DEV__ ? ['polling', 'websocket'] : ['websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1500,

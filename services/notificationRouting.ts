@@ -1,5 +1,24 @@
 import type { Router } from 'expo-router';
 import type { ChatNotification } from '@/types';
+import { notificationsApi } from '@/services/api';
+import { useNotificationStore } from '@/store/notificationStore';
+
+// Post-login landing decision. Both cold-start (restoreSession) and re-login
+// (welcome.tsx) call this so unread daily-matcher results are surfaced even
+// without a push tap. Side-effect: hydrates the notification summary store so
+// the bell badge reflects the current count without an extra round trip.
+export async function getPostLoginLandingRoute(): Promise<
+  | { pathname: '/(app)/beacon'; params?: { tab: 'matches' } }
+> {
+  try {
+    const s = await notificationsApi.summary();
+    useNotificationStore.getState().setSummary(s);
+    if (s.beaconMatches > 0) {
+      return { pathname: '/(app)/beacon', params: { tab: 'matches' } };
+    }
+  } catch { /* fall through to default */ }
+  return { pathname: '/(app)/beacon' };
+}
 
 // ── Phase 10 D-05: chat notification tap routing ────────────────────────
 // One function handles BOTH the cold-start tap (via

@@ -11,10 +11,10 @@
 // for human labels — the two files are complementary.
 
 export interface TimezoneZone {
-  slug: string;           // kebab-case, used as room key suffix
-  displayName: string;    // user-facing label (matches Intl longGeneric where possible)
+  slug: string; // kebab-case, used as room key suffix
+  displayName: string; // user-facing label (matches Intl longGeneric where possible)
   utcOffsetHours: number; // representative offset (standard time); half-hour zones use fraction
-  members: string[];      // IANA strings that map to this zone
+  members: string[]; // IANA strings that map to this zone
 }
 
 export type ZoneSlug = string;
@@ -31,7 +31,13 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'alaska-time',
     displayName: 'Alaska Time',
     utcOffsetHours: -9,
-    members: ['America/Anchorage', 'America/Juneau', 'America/Nome', 'America/Sitka', 'America/Yakutat'],
+    members: [
+      'America/Anchorage',
+      'America/Juneau',
+      'America/Nome',
+      'America/Sitka',
+      'America/Yakutat',
+    ],
   },
   {
     slug: 'pacific-time',
@@ -43,25 +49,48 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'mountain-time',
     displayName: 'Mountain Time',
     utcOffsetHours: -7,
-    members: ['America/Denver', 'America/Edmonton', 'America/Phoenix', 'America/Boise', 'America/Mazatlan'],
+    members: [
+      'America/Denver',
+      'America/Edmonton',
+      'America/Phoenix',
+      'America/Boise',
+      'America/Mazatlan',
+    ],
   },
   {
     slug: 'central-time',
     displayName: 'Central Time',
     utcOffsetHours: -6,
-    members: ['America/Chicago', 'America/Winnipeg', 'America/Mexico_City', 'America/Regina', 'America/Indiana/Knox'],
+    members: [
+      'America/Chicago',
+      'America/Winnipeg',
+      'America/Mexico_City',
+      'America/Regina',
+      'America/Indiana/Knox',
+    ],
   },
   {
     slug: 'eastern-time',
     displayName: 'Eastern Time',
     utcOffsetHours: -5,
-    members: ['America/New_York', 'America/Detroit', 'America/Toronto', 'America/Indianapolis', 'America/Kentucky/Louisville'],
+    members: [
+      'America/New_York',
+      'America/Detroit',
+      'America/Toronto',
+      'America/Indianapolis',
+      'America/Kentucky/Louisville',
+    ],
   },
   {
     slug: 'atlantic-time',
     displayName: 'Atlantic Time',
     utcOffsetHours: -4,
-    members: ['America/Halifax', 'America/Bermuda', 'America/Barbados', 'America/Puerto_Rico'],
+    members: [
+      'America/Halifax',
+      'America/Bermuda',
+      'America/Barbados',
+      'America/Puerto_Rico',
+    ],
   },
   {
     slug: 'newfoundland-time',
@@ -74,13 +103,23 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'brasilia-time',
     displayName: 'Brasilia Time',
     utcOffsetHours: -3,
-    members: ['America/Sao_Paulo', 'America/Recife', 'America/Manaus', 'America/Fortaleza', 'America/Belem'],
+    members: [
+      'America/Sao_Paulo',
+      'America/Recife',
+      'America/Manaus',
+      'America/Fortaleza',
+      'America/Belem',
+    ],
   },
   {
     slug: 'argentina-time',
     displayName: 'Argentina Time',
     utcOffsetHours: -3,
-    members: ['America/Argentina/Buenos_Aires', 'America/Argentina/Cordoba', 'America/Argentina/Mendoza'],
+    members: [
+      'America/Argentina/Buenos_Aires',
+      'America/Argentina/Cordoba',
+      'America/Argentina/Mendoza',
+    ],
   },
   {
     slug: 'chile-time',
@@ -92,14 +131,25 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'colombia-peru-time',
     displayName: 'Colombia Time',
     utcOffsetHours: -5,
-    members: ['America/Bogota', 'America/Lima', 'America/Guayaquil', 'America/Caracas'],
+    members: [
+      'America/Bogota',
+      'America/Lima',
+      'America/Guayaquil',
+      'America/Caracas',
+    ],
   },
   // ── Europe / Africa ──────────────────────────────────────────────────────
   {
     slug: 'greenwich-mean-time',
     displayName: 'Greenwich Mean Time',
     utcOffsetHours: 0,
-    members: ['Europe/London', 'Europe/Dublin', 'Atlantic/Reykjavik', 'Africa/Casablanca', 'Africa/Abidjan'],
+    members: [
+      'Europe/London',
+      'Europe/Dublin',
+      'Atlantic/Reykjavik',
+      'Africa/Casablanca',
+      'Africa/Abidjan',
+    ],
   },
   {
     slug: 'central-european-time',
@@ -126,7 +176,14 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'eastern-european-time',
     displayName: 'Eastern European Time',
     utcOffsetHours: 2,
-    members: ['Europe/Bucharest', 'Europe/Athens', 'Europe/Helsinki', 'Africa/Cairo', 'Africa/Johannesburg', 'Africa/Harare'],
+    members: [
+      'Europe/Bucharest',
+      'Europe/Athens',
+      'Europe/Helsinki',
+      'Africa/Cairo',
+      'Africa/Johannesburg',
+      'Africa/Harare',
+    ],
   },
   {
     slug: 'jerusalem-time',
@@ -138,7 +195,13 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'moscow-time',
     displayName: 'Moscow Time',
     utcOffsetHours: 3,
-    members: ['Europe/Moscow', 'Europe/Istanbul', 'Asia/Riyadh', 'Asia/Baghdad', 'Africa/Nairobi'],
+    members: [
+      'Europe/Moscow',
+      'Europe/Istanbul',
+      'Asia/Riyadh',
+      'Asia/Baghdad',
+      'Africa/Nairobi',
+    ],
   },
   // ── Asia / Pacific ───────────────────────────────────────────────────────
   {
@@ -153,17 +216,23 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     utcOffsetHours: 4,
     members: ['Asia/Dubai', 'Asia/Muscat'],
   },
-  {
-    slug: 'pakistan-time',
-    displayName: 'Pakistan Time',
-    utcOffsetHours: 5,
-    members: ['Asia/Karachi'],
-  },
+  // {
+  //   slug: 'pakistan-time',
+  //   displayName: 'Pakistan Time',
+  //   utcOffsetHours: 5,
+  //   members: ['Asia/Karachi'],
+  // },
   {
     slug: 'china-standard-time',
     displayName: 'China Standard Time',
     utcOffsetHours: 8,
-    members: ['Asia/Shanghai', 'Asia/Singapore', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Kuala_Lumpur'],
+    members: [
+      'Asia/Shanghai',
+      'Asia/Singapore',
+      'Asia/Hong_Kong',
+      'Asia/Taipei',
+      'Asia/Kuala_Lumpur',
+    ],
   },
   {
     slug: 'japan-standard-time',
@@ -175,7 +244,12 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'australia-eastern-time',
     displayName: 'Australian Eastern Time',
     utcOffsetHours: 10,
-    members: ['Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane', 'Pacific/Port_Moresby'],
+    members: [
+      'Australia/Sydney',
+      'Australia/Melbourne',
+      'Australia/Brisbane',
+      'Pacific/Port_Moresby',
+    ],
   },
   {
     slug: 'new-zealand-time',
@@ -194,7 +268,9 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
 
 // Module-load-time reverse-lookup map (O(1) per call) built from TIMEZONE_ZONES.
 const IANA_TO_SLUG = new Map<string, ZoneSlug>(
-  TIMEZONE_ZONES.flatMap((z) => z.members.map((iana) => [iana, z.slug] as [string, ZoneSlug])),
+  TIMEZONE_ZONES.flatMap((z) =>
+    z.members.map((iana) => [iana, z.slug] as [string, ZoneSlug]),
+  ),
 );
 
 /**

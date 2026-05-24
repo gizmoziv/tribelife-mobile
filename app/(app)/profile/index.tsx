@@ -121,7 +121,7 @@ export default function ProfileScreen() {
   const loadMyGroups = useCallback(() => {
     if (!isPremium) return;
     groupsApi
-      .myGroups()
+      .myGroups({ role: 'admin' })
       .then(({ groups }) => setMyGroups(groups))
       .catch(() => {});
   }, [isPremium]);
@@ -189,7 +189,9 @@ export default function ProfileScreen() {
       updateUser({ bio: next });
       setBioEditorVisible(false);
     } catch (err) {
-      setBioSaveError(err instanceof Error ? err.message : 'Could not update bio.');
+      setBioSaveError(
+        err instanceof Error ? err.message : 'Could not update bio.',
+      );
     } finally {
       setIsSavingBio(false);
     }
@@ -696,8 +698,14 @@ export default function ProfileScreen() {
               <LinearGradient
                 colors={
                   isDark
-                    ? [REGION_TILE_GRADIENT_DARK[0], REGION_TILE_GRADIENT_DARK[1]]
-                    : [REGION_TILE_GRADIENT_LIGHT[0], REGION_TILE_GRADIENT_LIGHT[1]]
+                    ? [
+                        REGION_TILE_GRADIENT_DARK[0],
+                        REGION_TILE_GRADIENT_DARK[1],
+                      ]
+                    : [
+                        REGION_TILE_GRADIENT_LIGHT[0],
+                        REGION_TILE_GRADIENT_LIGHT[1],
+                      ]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -705,7 +713,9 @@ export default function ProfileScreen() {
               >
                 <LinearGradient
                   colors={[
-                    isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.55)',
+                    isDark
+                      ? 'rgba(255,255,255,0.10)'
+                      : 'rgba(255,255,255,0.55)',
                     'rgba(255,255,255,0)',
                   ]}
                   start={{ x: 0.5, y: 0 }}
@@ -741,7 +751,11 @@ export default function ProfileScreen() {
                       <Text
                         style={[
                           bioStyles.eyebrow,
-                          { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                          {
+                            color: isDark
+                              ? COLORS.textMuted
+                              : COLORS.lightTextMuted,
+                          },
                         ]}
                       >
                         ABOUT
@@ -760,7 +774,11 @@ export default function ProfileScreen() {
                       <Text
                         style={[
                           bioStyles.eyebrow,
-                          { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                          {
+                            color: isDark
+                              ? COLORS.textMuted
+                              : COLORS.lightTextMuted,
+                          },
                         ]}
                       >
                         ABOUT
@@ -768,7 +786,11 @@ export default function ProfileScreen() {
                       <Text
                         style={[
                           bioStyles.placeholder,
-                          { color: isDark ? COLORS.textMuted : COLORS.lightTextMuted },
+                          {
+                            color: isDark
+                              ? COLORS.textMuted
+                              : COLORS.lightTextMuted,
+                          },
                         ]}
                       >
                         Tell people who you are
@@ -889,103 +911,102 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
-        {/* Private Groups (Premium) */}
-        {isPremium && (
-          <AnimatedEntry delay={120}>
-            <GlassCard>
-              <View style={styles.premiumInner}>
-                <Text style={[styles.premiumTitle, { color: colors.text }]}>
-                  Private Groups
-                </Text>
-                <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
-                  Create and manage private group chats for your community
-                </Text>
-                {myGroups.length > 0 && (
-                  <View style={{ gap: 8, marginTop: 4 }}>
-                    {myGroups.map((g) => (
-                      <View
-                        key={g.id}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingVertical: 10,
-                          paddingHorizontal: 12,
-                          borderRadius: RADIUS.md,
-                          backgroundColor: colors.surfaceGlass,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                        }}
+        {/* My Groups — only groups where the user is admin */}
+
+        <AnimatedEntry delay={120}>
+          <GlassCard>
+            <View style={styles.premiumInner}>
+              <Text style={[styles.premiumTitle, { color: colors.text }]}>
+                My Groups
+              </Text>
+              <Text style={[styles.premiumDesc, { color: colors.textMuted }]}>
+                Groups you administer
+              </Text>
+              {myGroups.length > 0 && (
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {myGroups.map((g) => (
+                    <View
+                      key={g.id}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 10,
+                        paddingHorizontal: 12,
+                        borderRadius: RADIUS.md,
+                        backgroundColor: colors.surfaceGlass,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <TouchableOpacity
+                        style={{ flex: 1 }}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(app)/chat/[conversationId]',
+                            params: {
+                              conversationId: g.id.toString(),
+                              isGroup: 'true',
+                              groupName: g.groupName,
+                              inviteSlug: g.inviteSlug,
+                            },
+                          })
+                        }
                       >
+                        <Text
+                          style={{
+                            fontSize: 15,
+                            fontFamily: FONTS.semiBold,
+                            color: colors.text,
+                          }}
+                        >
+                          {g.groupName}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontFamily: FONTS.regular,
+                            color: colors.textMuted,
+                            marginTop: 2,
+                          }}
+                        >
+                          {g.memberCount}{' '}
+                          {g.memberCount === 1 ? 'member' : 'members'}
+                          {g.role === 'admin' ? ' · Admin' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                      {g.role === 'admin' && (
                         <TouchableOpacity
-                          style={{ flex: 1 }}
-                          onPress={() =>
-                            router.push({
-                              pathname: '/(app)/chat/[conversationId]',
-                              params: {
-                                conversationId: g.id.toString(),
-                                isGroup: 'true',
-                                groupName: g.groupName,
-                                inviteSlug: g.inviteSlug,
-                              },
-                            })
-                          }
+                          onPress={() => handleRenameGroup(g)}
+                          hitSlop={8}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                          }}
                         >
                           <Text
                             style={{
-                              fontSize: 15,
+                              fontSize: 13,
                               fontFamily: FONTS.semiBold,
-                              color: colors.text,
+                              color: COLORS.primary,
                             }}
                           >
-                            {g.groupName}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontFamily: FONTS.regular,
-                              color: colors.textMuted,
-                              marginTop: 2,
-                            }}
-                          >
-                            {g.memberCount}{' '}
-                            {g.memberCount === 1 ? 'member' : 'members'}
-                            {g.role === 'admin' ? ' · Admin' : ''}
+                            Rename
                           </Text>
                         </TouchableOpacity>
-                        {g.role === 'admin' && (
-                          <TouchableOpacity
-                            onPress={() => handleRenameGroup(g)}
-                            hitSlop={8}
-                            style={{
-                              paddingHorizontal: 10,
-                              paddingVertical: 6,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontFamily: FONTS.semiBold,
-                                color: COLORS.primary,
-                              }}
-                            >
-                              Rename
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    ))}
-                  </View>
-                )}
-                <PillButton
-                  title="Create Group"
-                  onPress={() => router.push('/(app)/group/create')}
-                  variant="primary"
-                  style={{ width: '100%' }}
-                />
-              </View>
-            </GlassCard>
-          </AnimatedEntry>
-        )}
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+              <PillButton
+                title="Create Group"
+                onPress={() => router.push('/(app)/group/create')}
+                variant="primary"
+                style={{ width: '100%' }}
+              />
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
 
         {/* Your Organizations (D-02) — visible only when user has ≥1 membership */}
         {orgs.length > 0 && (
@@ -1526,15 +1547,22 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
-            onPress={() => { if (!isSavingBio) setBioEditorVisible(false); }}
+            onPress={() => {
+              if (!isSavingBio) setBioEditorVisible(false);
+            }}
           />
           <View
             style={[
               renameStyles.card,
-              { backgroundColor: colors.background, borderColor: colors.border },
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
             ]}
           >
-            <Text style={[renameStyles.title, { color: colors.text }]}>Edit bio</Text>
+            <Text style={[renameStyles.title, { color: colors.text }]}>
+              Edit bio
+            </Text>
             <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
               Tell others a bit about yourself
             </Text>
@@ -1557,11 +1585,24 @@ export default function ProfileScreen() {
                 },
               ]}
             />
-            <Text style={{ alignSelf: 'flex-end', fontSize: 12, fontFamily: FONTS.regular, color: colors.textMuted }}>
+            <Text
+              style={{
+                alignSelf: 'flex-end',
+                fontSize: 12,
+                fontFamily: FONTS.regular,
+                color: colors.textMuted,
+              }}
+            >
               {bioInput.length} / 280
             </Text>
             {bioSaveError ? (
-              <Text style={{ fontSize: 13, fontFamily: FONTS.medium, color: COLORS.error }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontFamily: FONTS.medium,
+                  color: COLORS.error,
+                }}
+              >
                 {bioSaveError}
               </Text>
             ) : null}
@@ -1571,17 +1612,27 @@ export default function ProfileScreen() {
                 style={[renameStyles.button, { borderColor: colors.border }]}
                 disabled={isSavingBio}
               >
-                <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+                <Text style={[renameStyles.buttonText, { color: colors.text }]}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSaveBio}
-                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                style={[
+                  renameStyles.button,
+                  {
+                    backgroundColor: COLORS.primary,
+                    borderColor: COLORS.primary,
+                  },
+                ]}
                 disabled={isSavingBio}
               >
                 {isSavingBio ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>
+                    Save
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>

@@ -364,24 +364,25 @@ export const referralsApi = {
 
 // ── Groups ─────────────────────────────────────────────────────────────────
 export const groupsApi = {
-  myGroups: () =>
+  myGroups: (opts?: { role?: 'admin' }) =>
     request<{ groups: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; createdAt: string; role: string; memberCount: number }[] }>(
-      '/api/chat/groups'),
+      opts?.role ? `/api/chat/groups?role=${opts.role}` : '/api/chat/groups'),
 
   create: (name: string, slug?: string, isPublic = false) =>
     request<{ conversation: { id: number; groupName: string; inviteSlug: string; createdAt: string } }>(
       '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug, isPublic }) }),
 
   getInfo: (slug: string) =>
-    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; memberCount: number; isMember: boolean; createdAt: string } }>(
+    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; isPublic: boolean; memberCount: number; isMember: boolean; createdAt: string; admin: { id: number; handle: string; name: string; avatarUrl: string | null } | null } }>(
       `/api/chat/groups/${slug}`),
 
   join: (slug: string) =>
     request<{ conversation: { id: number; groupName: string } }>(
       `/api/chat/groups/${slug}/join`, { method: 'POST' }),
 
-  update: (id: number, data: { name?: string; slug?: string; groupIconUrl?: string }) =>
-    request(`/api/chat/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  update: (id: number, data: { name?: string; slug?: string; groupIconUrl?: string; isPublic?: boolean }) =>
+    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; isPublic: boolean } }>(
+      `/api/chat/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   members: (id: number) =>
     request<{ members: GroupMember[] }>(`/api/chat/groups/${id}/members`),

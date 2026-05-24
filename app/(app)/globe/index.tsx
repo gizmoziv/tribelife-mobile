@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,13 +15,13 @@ import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import Purchases from 'react-native-purchases';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGlobeStore } from '@/store/globeStore';
-import { useChatsStore } from '@/store/chatsStore';
 import { useAuthStore } from '@/store/authStore';
 import { globeApi } from '@/services/api';
 import {
   connectSocket,
   onGlobeParticipants,
   onChevraGroupMessage,
+  onChatNotification,
 } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
@@ -61,13 +61,23 @@ export default function GlobeScreen() {
   const screenW = Dimensions.get('window').width;
   const tileWidth = (screenW - SPACING.page * 2 - TILE_GAP) / 2;
 
+  // Tracks whether the first Chevra fetch has succeeded. Drives the
+  // cold-start full-screen spinner; subsequent fetches refresh silently.
+  const hasLoadedOnceRef = useRef(false);
+
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedQuery(searchQuery), 200);
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
   const fetchChevra = useCallback(() => {
-    setLoadingRooms(true);
+    // Only show the full-screen spinner on cold start (before the first
+    // successful fetch). Subsequent refetches (focus, search-debounce,
+    // member-change) refresh the list silently so the search input keeps
+    // focus and content doesn't flash. `hasLoadedOnceRef` survives empty
+    // result sets (e.g., a search that matches no globe rooms drops
+    // globeStore.rooms to []) so we don't relapse into the cold-start path.
+    if (!hasLoadedOnceRef.current) setLoadingRooms(true);
     // Phase 14 SRCH-03: pass debouncedQuery to server for title filtering.
     // Empty/whitespace-only q omits the param (globeApi.rooms trims internally).
     globeApi
@@ -104,10 +114,25 @@ export default function GlobeScreen() {
 
         setPublicGroupRows(groupRows);
         setTimezoneRoomRows(tzRoomRows);
+        hasLoadedOnceRef.current = true;
       })
       .catch(() => {})
       .finally(() => setLoadingRooms(false));
   }, [setRooms, setLoadingRooms, debouncedQuery]);
+
+  // Refetch Chevra when a group member-change notification arrives so the
+  // memberCount on group tiles tracks live joins/leaves instead of waiting
+  // for the next tab focus. Body-suffix match avoids coupling to a structured
+  // event type the backend doesn't currently emit.
+  useEffect(() => {
+    const cleanup = onChatNotification((raw) => {
+      const body = (raw as { body?: string } | null)?.body;
+      if (typeof body === 'string' && /(joined|left) the community$/.test(body)) {
+        fetchChevra();
+      }
+    });
+    return cleanup;
+  }, [fetchChevra]);
 
   useFocusEffect(
     useCallback(() => {
@@ -185,7 +210,28 @@ export default function GlobeScreen() {
   // Phase 14 SRCH-03: server now handles filtering via ?q=. combinedRows from
   // the server response already reflect the query — no client-side .filter needed.
   const isSearching = debouncedQuery.trim().length > 0;
-  const filteredRows = combinedRows;
+  // Defensive dedup by key — a transient state mid-update (multiple fetchChevra
+  // triggers racing) can produce duplicate entries that React flags as
+  // "two children with the same key" under numColumns row grouping.
+  const filteredRows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ChevraRow[] = [];
+    for (const r of combinedRows) {
+      const key =
+        r.kind === 'group'
+          ? `group_${r.conversationId}`
+          : r.kind === 'timezone_room'
+            ? `timezone_room_${r.slug}`
+            : `globe_${r.slug}`;
+      if (seen.has(key)) {
+        if (__DEV__) console.warn('[chevra] dropped duplicate row', key);
+        continue;
+      }
+      seen.add(key);
+      out.push(r);
+    }
+    return out;
+  }, [combinedRows]);
 
   // Plan 15-05 (TZRM-01): RevenueCat purchase flow — mirror of profile/index.tsx
   // handleUpgrade (the canonical reference impl). On success we refresh caps so
@@ -220,35 +266,6 @@ export default function GlobeScreen() {
     }
   }, [fetchChevra]);
 
-  // Plan 15-05 (TZRM-01): joinable timezone-room tap. POST /rooms/:slug/join,
-  // on success refetch Chevra (the row disappears because backend now filters
-  // joined rooms out for premium per D-10) + hydrate Chats store so the new
-  // joined row appears in the Chats list immediately. On 403 capabilityViolation
-  // (e.g. race between Chevra fetch + caps change), surface the UpgradeModal.
-  const handleJoinTimezoneRoom = useCallback(
-    async (slug: string, displayName: string) => {
-      try {
-        await globeApi.joinRoom(slug);
-        // Server-owned ordering: refetch both the Chevra list (D-10 filters
-        // joined out) and the Chats list (D-04 places the new joined row in
-        // the unread-first section).
-        fetchChevra();
-        useChatsStore.getState().hydrate();
-        Alert.alert('Joined', 'Joined ' + displayName);
-      } catch (err: any) {
-        if (err?.status === 403 && err?.data?.capabilityViolation === true) {
-          // Defensive — backend cap re-check failed (e.g. expired premium
-          // between the Chevra fetch and the join request). Surface the
-          // UpgradeModal so the user can resolve.
-          setUpgradeModalVisible(true);
-          return;
-        }
-        Alert.alert('Could not join', 'Please try again later.');
-      }
-    },
-    [fetchChevra],
-  );
-
   const renderItem = useCallback(
     ({ item }: { item: ChevraRow }) => (
       <ChevraCommunityTile
@@ -269,14 +286,15 @@ export default function GlobeScreen() {
             return;
           }
           if (item.kind === 'timezone_room') {
-            // Plan 15-05 (TZRM-01): paywalled → UpgradeModal. Joinable →
-            // POST join + refresh. Backend D-08 is the authoritative gate;
-            // this client-side branch is the affordance.
+            // Paywalled → UpgradeModal. Eligible → navigate to preview; the
+            // "Join Chat" button on the room screen performs the actual join
+            // (matches the globe_room read-only-preview pattern from Phase 11
+            // D-12). Backend D-08 remains the authoritative gate.
             if (item.paywalled) {
               setUpgradeModalVisible(true);
               return;
             }
-            handleJoinTimezoneRoom(item.slug, item.displayName);
+            router.push(`/(app)/globe/${item.slug}`);
             return;
           }
           // globe_room
@@ -285,7 +303,7 @@ export default function GlobeScreen() {
         }}
       />
     ),
-    [router, unreadCounts, markRoomRead, tileWidth, handleJoinTimezoneRoom],
+    [router, unreadCounts, markRoomRead, tileWidth],
   );
 
   const keyExtractor = useCallback((item: ChevraRow) => {

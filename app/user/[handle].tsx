@@ -22,6 +22,7 @@ import {
   REGION_TILE_GRADIENT_LIGHT,
 } from '@/constants';
 import type { PublicProfile } from '@/types';
+import { AvatarCircle } from '@/components/ui/AvatarCircle';
 
 export default function UserProfileScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>();
@@ -83,9 +84,12 @@ export default function UserProfileScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Avatar */}
         <View style={styles.header}>
-          <View style={[styles.avatar, { backgroundColor: COLORS.primary }]}>
-            <Text style={styles.avatarText}>{profile.name[0]?.toUpperCase()}</Text>
-          </View>
+          <AvatarCircle
+            name={profile.name}
+            size={80}
+            imageUrl={profile.avatarUrl ?? undefined}
+            showRing={false}
+          />
           <Text style={[styles.name, { color: colors.text }]}>{profile.name}</Text>
           <Text style={[styles.handle, { color: COLORS.primary }]}>@{profile.handle}</Text>
 

@@ -33,7 +33,8 @@ type RowKey =
   | { type: 'group'; conversationId: number }
   | { type: 'town_square'; roomSlug: string }
   | { type: 'local_chat'; timezoneIana: string }
-  | { type: 'globe_room'; roomSlug: string };
+  | { type: 'globe_room'; roomSlug: string }
+  | { type: 'timezone_room'; zoneSlug: string };
 
 interface ChatsState {
   rows: ChatsRow[];
@@ -55,6 +56,7 @@ function rowMatchesEntity(row: ChatsRow, entityId: string | number): boolean {
   if (row.type === 'town_square') return entityId === 'town-square';
   if (row.type === 'local_chat') return row.timezoneIana === entityId;
   if (row.type === 'globe_room') return row.roomSlug === entityId;
+  if (row.type === 'timezone_room') return row.zoneSlug === entityId;
   return false;
 }
 
@@ -64,6 +66,7 @@ function rowMatchesKey(row: ChatsRow, key: RowKey): boolean {
   if (key.type === 'town_square' && row.type === 'town_square') return row.roomSlug === key.roomSlug;
   if (key.type === 'local_chat' && row.type === 'local_chat') return row.timezoneIana === key.timezoneIana;
   if (key.type === 'globe_room' && row.type === 'globe_room') return row.roomSlug === key.roomSlug;
+  if (key.type === 'timezone_room' && row.type === 'timezone_room') return row.zoneSlug === key.zoneSlug;
   return false;
 }
 
@@ -116,6 +119,13 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     if (hasMatchingRow) {
       set((s) => ({ rows: applyToRow(s.rows, n.entityId, lastMessage, alsoBump) }));
     } else {
+      get().hydrate();
+    }
+    // Group membership-change system notifications change the row's
+    // memberCount, which `applyToRow` doesn't touch. Re-hydrate to pull
+    // fresh counts. Match by body suffix to avoid coupling to a structured
+    // event type that backend doesn't currently emit.
+    if (/(joined|left) the community$/.test(n.body)) {
       get().hydrate();
     }
   },

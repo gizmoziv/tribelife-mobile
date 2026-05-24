@@ -29,6 +29,7 @@ import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { useChatsStore } from '@/store/chatsStore';
+import { TIMEZONE_ZONES } from '@/utils/timezoneZones';
 import { chat, globeApi, notificationsApi, reactionsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -187,11 +188,30 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
   const highlightAnim = useRef(new Animated.Value(0)).current;
 
+  // Per-room dismiss of the welcome banner — persisted to AsyncStorage so it
+  // stays dismissed across sessions. Per-device (not per-account).
+  const welcomeDismissKey = `chevra:welcome_dismissed:${roomSlug}`;
+  const [welcomeDismissed, setWelcomeDismissed] = useState<boolean>(false);
+
   useEffect(() => {
     AsyncStorage.getItem('preferredTranslateLanguage').then((lang) => {
       if (lang) setPreferredLanguage(lang);
     });
   }, []);
+
+  useEffect(() => {
+    if (!roomSlug) return;
+    let cancelled = false;
+    AsyncStorage.getItem(welcomeDismissKey).then((v) => {
+      if (!cancelled) setWelcomeDismissed(v === '1');
+    });
+    return () => { cancelled = true; };
+  }, [roomSlug, welcomeDismissKey]);
+
+  const dismissWelcome = useCallback(() => {
+    setWelcomeDismissed(true);
+    AsyncStorage.setItem(welcomeDismissKey, '1').catch(() => {});
+  }, [welcomeDismissKey]);
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
@@ -205,12 +225,38 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     [rooms, roomSlug],
   );
 
+  // Phase 15 (TZRM-01): when `roomSlug` is a curated zone slug (e.g.
+  // `eastern-time`), `globeStore.rooms` won't contain it — those only hold
+  // the 7 native globe rooms. Resolve the display name + membership from
+  // TIMEZONE_ZONES + chatsStore.rows so the header reads "Eastern Time"
+  // (not "Globe Room") and the Join Chat button hides once joined.
+  const timezoneZone = useMemo(
+    () => TIMEZONE_ZONES.find((z) => z.slug === roomSlug),
+    [roomSlug],
+  );
+  // chatsStore is the authoritative "user has joined this room" signal — a
+  // row exists in /api/chats only for memberships. Use it as a fallback when
+  // globeStore hasn't hydrated yet (e.g., user tapped Town Square in the
+  // Chats list before ever visiting Chevra, so globeStore.rooms is empty).
+  // Covers town_square, regional globe_room, and timezone_room variants.
+  const isInChatsStore = useChatsStore((s) =>
+    s.rows.some(
+      (r) =>
+        (r.type === 'town_square' && r.roomSlug === roomSlug) ||
+        (r.type === 'globe_room' && r.roomSlug === roomSlug) ||
+        (r.type === 'timezone_room' && r.zoneSlug === roomSlug),
+    ),
+  );
+  const effectiveDisplayName =
+    room?.displayName ?? timezoneZone?.displayName ?? 'Globe Room';
+
   // Phase 11 D-12: read-only mode driver. `isMember` map from Plan 11-02 D-11.
   const isMember = useGlobeStore((s) => s.isMember[roomSlug] ?? false);
   const setIsMember = useGlobeStore((s) => s.setIsMember);
   // Fall back to server-truth GlobeRoom.isMember when the store map hasn't
-  // been hydrated yet (cold deep link directly to /globe/[slug]).
-  const effectiveIsMember = isMember || (room?.isMember ?? false);
+  // been hydrated yet (cold deep link directly to /globe/[slug]), or to the
+  // chatsStore presence as the cross-room authoritative source.
+  const effectiveIsMember = isMember || (room?.isMember ?? false) || isInChatsStore;
 
   const [isJoining, setIsJoining] = useState(false);
 
@@ -265,6 +311,12 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     if (roomSlug === 'town-square') {
       useChatsStore.getState().clearRowUnread({ type: 'town_square', roomSlug });
       useChatsStore.getState().setCurrentlyViewing('town-square');
+    }
+    // Phase 15 (TZRM-01): joined non-native timezone rooms also live in the
+    // Chats list (materialized server-side). Same optimistic-clear pattern.
+    if (timezoneZone) {
+      useChatsStore.getState().clearRowUnread({ type: 'timezone_room', zoneSlug: roomSlug });
+      useChatsStore.getState().setCurrentlyViewing(roomSlug);
     }
 
     // Clear mention notifications scoped to this Globe room so the bell +
@@ -405,6 +457,12 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       if (roomSlug === 'town-square') {
         const viewing = useChatsStore.getState().currentlyViewing;
         if (viewing === 'town-square') {
+          useChatsStore.getState().setCurrentlyViewing(null);
+        }
+      }
+      if (timezoneZone) {
+        const viewing = useChatsStore.getState().currentlyViewing;
+        if (viewing === roomSlug) {
           useChatsStore.getState().setCurrentlyViewing(null);
         }
       }
@@ -767,7 +825,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <CustomHeader
-          title={room?.displayName ?? 'Globe Room'}
+          title={effectiveDisplayName}
           participantCount={0}
           onBack={() => router.back()}
           colors={colors}
@@ -785,7 +843,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <CustomHeader
-        title={room?.displayName ?? 'Globe Room'}
+        title={effectiveDisplayName}
         participantCount={participantCount}
         onBack={() => router.back()}
         colors={colors}
@@ -806,9 +864,17 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           </View>
         )}
 
-        {/* Welcome message */}
-        {room?.welcomeMessage && (
+        {/* Welcome message — dismissible per room (persisted to AsyncStorage) */}
+        {room?.welcomeMessage && !welcomeDismissed && (
           <View style={[styles.welcomeBanner, { backgroundColor: colors.primaryGlow }]}>
+            <TouchableOpacity
+              onPress={dismissWelcome}
+              hitSlop={10}
+              style={styles.welcomeDismiss}
+              accessibilityLabel="Dismiss welcome message"
+            >
+              <Text style={[styles.welcomeDismissText, { color: COLORS.primary }]}>✕</Text>
+            </TouchableOpacity>
             <View style={styles.welcomeRow}>
               <CommunityIcon color={COLORS.primary} />
               <Text style={[styles.welcomeTitle, { color: COLORS.primary }]}>
@@ -1134,7 +1200,23 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.page,
     marginTop: SPACING.sm,
     padding: 12,
+    paddingRight: 36,
     borderRadius: RADIUS.sm,
+    position: 'relative',
+  },
+  welcomeDismiss: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomeDismissText: {
+    fontSize: 16,
+    fontFamily: FONTS.semiBold,
+    lineHeight: 18,
   },
   welcomeRow: {
     flexDirection: 'row',

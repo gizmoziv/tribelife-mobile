@@ -30,7 +30,16 @@ import { PillToggle } from '@/components/ui/PillToggle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import type { Beacon, BeaconMatch } from '@/types';
-import Svg, { Path, G, Circle, Ellipse, Defs, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
+import Svg, {
+  Path,
+  G,
+  Circle,
+  Ellipse,
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  RadialGradient,
+  Stop,
+} from 'react-native-svg';
 
 // Animated flame — transforms drive a real-fire feel:
 //   scaleY flicker (fast, small)  = the tongue stretching
@@ -129,8 +138,7 @@ const FLAME_INNER =
 const FLAME_CORE =
   'M 56 54 C 52 58 50 64 52 70 C 54 74 60 72 60 66 C 60 60 60 56 56 54 Z';
 // Detached curl on the lower-left — the distinctive flame wisp from the logo.
-const FLAME_WISP =
-  'M 22 82 C 12 78 10 68 16 64 C 22 68 24 76 22 82 Z';
+const FLAME_WISP = 'M 22 82 C 12 78 10 68 16 64 C 22 68 24 76 22 82 Z';
 
 function useFlickerLoop(
   val: Animated.Value,
@@ -195,11 +203,20 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
 
   // Embers: looped translateY from 0 → -50 with opacity curve
   useEffect(() => {
-    const emberLoop = (yVal: Animated.Value, opVal: Animated.Value, duration: number, delay: number) =>
+    const emberLoop = (
+      yVal: Animated.Value,
+      opVal: Animated.Value,
+      duration: number,
+      delay: number,
+    ) =>
       Animated.loop(
         Animated.parallel([
           Animated.sequence([
-            Animated.timing(yVal, { toValue: 0, duration: 0, useNativeDriver: true }),
+            Animated.timing(yVal, {
+              toValue: 0,
+              duration: 0,
+              useNativeDriver: true,
+            }),
             Animated.timing(yVal, {
               toValue: -58,
               duration,
@@ -209,7 +226,11 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
             }),
           ]),
           Animated.sequence([
-            Animated.timing(opVal, { toValue: 0, duration: 0, useNativeDriver: true }),
+            Animated.timing(opVal, {
+              toValue: 0,
+              duration: 0,
+              useNativeDriver: true,
+            }),
             Animated.timing(opVal, {
               toValue: 1,
               duration: duration * 0.3,
@@ -235,7 +256,16 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
     ];
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [ember1Y, ember2Y, ember3Y, ember4Y, ember1Op, ember2Op, ember3Op, ember4Op]);
+  }, [
+    ember1Y,
+    ember2Y,
+    ember3Y,
+    ember4Y,
+    ember1Op,
+    ember2Op,
+    ember3Op,
+    ember4Op,
+  ]);
 
   const swayRotate = sway.interpolate({
     inputRange: [-1, 1],
@@ -280,7 +310,14 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
         </Defs>
 
         {/* Soft radial halo that pulses behind the flame */}
-        <AnimatedEllipse cx="50" cy="92" rx="44" ry="30" fill="url(#halo)" opacity={haloPulse} />
+        <AnimatedEllipse
+          cx="50"
+          cy="92"
+          rx="44"
+          ry="30"
+          fill="url(#halo)"
+          opacity={haloPulse}
+        />
 
         {/* Detached wisp at the lower-left — the signature flame curl from
             the TribeLife logo. Lives slightly behind the main body so the
@@ -308,16 +345,40 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
             Spawn points scatter across the flame body so they feel like
             ash kicked up by a bonfire, not a single wick's smoke trail. */}
         <AnimatedG transform={[{ translateY: ember1Y }]}>
-          <AnimatedCircle cx="36" cy="72" r="1.8" fill="#FDE68A" opacity={ember1Op} />
+          <AnimatedCircle
+            cx="36"
+            cy="72"
+            r="1.8"
+            fill="#FDE68A"
+            opacity={ember1Op}
+          />
         </AnimatedG>
         <AnimatedG transform={[{ translateY: ember2Y }]}>
-          <AnimatedCircle cx="62" cy="66" r="2.2" fill="#F59E0B" opacity={ember2Op} />
+          <AnimatedCircle
+            cx="62"
+            cy="66"
+            r="2.2"
+            fill="#F59E0B"
+            opacity={ember2Op}
+          />
         </AnimatedG>
         <AnimatedG transform={[{ translateY: ember3Y }]}>
-          <AnimatedCircle cx="50" cy="58" r="1.5" fill="#FFFFFF" opacity={ember3Op} />
+          <AnimatedCircle
+            cx="50"
+            cy="58"
+            r="1.5"
+            fill="#FFFFFF"
+            opacity={ember3Op}
+          />
         </AnimatedG>
         <AnimatedG transform={[{ translateY: ember4Y }]}>
-          <AnimatedCircle cx="44" cy="78" r="1.3" fill="#FDE68A" opacity={ember4Op} />
+          <AnimatedCircle
+            cx="44"
+            cy="78"
+            r="1.3"
+            fill="#FDE68A"
+            opacity={ember4Op}
+          />
         </AnimatedG>
       </Svg>
     </Animated.View>
@@ -584,7 +645,7 @@ function MyBeaconsPanel() {
             size="lg"
             loading={isSubmitting}
             disabled={inputText.trim().length < 10 || isSubmitting}
-            icon={<FlameIcon />}
+            // icon={<FlameIcon />}
             style={{ width: '100%' }}
           />
         </AnimatedEntry>

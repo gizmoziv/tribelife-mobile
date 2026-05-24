@@ -17,21 +17,25 @@ import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { groupsApi } from '@/services/api';
+import { groupsApi, chat } from '@/services/api';
 import { requestGroupIconUploadUrl, uploadToSpaces, confirmGroupIconUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
+import { VisibilityCard, GlobeRadioIcon, LockRadioIcon } from '@/components/ui/VisibilityChoice';
+import { useCapability } from '@/hooks/useCapability';
+import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import type { GroupMember } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 export default function GroupInfoScreen() {
-  const { conversationId: rawId, groupName: rawGroupName, inviteSlug: rawSlug } = useLocalSearchParams<{
+  const { conversationId: rawId, groupName: rawGroupName, inviteSlug: rawSlug, from: rawFrom } = useLocalSearchParams<{
     conversationId: string;
     groupName?: string;
     inviteSlug?: string;
+    from?: string;
   }>();
   const conversationId = parseInt(rawId);
   const [groupName, setGroupName] = useState(rawGroupName ?? '');
@@ -44,11 +48,30 @@ export default function GroupInfoScreen() {
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const [groupIconUrl, setGroupIconUrl] = useState<string | null>(null);
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  // Public group info (memberCount, isMember) — available even for non-members
+  // via the inviteSlug-keyed getInfo endpoint. Source of truth for the header
+  // count + Join/Leave button render; `members[]` is the authoritative list
+  // only when the user IS a member (members endpoint returns 403 otherwise).
+  const [publicMemberCount, setPublicMemberCount] = useState<number | null>(null);
+  const [publicIsMember, setPublicIsMember] = useState<boolean | null>(null);
+  const [isPublic, setIsPublic] = useState<boolean | null>(null);
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
+  // Earliest-joined admin from the public getInfo endpoint — used to show
+  // "Admin" affordance to non-members (the /members endpoint is 403 for them).
+  const [adminInfo, setAdminInfo] = useState<{ id: number; handle: string; name: string; avatarUrl: string | null } | null>(null);
+  const [isOpeningAdminDm, setIsOpeningAdminDm] = useState(false);
 
   const currentMember = members.find((m) => m.userId === user?.id);
   const isAdmin = currentMember?.role === 'admin';
+  const canCreatePrivateGroup = useCapability('canCreatePrivateGroup');
+  const tabBarSpace = useTabBarSpace();
+  // Prefer the public flag; fall back to membership inferred from the
+  // members[] list (only populated when the user IS a member).
+  const isMember = publicIsMember ?? !!currentMember;
+  const effectiveMemberCount = publicMemberCount ?? members.length;
 
   useEffect(() => {
     groupsApi.members(conversationId).then(({ members: m }) => {
@@ -63,6 +86,10 @@ export default function GroupInfoScreen() {
         .then(({ group }) => {
           setGroupIconUrl(group.groupIconUrl ?? null);
           setResolvedSlug(group.inviteSlug);
+          setPublicMemberCount(group.memberCount);
+          setPublicIsMember(group.isMember);
+          setIsPublic(group.isPublic);
+          setAdminInfo(group.admin ?? null);
         })
         .catch(() => {});
     } else {
@@ -70,7 +97,11 @@ export default function GroupInfoScreen() {
       groupsApi.myGroups()
         .then(({ groups }) => {
           const found = groups.find((g) => g.id === conversationId);
-          if (found) setResolvedSlug(found.inviteSlug);
+          if (found) {
+            setResolvedSlug(found.inviteSlug);
+            setPublicMemberCount(found.memberCount);
+            setPublicIsMember(true); // myGroups only returns groups the user is in
+          }
         })
         .catch(() => {});
     }
@@ -232,12 +263,83 @@ export default function GroupInfoScreen() {
     }
   }, [conversationId, members, user?.id]);
 
-  const goBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(app)/chat');
+  const handleJoin = useCallback(async () => {
+    const slug = resolvedSlug || inviteSlug;
+    if (!slug || isJoining) return;
+    setIsJoining(true);
+    try {
+      await groupsApi.join(slug);
+      setPublicIsMember(true);
+      setPublicMemberCount((c) => (c ?? 0) + 1);
+      // Refetch members list — backend now permits since we just joined.
+      groupsApi.members(conversationId).then(({ members: m }) => setMembers(m)).catch(() => {});
+    } catch {
+      Alert.alert('Error', 'Failed to join group.');
+    } finally {
+      setIsJoining(false);
     }
+  }, [conversationId, resolvedSlug, inviteSlug, isJoining]);
+
+  const handleMessageAdmin = useCallback(async () => {
+    if (!adminInfo || isOpeningAdminDm) return;
+    if (adminInfo.id === user?.id) return;
+    setIsOpeningAdminDm(true);
+    try {
+      const { conversationId: dmId } = await chat.getOrCreateConversation(adminInfo.id);
+      router.push({
+        pathname: '/(app)/chat/[conversationId]',
+        params: { conversationId: dmId.toString(), handle: adminInfo.handle },
+      });
+    } catch {
+      Alert.alert('Error', 'Could not start conversation with the admin. Please try again.');
+    } finally {
+      setIsOpeningAdminDm(false);
+    }
+  }, [adminInfo, isOpeningAdminDm, user?.id, router]);
+
+  const handleToggleVisibility = useCallback(async (next: boolean) => {
+    if (!isAdmin || isUpdatingVisibility) return;
+    // Optimistic flip — revert if backend rejects.
+    const prev = isPublic;
+    setIsPublic(next);
+    setIsUpdatingVisibility(true);
+    try {
+      await groupsApi.update(conversationId, { isPublic: next });
+    } catch {
+      setIsPublic(prev);
+      Alert.alert('Error', 'Failed to update group visibility.');
+    } finally {
+      setIsUpdatingVisibility(false);
+    }
+  }, [conversationId, isAdmin, isPublic, isUpdatingVisibility]);
+
+  const goBack = () => {
+    // Group Info lives in its own Stack outside the (app) tabs. router.back()
+    // pops out of the group stack into the tabs root (Chats list) — not the
+    // chat screen the user came from. Replace explicitly to the originating
+    // chat screen so the user lands back in the same tab + stack history
+    // (e.g., Chevra → group chat → group info → back → group chat → back → Chevra).
+    const cameFromGlobe = typeof rawFrom === 'string' && rawFrom.includes('/globe/group/');
+    if (cameFromGlobe) {
+      router.replace({
+        pathname: '/(app)/globe/group/[conversationId]',
+        params: {
+          conversationId: String(conversationId),
+          isGroup: 'true',
+          groupName: groupName,
+          isMember: isMember ? 'true' : 'false',
+        },
+      });
+      return;
+    }
+    router.replace({
+      pathname: '/(app)/chat/[conversationId]',
+      params: {
+        conversationId: String(conversationId),
+        isGroup: 'true',
+        groupName: groupName,
+      },
+    });
   };
 
   if (isLoading) {
@@ -262,7 +364,7 @@ export default function GroupInfoScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: tabBarSpace + SPACING.xl }]}>
         {/* Group Overview */}
         <AnimatedEntry>
           <GlassCard>
@@ -294,7 +396,7 @@ export default function GroupInfoScreen() {
               </TouchableOpacity>
               <Text style={[styles.groupName, { color: colors.text }]}>{groupName || 'Group Chat'}</Text>
               <Text style={[styles.memberCountText, { color: colors.textMuted }]}>
-                {members.length} {members.length === 1 ? 'member' : 'members'}
+                {effectiveMemberCount} {effectiveMemberCount === 1 ? 'member' : 'members'}
               </Text>
               {isAdmin && (
                 <TouchableOpacity onPress={handleRename} style={{ marginTop: 6 }}>
@@ -307,7 +409,8 @@ export default function GroupInfoScreen() {
           </GlassCard>
         </AnimatedEntry>
 
-        {/* Invite Link */}
+        {/* Invite Link — members only (non-members shouldn't propagate invites) */}
+        {isMember && (
         <AnimatedEntry delay={60}>
           <GlassCard>
             <View style={styles.inviteSection}>
@@ -321,8 +424,63 @@ export default function GroupInfoScreen() {
             </View>
           </GlassCard>
         </AnimatedEntry>
+        )}
 
-        {/* Members */}
+        {/* Visibility — admin-only stacked Public/Private chooser (mirrors
+            the group creation pattern from group/create.tsx). */}
+        {isAdmin && isPublic !== null && (
+        <AnimatedEntry delay={90}>
+          <GlassCard>
+            <View style={styles.inviteSection}>
+              <Text style={[styles.sectionLabel, { color: colors.text }]}>Visibility</Text>
+              <VisibilityCard
+                selected={isPublic === true}
+                title="Public"
+                description="Anyone can find and join from Chevra."
+                icon={<GlobeRadioIcon color={isPublic ? COLORS.primary : colors.textMuted} />}
+                onPress={() => {
+                  if (isUpdatingVisibility || isPublic === true) return;
+                  handleToggleVisibility(true);
+                }}
+                textColor={colors.text}
+                mutedColor={colors.textMuted}
+                surfaceColor={colors.surface}
+                borderColor={colors.border}
+              />
+              <View style={{ height: SPACING.sm }} />
+              <VisibilityCard
+                selected={isPublic === false}
+                title="Private"
+                description="Invite only. Members join via the invite link."
+                icon={<LockRadioIcon color={!isPublic ? COLORS.primary : colors.textMuted} />}
+                premiumLocked={!canCreatePrivateGroup}
+                onPress={() => {
+                  if (isUpdatingVisibility || isPublic === false) return;
+                  if (!canCreatePrivateGroup) {
+                    Alert.alert(
+                      'Upgrade to Premium',
+                      'Private groups are a Premium feature. Upgrade to make this group invite-only.',
+                      [
+                        { text: 'Not Now', style: 'cancel' },
+                        { text: 'Upgrade', onPress: () => router.push('/(app)/profile') },
+                      ],
+                    );
+                    return;
+                  }
+                  handleToggleVisibility(false);
+                }}
+                textColor={colors.text}
+                mutedColor={colors.textMuted}
+                surfaceColor={colors.surface}
+                borderColor={colors.border}
+              />
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
+        )}
+
+        {/* Members — only shown to members (backend /members endpoint is 403 for non-members) */}
+        {isMember && (
         <AnimatedEntry delay={120}>
           <View style={styles.membersSection}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
@@ -371,10 +529,52 @@ export default function GroupInfoScreen() {
             </GlassCard>
           </View>
         </AnimatedEntry>
+        )}
 
-        {/* Leave Group */}
+        {/* Admin — shown to non-members so they know who runs the group and
+            can DM them. Members already see admins in the full Members list. */}
+        {!isMember && adminInfo && (
+        <AnimatedEntry delay={140}>
+          <View style={styles.membersSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>ADMIN</Text>
+            <GlassCard>
+              <TouchableOpacity
+                style={styles.memberRow}
+                onPress={handleMessageAdmin}
+                disabled={isOpeningAdminDm || adminInfo.id === user?.id}
+                activeOpacity={0.7}
+              >
+                <View style={styles.memberInfo}>
+                  <AvatarCircle
+                    name={adminInfo.name || adminInfo.handle || '?'}
+                    size={36}
+                    showRing={false}
+                    imageUrl={adminInfo.avatarUrl ?? undefined}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.memberName, { color: colors.text }]}>
+                      @{adminInfo.handle}
+                    </Text>
+                    <Text style={[styles.roleText, { color: COLORS.accent }]}>Admin</Text>
+                  </View>
+                </View>
+                {adminInfo.id !== user?.id && (
+                  isOpeningAdminDm ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: SPACING.sm }} />
+                  ) : (
+                    <Text style={[styles.messageAdminAction, { color: COLORS.primary }]}>Message</Text>
+                  )
+                )}
+              </TouchableOpacity>
+            </GlassCard>
+          </View>
+        </AnimatedEntry>
+        )}
+
+        {/* Join / Leave Group — conditional on membership */}
         <AnimatedEntry delay={180}>
           <View style={styles.leaveSection}>
+            {isMember ? (
             <PillButton
               title="Leave Group"
               onPress={handleLeave}
@@ -385,6 +585,17 @@ export default function GroupInfoScreen() {
               style={{ width: '100%', backgroundColor: COLORS.error }}
               textStyle={{ color: '#FFF' }}
             />
+            ) : (
+            <PillButton
+              title="Join Group"
+              onPress={handleJoin}
+              variant="primary"
+              size="md"
+              loading={isJoining}
+              disabled={isJoining}
+              style={{ width: '100%' }}
+            />
+            )}
           </View>
         </AnimatedEntry>
       </ScrollView>
@@ -450,6 +661,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.semiBold,
   },
+  visibilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  visibilityHint: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    marginTop: 2,
+  },
   membersSection: {
     gap: 6,
   },
@@ -488,6 +709,12 @@ const styles = StyleSheet.create({
   kickText: {
     fontSize: 13,
     fontFamily: FONTS.semiBold,
+  },
+  messageAdminAction: {
+    fontSize: 14,
+    fontFamily: FONTS.semiBold,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   leaveSection: {
     marginTop: SPACING.md,

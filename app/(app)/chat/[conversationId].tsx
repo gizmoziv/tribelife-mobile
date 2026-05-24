@@ -22,7 +22,7 @@ import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter, usePathname } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
@@ -92,6 +92,7 @@ export default function DMThreadScreen() {
   const initialIsMember = rawIsMember !== 'false';
   const navigation = useNavigation();
   const router = useRouter();
+  const pathname = usePathname();
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   const keyboardBehavior = useKeyboardBehavior();
@@ -201,7 +202,7 @@ export default function DMThreadScreen() {
           <TouchableOpacity
             onPress={() => router.push({
               pathname: '/(app)/group/[conversationId]',
-              params: { conversationId: conversationId.toString(), groupName, inviteSlug },
+              params: { conversationId: conversationId.toString(), groupName, inviteSlug, from: pathname },
             })}
             hitSlop={8}
             style={{ paddingRight: 12 }}
@@ -780,7 +781,11 @@ export default function DMThreadScreen() {
         onLongPress={isReadOnlyPreview ? noopLongPress : handleLongPress}
         onReactionToggle={isReadOnlyPreview ? noopReactionToggle : handleReactionToggle}
         showAvatar={isGroup}
-        onProfilePress={() => !isMe && item.senderHandle ? router.push(`/user/${item.senderHandle}`) : undefined}
+        onProfilePress={
+          isReadOnlyPreview
+            ? undefined
+            : () => (!isMe && item.senderHandle ? router.push(`/user/${item.senderHandle}`) : undefined)
+        }
         translatedContent={translations[item.id]?.text ?? null}
         showTranslation={translations[item.id]?.showing ?? false}
         onToggleTranslation={handleToggleTranslation}

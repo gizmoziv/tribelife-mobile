@@ -1,4 +1,22 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
+import { Platform } from 'react-native';
+
+const RAW_API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+if (!__DEV__ && !RAW_API_URL) {
+  throw new Error(
+    'EXPO_PUBLIC_API_URL is required in production builds. Configure it in EAS Build secrets before shipping.',
+  );
+}
+
+const RESOLVED_URL = RAW_API_URL ?? 'http://localhost:4000';
+
+// Android emulator's localhost is the emulator itself, not the host machine.
+// In dev only, rewrite localhost/127.0.0.1 → 10.0.2.2 (the emulator's host alias).
+// Production builds always honor EXPO_PUBLIC_API_URL verbatim.
+export const API_URL =
+  __DEV__ && Platform.OS === 'android'
+    ? RESOLVED_URL.replace(/\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/, '//10.0.2.2')
+    : RESOLVED_URL;
 
 export const COLORS = {
   // Core palette
