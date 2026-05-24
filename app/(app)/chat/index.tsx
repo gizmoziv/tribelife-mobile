@@ -37,6 +37,7 @@ import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
+import { PillToggle } from '@/components/ui/PillToggle';
 import {
   connectSocket,
   sendRoomMessage,
@@ -91,6 +92,13 @@ export default function ChatsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
+
+  // Filter pills: All | Unread | Groups | DMs (single-select, default 'all').
+  // Order in PILL_OPTIONS must stay aligned with pillFilterFromIndex /
+  // PILL_INDEX_FOR_FILTER below — both PillToggle and the badges array
+  // index into it. State is component-local; not persisted across launches.
+  type PillFilter = 'all' | 'unread' | 'groups' | 'dms';
+  const [pillFilter, setPillFilter] = useState<PillFilter>('all');
 
   // Phase 14 SRCH-02: message search state
   const [messageResults, setMessageResults] = useState<SearchResult[]>([]);
@@ -185,6 +193,58 @@ export default function ChatsScreen() {
       });
   }, [debouncedQuery, searchCursor, isPaginating]);
 
+  // Pill-filtered + sorted view. Composes BEFORE the search filter so the
+  // active pill bounds the search result set too (e.g. searching while
+  // "Groups" is selected only matches group rows). Sort rules per CPO spec:
+  //   - All: pinned (local_chat[0], town_square[1]) first, then lastMessage
+  //     desc. Rows with no lastMessage sort to the bottom.
+  //   - Unread / Groups / DMs: pure lastMessage desc.
+  // Note: the All view no longer bubbles unreadCount to the top — that's
+  // what the dedicated Unread pill is for.
+  const pillFilteredRows = useMemo(() => {
+    const byLastMessageDesc = (a: ChatsRow, b: ChatsRow) => {
+      const at = a.lastMessage?.at ?? '';
+      const bt = b.lastMessage?.at ?? '';
+      // Empty strings sort last under desc ordering — that's the desired
+      // "rows with no messages go to the bottom" behavior.
+      if (at === bt) return 0;
+      return at < bt ? 1 : -1;
+    };
+
+    if (pillFilter === 'unread') {
+      return rows.filter((r) => r.unreadCount > 0).slice().sort(byLastMessageDesc);
+    }
+    if (pillFilter === 'groups') {
+      return rows
+        .filter((r) => r.type === 'group' || r.type === 'globe_room' || r.type === 'timezone_room')
+        .slice()
+        .sort(byLastMessageDesc);
+    }
+    if (pillFilter === 'dms') {
+      return rows.filter((r) => r.type === 'dm').slice().sort(byLastMessageDesc);
+    }
+    // 'all' — pinned first (local_chat, then town_square), then the rest by
+    // lastMessage desc. Stable pin ordering by row.type, then a single
+    // comparator-driven sort over the non-pinned tail.
+    const localChat: ChatsRow[] = [];
+    const townSquare: ChatsRow[] = [];
+    const tail: ChatsRow[] = [];
+    for (const r of rows) {
+      if (r.type === 'local_chat') localChat.push(r);
+      else if (r.type === 'town_square') townSquare.push(r);
+      else tail.push(r);
+    }
+    tail.sort(byLastMessageDesc);
+    return [...localChat, ...townSquare, ...tail];
+  }, [rows, pillFilter]);
+
+  // Total count of conversations with unread messages — drives the numeric
+  // badge on the Unread pill. Counts rows, not messages (matches WhatsApp).
+  const unreadConvCount = useMemo(
+    () => rows.reduce((n, r) => (r.unreadCount > 0 ? n + 1 : n), 0),
+    [rows],
+  );
+
   // Filtered view by title (case-insensitive substring on the row title only).
   // Title derivation matches ChatsListRow:
   //   - local_chat: timezoneToZoneName(row.timezoneIana)
@@ -193,12 +253,12 @@ export default function ChatsScreen() {
   //   - group: row.name
   const filteredRows = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) => {
+    if (!q) return pillFilteredRows;
+    return pillFilteredRows.filter((row) => {
       const tokens = chatsRowSearchTokens(row);
       return tokens.includes(q);
     });
-  }, [rows, debouncedQuery]);
+  }, [pillFilteredRows, debouncedQuery]);
 
   // Register the re-tap callback. The ChatsScreen owns both the search-clear
   // setter and the FlatList ref, so the store's action is just a closure
@@ -399,6 +459,14 @@ export default function ChatsScreen() {
             </TouchableOpacity>
           )}
         </View>
+      </View>
+      <View style={styles.pillsRow}>
+        <PillToggle
+          options={['All', 'Unread', 'Groups', 'DMs']}
+          activeIndex={pillFilter === 'all' ? 0 : pillFilter === 'unread' ? 1 : pillFilter === 'groups' ? 2 : 3}
+          onSelect={(i) => setPillFilter(i === 0 ? 'all' : i === 1 ? 'unread' : i === 2 ? 'groups' : 'dms')}
+          badges={[undefined, unreadConvCount > 0 ? unreadConvCount : undefined, undefined, undefined]}
+        />
       </View>
       <ChatsList data={filteredRows} flatListRef={flatListRef} />
     </SafeAreaView>
@@ -646,13 +714,11 @@ function ChatsListRow({
       router.push('/(app)/chat/regional/' + row.roomSlug);
       return;
     }
-    // Phase 15 (TZRM-01): joined non-native timezone room → existing
-    // globe/[roomSlug] chat screen (the slug IS the zone slug, e.g.
-    // 'eastern-time'). The globe chat screen's socket subscribe + GET
-    // /messages path already works post-Plan-15-03 because backend dispatch
-    // accepts timezone-slugs.
+    // Phase 15 (TZRM-01): joined non-native timezone room → Chats-stack mirror
+    // (chat/timezone/[zoneSlug]) so back-press returns to Chats and the bottom
+    // tab stays on Chats — mirrors the chat/regional/[roomSlug] pattern.
     if (row.type === 'timezone_room') {
-      router.push('/(app)/globe/' + row.zoneSlug);
+      router.push('/(app)/chat/timezone/' + row.zoneSlug);
       return;
     }
     // DM and Group rows route to the existing conversation screen.
@@ -720,7 +786,9 @@ function ChatsListRow({
       />
     );
     title = row.name;
-    subtitle = row.lastMessage?.preview ?? (row.memberCount + ' members');
+    subtitle =
+      row.lastMessage?.preview ??
+      `${row.memberCount} ${row.memberCount === 1 ? 'member' : 'members'}`;
     isGroupRow = !row.isArchived;
     groupIsPublic = row.isPublic;
   }
@@ -1555,8 +1623,9 @@ function DMListPanel() {
         const displayName = isGroup ? (item.groupName ?? 'Group') : `@${item.participantHandle}`;
         const avatarName = isGroup ? (item.groupName ?? 'G') : (item.participantName ?? '?');
         const avatarUrl = isGroup ? (item.groupIconUrl ?? undefined) : (item.participantAvatar ?? undefined);
+        const memberCount = item.memberCount ?? 0;
         const subtitle = isGroup
-          ? (item.lastMessage?.content ?? `${item.memberCount ?? 0} members`)
+          ? (item.lastMessage?.content ?? `${memberCount} ${memberCount === 1 ? 'member' : 'members'}`)
           : (item.lastMessage?.content ?? 'Start a conversation');
 
         return (
@@ -1888,6 +1957,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.page,
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
+  },
+  pillsRow: {
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.sm,
   },
   searchInput: {
     height: 44,
