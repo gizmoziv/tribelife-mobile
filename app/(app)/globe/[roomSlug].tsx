@@ -217,9 +217,10 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       setKeyboardVisible(true);
       // Two-pass scroll-to-end matches Android's `behavior='height'` KAV
       // timing — the first call fires before the view shrinks; the
-      // 100ms-delayed second call lands on the real post-shrink bottom.
+      // 300ms-delayed second call lands on the real post-shrink bottom
+      // (Android's keyboard animation is ~250ms).
       flatListRef.current?.scrollToEnd({ animated: true });
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };

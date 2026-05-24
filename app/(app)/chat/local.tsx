@@ -359,12 +359,13 @@ export default function LocalChatScreen() {
   // scoped to the main screen so it has access to flatListRef.
   //
   // Two-pass scroll: the first call fires before Android's
-  // `behavior='height'` KAV finishes shrinking; the 100ms-delayed second
-  // call lands on the real post-shrink bottom.
+  // `behavior='height'` KAV finishes shrinking; the 300ms-delayed second
+  // call lands on the real post-shrink bottom (Android's keyboard
+  // animation is ~250ms).
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
       flatListRef.current?.scrollToEnd({ animated: true });
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300);
     });
     return () => { showSub.remove(); };
   }, []);
@@ -644,7 +645,11 @@ export default function LocalChatScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
-        keyboardVerticalOffset={90}
+        // Inline LocalChatHeader is INSIDE the SafeAreaView as a sibling
+        // of the KAV, so nothing above the KAV needs to be compensated
+        // for. The previous 90 left a large gap between the input bar
+        // and the keyboard top.
+        keyboardVerticalOffset={0}
       >
         {/* Redundant timezone GlowBadge removed in Phase 9 hotfix 2 —
             the Stack.Screen headerTitle (zoneName) already shows the room name. */}

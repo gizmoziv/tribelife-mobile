@@ -115,7 +115,9 @@ export default function DMThreadScreen() {
       // `behavior='padding'` which settles synchronously, but the double
       // call is harmless there.
       flatListRef.current?.scrollToEnd({ animated: true });
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+      // Android keyboard animation is ~250ms; fire the snap pass at 300ms
+      // so it lands AFTER the post-shrink layout has settled.
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
@@ -843,7 +845,13 @@ export default function DMThreadScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
-        keyboardVerticalOffset={100}
+        // The chat SafeAreaView already absorbs insets.bottom on iOS and
+        // the navigation header is OUTSIDE the KAV, so no offset is needed
+        // to compensate for elements above. The previous hardcoded 100
+        // left a ~100px gap between the input bar bottom and the keyboard
+        // top because KAV pushed content up by `keyboardHeight - insets +
+        // offset` (offset extra).
+        keyboardVerticalOffset={0}
       >
         <FlatList
           ref={flatListRef}
