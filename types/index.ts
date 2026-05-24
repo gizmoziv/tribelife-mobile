@@ -241,6 +241,17 @@ export type ChatsRow =
       displayName: string;
       unreadCount: number;
       lastMessage: ChatsRowLastMessage | null;
+    }
+  // Phase 15 D-04 + TZRM-01: joined non-native timezone room — mixes into
+  // unread-first section, NOT pinned alongside Local Chat. Mirror of backend
+  // Plan 15-03 Task 2 ChatsRow extension (tribelife-backend/src/types/chats.ts).
+  // Routing: tap → `globe/[roomSlug]` chat screen using `zoneSlug` as roomSlug.
+  | {
+      type: 'timezone_room';
+      zoneSlug: string;
+      displayName: string;
+      unreadCount: number;
+      lastMessage: ChatsRowLastMessage | null;
     };
 
 export interface ChatsListResponse {
