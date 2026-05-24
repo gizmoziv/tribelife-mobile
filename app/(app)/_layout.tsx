@@ -249,19 +249,26 @@ export default function AppLayout() {
       screenOptions={{
         tabBarHideOnKeyboard: true,
         tabBarStyle: {
+          // Docked full-width tab bar with rounded top corners (WhatsApp /
+          // Instagram / Twitter style). Previously this was a floating pill
+          // with side margins and `bottom: insets.bottom + 12`, which left a
+          // strip below + side strips where chat-list rows and the Android
+          // system-nav buttons leaked through. Anchoring to `bottom: 0` with
+          // full width and a solid background extends the opaque coverage
+          // all the way to the screen edge.
           position: 'absolute',
-          bottom: insets.bottom + 12,
-          left: SPACING.page,
-          right: SPACING.page,
-          // Fully opaque so chat-list rows and other content don't bleed
-          // through behind the tab bar (the 0.92 alpha was leaking dark
-          // chevra cards on iOS and making the Android system-nav buttons
-          // hard to see against the chat content underneath).
+          bottom: 0,
+          left: 0,
+          right: 0,
           backgroundColor: isDark ? '#0F1423' : '#FFFFFF',
           borderTopWidth: 0,
-          borderRadius: RADIUS.xl,
-          height: 70,
-          paddingBottom: 10,
+          borderTopLeftRadius: RADIUS.xl,
+          borderTopRightRadius: RADIUS.xl,
+          // height = visual tab-row (70) + bottom safe-area inset so the
+          // icons sit ABOVE the system nav strip on Android (gesture: 0,
+          // 3-button: ~48) and above the home-indicator on iOS.
+          height: 70 + insets.bottom,
+          paddingBottom: 10 + insets.bottom,
           paddingTop: 10,
           ...SHADOWS.lg,
         },
