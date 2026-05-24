@@ -37,7 +37,6 @@ import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
-import { PillToggle } from '@/components/ui/PillToggle';
 import {
   connectSocket,
   sendRoomMessage,
@@ -94,9 +93,9 @@ export default function ChatsScreen() {
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
 
   // Filter pills: All | Unread | Groups | DMs (single-select, default 'all').
-  // Order in PILL_OPTIONS must stay aligned with pillFilterFromIndex /
-  // PILL_INDEX_FOR_FILTER below — both PillToggle and the badges array
-  // index into it. State is component-local; not persisted across launches.
+  // Tapping the selected pill is a no-op (handled inline in the chip
+  // Pressable.onPress below). State is component-local; not persisted
+  // across launches.
   type PillFilter = 'all' | 'unread' | 'groups' | 'dms';
   const [pillFilter, setPillFilter] = useState<PillFilter>('all');
 
@@ -461,14 +460,43 @@ export default function ChatsScreen() {
         </View>
       </View>
       <View style={styles.pillsRow}>
-        <PillToggle
-          options={['All', 'Unread', 'Groups', 'DMs']}
-          activeIndex={pillFilter === 'all' ? 0 : pillFilter === 'unread' ? 1 : pillFilter === 'groups' ? 2 : 3}
-          onSelect={(i) => setPillFilter(i === 0 ? 'all' : i === 1 ? 'unread' : i === 2 ? 'groups' : 'dms')}
-          badges={[undefined, unreadConvCount > 0 ? unreadConvCount : undefined, undefined, undefined]}
-          compact
-          activeColor="rgba(129, 140, 248, 0.6)"
-        />
+        {(['all', 'unread', 'groups', 'dms'] as const).map((key) => {
+          const label = key === 'all' ? 'All' : key === 'unread' ? 'Unread' : key === 'groups' ? 'Groups' : 'DMs';
+          const isActive = pillFilter === key;
+          const badge = key === 'unread' ? unreadConvCount : 0;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => {
+                if (isActive) return;
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setPillFilter(key);
+              }}
+              style={[
+                styles.pillChip,
+                isActive
+                  ? { backgroundColor: 'rgba(129, 140, 248, 0.85)', borderColor: 'rgba(129, 140, 248, 0.95)' }
+                  : { backgroundColor: colors.surfaceGlass, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.pillChipText,
+                  isActive
+                    ? { color: '#FFFFFF', fontFamily: FONTS.semiBold }
+                    : { color: colors.textMuted, fontFamily: FONTS.medium },
+                ]}
+              >
+                {label}
+              </Text>
+              {badge > 0 && (
+                <View style={styles.pillChipBadge}>
+                  <Text style={styles.pillChipBadgeText}>{badge > 99 ? '99+' : badge}</Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
       </View>
       <ChatsList data={filteredRows} flatListRef={flatListRef} />
     </SafeAreaView>
@@ -1961,9 +1989,41 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xs,
   },
   pillsRow: {
+    flexDirection: 'row',
+    gap: 8,
     paddingHorizontal: SPACING.page,
     paddingTop: SPACING.xs,
     paddingBottom: SPACING.sm,
+  },
+  // Pill style mirrors the notifications-page filter tabs (see
+  // app/notifications.tsx ~line 347-370) so the two filter bars feel
+  // identical across the app. Independent chips with their own
+  // backgrounds — NOT a segmented control with a sliding indicator.
+  pillChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+  },
+  pillChipText: {
+    fontSize: 13,
+  },
+  pillChipBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9999,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillChipBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: FONTS.bold,
   },
   searchInput: {
     height: 44,
