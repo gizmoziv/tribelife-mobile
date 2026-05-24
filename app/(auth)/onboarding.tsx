@@ -136,6 +136,17 @@ export default function OnboardingScreen() {
         AsyncStorage.removeItem('attributionRef'),
         AsyncStorage.removeItem('attributionSource'),
       ]);
+      // Deferred deep-link: if a /g/:slug interstitial wrote a pending group
+      // slug to the clipboard before install, recoverAttributionFromClipboard
+      // (in _layout.tsx) has already persisted it to AsyncStorage. Consume it
+      // here so first-onboarding lands the user on the Join Group screen
+      // instead of the default beacon/globe CTA.
+      const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
+      if (pendingGroupSlug) {
+        await AsyncStorage.removeItem('pendingGroupSlug');
+        router.replace(`/g/${pendingGroupSlug}` as any);
+        return;
+      }
       const ctaDismissed = await AsyncStorage.getItem('globe_cta_dismissed');
       if (ctaDismissed === 'true') {
         router.replace('/(app)/beacon');

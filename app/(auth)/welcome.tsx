@@ -14,9 +14,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
+import { getPostLoginLandingRoute } from '@/services/notificationRouting';
 import { FONTS, COLORS, SPACING, SHADOWS, RADIUS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -106,10 +108,24 @@ export default function WelcomeScreen() {
 
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding'); // onboarding always wins
-      } else if (redirectTarget) {
-        router.replace(redirectTarget as any); // type cast — Expo Router typed routes don't know about runtime strings
       } else {
-        router.replace('/(app)/beacon');
+        // Deferred deep-link: if recoverAttributionFromClipboard (in
+        // _layout.tsx) persisted a pending group slug from a fresh-install
+        // /g/:slug interstitial, route to the Join Group screen on first
+        // post-login navigation. Wins over `redirectTarget` and the landing
+        // route — the user came in via a group invite, not a session
+        // restore.
+        const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
+        if (pendingGroupSlug) {
+          await AsyncStorage.removeItem('pendingGroupSlug');
+          router.replace(`/g/${pendingGroupSlug}` as any);
+        } else if (redirectTarget) {
+          router.replace(redirectTarget as any); // type cast — Expo Router typed routes don't know about runtime strings
+        } else {
+          // Surface unread daily-matcher results immediately after re-login.
+          const landing = await getPostLoginLandingRoute();
+          router.replace(landing);
+        }
       }
     } catch (err: any) {
       if (err.code === 'SIGN_IN_CANCELLED') {
@@ -148,10 +164,24 @@ export default function WelcomeScreen() {
 
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding'); // onboarding always wins
-      } else if (redirectTarget) {
-        router.replace(redirectTarget as any); // type cast — Expo Router typed routes don't know about runtime strings
       } else {
-        router.replace('/(app)/beacon');
+        // Deferred deep-link: if recoverAttributionFromClipboard (in
+        // _layout.tsx) persisted a pending group slug from a fresh-install
+        // /g/:slug interstitial, route to the Join Group screen on first
+        // post-login navigation. Wins over `redirectTarget` and the landing
+        // route — the user came in via a group invite, not a session
+        // restore.
+        const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
+        if (pendingGroupSlug) {
+          await AsyncStorage.removeItem('pendingGroupSlug');
+          router.replace(`/g/${pendingGroupSlug}` as any);
+        } else if (redirectTarget) {
+          router.replace(redirectTarget as any); // type cast — Expo Router typed routes don't know about runtime strings
+        } else {
+          // Surface unread daily-matcher results immediately after re-login.
+          const landing = await getPostLoginLandingRoute();
+          router.replace(landing);
+        }
       }
     } catch (err: any) {
       if (err.code === 'ERR_REQUEST_CANCELED') {
