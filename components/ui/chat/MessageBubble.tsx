@@ -125,8 +125,34 @@ export function MessageBubble({
   }, [router]);
 
   const handleUrlPress = useCallback((url: string) => {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      if (host === 'tribelife.app') {
+        // Same-host deep links: route in-app instead of round-tripping through
+        // Safari + the /g, /u, /org, /globe interstitials. iOS deliberately
+        // bypasses Universal Links when the foreground app calls openURL() on
+        // its own UL (Apple's "the app had its chance" rule) — the OS forces
+        // Safari, the interstitial renders, and "Open in TribeLife" then just
+        // reloads the same page in Safari. Loop. router.push avoids the trip.
+        const p = parsed.pathname;
+        const qs = parsed.search;
+        if (
+          /^\/g\/[\w-]+/.test(p) ||
+          /^\/u\/[\w-]+/.test(p) ||
+          /^\/org\/invite\/[\w-]+/.test(p) ||
+          /^\/org\/[\w-]+/.test(p) ||
+          /^\/globe(\/|$)/.test(p)
+        ) {
+          router.push(p + qs);
+          return;
+        }
+      }
+    } catch {
+      // Malformed URL — fall through to the external opener below.
+    }
     Linking.openURL(url).catch(() => {});
-  }, []);
+  }, [router]);
 
   const renderContent = (baseColor: string, mentionColor: string, linkColor: string) => {
     if (!displayContent) return null;

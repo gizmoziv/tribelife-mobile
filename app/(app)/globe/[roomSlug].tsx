@@ -383,8 +383,20 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
             }, 250);
           }
         } else {
+          // Belt-and-suspenders scroll-to-bottom retries. For small rooms
+          // (e.g. hawaii-time, ~4 messages) the 100ms attempt is enough —
+          // the whole list lays out in the first pass. For larger rooms
+          // (50-item initial fetch with avatars + reactions + reply
+          // previews), FlatList's windowed renderer only paints ~10 items
+          // initially, so the early scrollToEnd jumps to the bottom of
+          // those ~10, not the real bottom of 50. Each subsequent retry
+          // catches a later windowing pass; combined with the extended
+          // onContentSizeChange snap window below they cover the slow-
+          // render tail.
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
           setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 1500);
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 3000);
         }
       })
       .catch(() => {})
@@ -908,13 +920,20 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onContentSizeChange={() => {
-            // Phase 14: re-snap to bottom for 1.5s after mount while async
-            // layout shifts (avatars, reactions, reply previews) settle.
-            // hasInitialScrolled gets pre-set by the aroundMessageId path to
-            // suppress this so a deep-link doesn't get fought.
+            // Re-snap to bottom for 5s after mount while async layout
+            // shifts (avatars, reactions, reply previews, windowed
+            // re-renders for 50-item fetches) settle. Was 1.5s — too short
+            // for rooms with 50 messages: FlatList's windowing kept
+            // emitting contentSize events past the cutoff, and the
+            // post-cutoff `else if (isAtBottom)` branch never fires when
+            // we're stranded mid-list (isAtBottom is false). 5s covers the
+            // slow-render tail observed in central-european-time and the
+            // other heavy zones. hasInitialScrolled gets pre-set by the
+            // aroundMessageId path to suppress this so a deep-link doesn't
+            // get fought.
             if (!hasInitialScrolled.current) {
               flatListRef.current?.scrollToEnd({ animated: false });
-              if (Date.now() - mountedAtRef.current > 1500) {
+              if (Date.now() - mountedAtRef.current > 5000) {
                 hasInitialScrolled.current = true;
               }
             } else if (isAtBottom) {
