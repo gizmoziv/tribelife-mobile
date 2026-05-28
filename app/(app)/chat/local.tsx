@@ -15,6 +15,7 @@ import {
   AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
@@ -76,13 +77,27 @@ function LocalChatHeader({
   title,
   onBack,
   colors,
+  insetsTop,
 }: {
   title: string;
   onBack: () => void;
   colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
+  insetsTop: number;
 }) {
   return (
-    <View style={[styles.headerRow, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.headerRow,
+        {
+          // RN's deprecated SafeAreaView is a no-op on Android, so the
+          // status-bar inset must be added manually. iOS doesn't need it
+          // because RN's SafeAreaView handles the notch. Matches the
+          // pattern in globe/[roomSlug].tsx CustomHeader.
+          paddingTop: (Platform.OS === 'android' ? insetsTop : 0) + 6,
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
       <Pressable
         onPress={onBack}
         hitSlop={8}
@@ -115,6 +130,7 @@ export default function LocalChatScreen() {
   const keyboardBehavior = useKeyboardBehavior();
   const router = useRouter();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { aroundMessageId: rawAroundMessageId } = useLocalSearchParams<{ aroundMessageId?: string }>();
   const aroundMessageId = rawAroundMessageId ? Number(rawAroundMessageId) : undefined;
 
@@ -184,9 +200,15 @@ export default function LocalChatScreen() {
   }, [roomId]);
 
   // Mark the room read in globe_read_positions on mount (Plan 09-01/02).
+  //
+  // Phase 15 (TZRM-01): write the CANONICAL zone slug (e.g. `eastern-time`),
+  // NOT the raw IANA. routes/chats.ts reads `globe_read_positions.roomSlug`
+  // using the same canonical slug (via `getZoneForTimezone()` server-side),
+  // so passing raw IANA here means the read-mark and the unread-count query
+  // never agree on the row key — the unread badge would never clear.
   useEffect(() => {
     if (user?.timezone) {
-      chats.markRoomRead(user.timezone).catch(() => { /* silent */ });
+      chats.markRoomRead(getZoneForTimezone(user.timezone)).catch(() => { /* silent */ });
     }
   }, [user?.timezone]);
 
@@ -631,7 +653,7 @@ export default function LocalChatScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <LocalChatHeader title={zoneName} onBack={() => router.back()} colors={colors} />
+        <LocalChatHeader title={zoneName} onBack={() => router.back()} colors={colors} insetsTop={insets.top} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
         </View>
@@ -641,7 +663,7 @@ export default function LocalChatScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <LocalChatHeader title={zoneName} onBack={() => router.back()} colors={colors} />
+      <LocalChatHeader title={zoneName} onBack={() => router.back()} colors={colors} insetsTop={insets.top} />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}

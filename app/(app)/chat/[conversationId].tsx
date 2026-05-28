@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   ActivityIndicator,
@@ -16,6 +15,7 @@ import {
   AppState,
   Animated,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
@@ -845,13 +845,13 @@ export default function DMThreadScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
-        // The chat SafeAreaView already absorbs insets.bottom on iOS and
-        // the navigation header is OUTSIDE the KAV, so no offset is needed
-        // to compensate for elements above. The previous hardcoded 100
-        // left a ~100px gap between the input bar bottom and the keyboard
-        // top because KAV pushed content up by `keyboardHeight - insets +
-        // offset` (offset extra).
-        keyboardVerticalOffset={0}
+        // `react-native-keyboard-controller`'s KAV uses native keyboard
+        // frame listeners (works on Android edge-to-edge where RN's
+        // built-in KAV silently no-ops since SDK 53). `automaticOffset`
+        // measures the screen position natively — including the Stack
+        // header above this SafeAreaView — so no manual offset is needed.
+        // See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
+        automaticOffset
       >
         <FlatList
           ref={flatListRef}

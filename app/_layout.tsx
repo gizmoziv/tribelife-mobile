@@ -9,6 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ExpoLinking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import Purchases from 'react-native-purchases';
 import {
   useFonts,
@@ -460,22 +462,35 @@ function RootLayoutInner() {
   if (versionResult.status === 'force_update') {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <ForceUpdateModal message={versionResult.message} />
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <ForceUpdateModal message={versionResult.message} />
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(app)" />
-        <Stack.Screen name="user/[handle]" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="g/[slug]" options={{ headerShown: false }} />
-      </Stack>
+      {/* `initialMetrics={initialWindowMetrics}` seeds safe-area insets
+          SYNCHRONOUSLY on the first render so `useSafeAreaInsets()` and
+          context-aware `<SafeAreaView>` return real values immediately
+          — fixes the Android race where the loading-state render of
+          `globe/[roomSlug]` (timezone rooms like Eastern) committed
+          before the native layout measurement pass, locking in a
+          status-bar overlap. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <KeyboardProvider>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(app)" />
+            <Stack.Screen name="user/[handle]" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="g/[slug]" options={{ headerShown: false }} />
+          </Stack>
+        </KeyboardProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
