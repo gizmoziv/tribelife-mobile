@@ -374,6 +374,7 @@ export default function ProfileScreen() {
     beaconMatchesPush: true,
     dmPush: true,
     dmsPush: true,
+    groupsPush: true,
   });
   const [newsPushEnabled, setNewsPushEnabled] = useState(true); // default true matches DB column default
 
@@ -850,6 +851,18 @@ export default function ProfileScreen() {
                   <Switch
                     value={pushEnabled && notifPrefs.dmsPush}
                     onValueChange={(v) => updateNotifPref('dmsPush', v)}
+                    trackColor={{ false: colors.border, true: COLORS.primary }}
+                    thumbColor="#FFF"
+                    disabled={!pushEnabled}
+                  />
+                }
+              />
+              <SettingsRow
+                label="Groups"
+                right={
+                  <Switch
+                    value={pushEnabled && notifPrefs.groupsPush}
+                    onValueChange={(v) => updateNotifPref('groupsPush', v)}
                     trackColor={{ false: colors.border, true: COLORS.primary }}
                     thumbColor="#FFF"
                     disabled={!pushEnabled}
