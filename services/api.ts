@@ -275,6 +275,7 @@ export const notificationsApi = {
       beaconMatchesPush: boolean;
       dmPush: boolean;
       dmsPush: boolean;
+      groupsPush: boolean;
     }>('/api/notifications/preferences'),
 
   updatePreferences: (prefs: {
@@ -283,6 +284,7 @@ export const notificationsApi = {
     beaconMatchesPush?: boolean;
     dmPush?: boolean;
     dmsPush?: boolean;
+    groupsPush?: boolean;
   }) =>
     request('/api/notifications/preferences', {
       method: 'PUT',

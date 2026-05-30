@@ -104,7 +104,7 @@ export interface BeaconMatch {
 
 export interface Notification {
   id: number;
-  type: 'mention' | 'beacon_match' | 'new_dm' | 'system' | 'org_invite';
+  type: 'mention' | 'beacon_match' | 'new_dm' | 'group' | 'system' | 'org_invite';
   title: string;
   body: string;
   data: Record<string, unknown>;
