@@ -419,10 +419,10 @@ function RootLayoutInner() {
         // daily matcher ran while the user was away), bump them to the
         // Matches tab. Only-on-growth gate avoids yanking users who already
         // saw the count and just toggled away briefly.
-        const prevBeaconMatches = useNotificationStore.getState().summary.beaconMatches;
+        const prevBeaconMatches = useNotificationStore.getState().summary.matches;
         notificationsApi.summary().then((s) => {
           useNotificationStore.getState().setSummary(s);
-          if (s.beaconMatches > prevBeaconMatches && s.beaconMatches > 0) {
+          if (s.matches > prevBeaconMatches && s.matches > 0) {
             router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
           }
         }).catch(() => {});

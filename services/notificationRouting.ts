@@ -13,7 +13,7 @@ export async function getPostLoginLandingRoute(): Promise<
   try {
     const s = await notificationsApi.summary();
     useNotificationStore.getState().setSummary(s);
-    if (s.beaconMatches > 0) {
+    if (s.matches > 0) {
       return { pathname: '/(app)/beacon', params: { tab: 'matches' } };
     }
   } catch { /* fall through to default */ }

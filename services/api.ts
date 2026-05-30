@@ -249,16 +249,16 @@ export const notificationsApi = {
     request<{ notifications: Notification[]; unreadCount: number }>('/api/notifications'),
 
   summary: () =>
-    request<{ mentions: number; dmConversations: number; beaconMatches: number; system: number }>(
+    request<{ groups: number; dms: number; matches: number; system: number }>(
       '/api/notifications/summary',
     ),
 
-  readAll: (type?: 'mention' | 'new_dm' | 'beacon_match' | 'system') =>
+  readAll: (tab: 'groups' | 'dms' | 'matches' | 'system') =>
     request<{
       clearedConversationIds: number[];
       clearedGlobeSlugs: string[];
       clearedTimezoneRooms: string[];
-    }>(`/api/notifications/read-all${type ? `?type=${type}` : ''}`, { method: 'PUT' }),
+    }>(`/api/notifications/read-all?tab=${tab}`, { method: 'PUT' }),
 
   read: (id: number) => request(`/api/notifications/${id}/read`, { method: 'PUT' }),
 
@@ -274,6 +274,7 @@ export const notificationsApi = {
       timezoneChatPush: boolean;
       beaconMatchesPush: boolean;
       dmPush: boolean;
+      dmsPush: boolean;
     }>('/api/notifications/preferences'),
 
   updatePreferences: (prefs: {
@@ -281,6 +282,7 @@ export const notificationsApi = {
     timezoneChatPush?: boolean;
     beaconMatchesPush?: boolean;
     dmPush?: boolean;
+    dmsPush?: boolean;
   }) =>
     request('/api/notifications/preferences', {
       method: 'PUT',

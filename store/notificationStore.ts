@@ -2,16 +2,16 @@ import { create } from 'zustand';
 import type { Notification } from '@/types';
 
 export interface NotificationSummary {
-  mentions: number;
-  dmConversations: number;
-  beaconMatches: number;
+  groups: number;
+  dms: number;
+  matches: number;
   system: number;
 }
 
 const EMPTY_SUMMARY: NotificationSummary = {
-  mentions: 0,
-  dmConversations: 0,
-  beaconMatches: 0,
+  groups: 0,
+  dms: 0,
+  matches: 0,
   system: 0,
 };
 
@@ -29,15 +29,17 @@ interface NotificationState {
   incrementUnread: () => void;
 }
 
-// Bell count = events, not messages. DMs are counted as conversations so a
-// chatty thread can't inflate the bell past its real signal value.
+// Bell count = sum of all four tab pills.
 export const selectBellCount = (s: NotificationState): number =>
-  s.summary.mentions + s.summary.dmConversations + s.summary.beaconMatches + s.summary.system;
+  s.summary.groups + s.summary.dms + s.summary.matches + s.summary.system;
 
+// Maps notification type → summary key.
+// Groups has NO type mapping — it is derived from chatsStore unread state;
+// addNotification must never bump summary.groups.
 const summaryKeyForType: Record<string, keyof NotificationSummary | null> = {
-  mention: 'mentions',
-  new_dm: 'dmConversations',
-  beacon_match: 'beaconMatches',
+  mention: 'dms',
+  new_dm: 'dms',
+  beacon_match: 'matches',
   system: 'system',
   org_invite: null, // explicit no-bucket — invites surface only in raw notification list + bell unreadCount
 };
