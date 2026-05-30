@@ -14,11 +14,12 @@ import { useNotificationStore, selectBellCount } from '@/store/notificationStore
 import { useChatsStore } from '@/store/chatsStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { chat, globeApi, notificationsApi } from '@/services/api';
+import { routeChatNotificationTap } from '@/services/notificationRouting';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
-import type { Notification } from '@/types';
+import type { Notification, ChatNotification } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function GroupsIcon() {
@@ -68,6 +69,7 @@ const ICON_MAP: Record<string, () => React.ReactNode> = {
   mention: () => <MentionIcon />,
   beacon_match: () => <SparkleIcon />,
   new_dm: () => <EnvelopeIcon />,
+  group: () => <GroupsIcon />,
   system: () => <BellIcon />,
   org_invite: () => <BellIcon />,
 };
@@ -76,6 +78,7 @@ const ICON_COLORS: Record<string, string> = {
   mention: COLORS.primary,
   beacon_match: COLORS.accent,
   new_dm: COLORS.secondary,
+  group: COLORS.primary,
   system: '#7A8BA8',
   org_invite: COLORS.primary,
 };
@@ -90,7 +93,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 ];
 
 const EMPTY_COPY: Record<TabKey, { title: string; subtitle: string }> = {
-  groups: { title: 'All caught up', subtitle: 'Unread group and community chats will show their count here. Head to Chats to see them.' },
+  groups: { title: 'All caught up', subtitle: 'New messages in groups and community chats will appear here.' },
   dms: { title: 'No new messages', subtitle: 'Mentions, replies, and direct messages land here.' },
   matches: { title: 'No matches yet', subtitle: 'Daily beacon matches will appear here once the matcher runs.' },
   system: { title: 'All quiet', subtitle: 'Moderation notices and system announcements appear here.' },
@@ -110,16 +113,19 @@ export default function NotificationsScreen() {
     notificationsApi.summary().then(setSummary).catch(() => {});
   }, []);
 
-  // Groups tab: no stored notification rows — derived from chatsStore unread state.
+  // Groups tab: stored type:'group' rows, collapsed one-row-per-chat by entityId.
   // DMs tab: collapse to one row per conversation. Mentions fold into DMs.
   // Matches/System: one row per event.
+  //
+  // Collapse source decision (D-14): use the stored notification rows from the
+  // server (type:'group') keyed by entityId — same approach as DMs collapsing by
+  // conversationId. Per-chat unread count = number of unread group rows for that
+  // entityId (mirrors DMs, which don't separately track chatsStore counts).
   const visibleNotifications = useMemo(() => {
-    if (activeTab === 'groups') {
-      // Groups has no stored notification rows — empty list with empty-state copy.
-      return [] as Notification[];
-    }
     const ofType = notifications.filter((n) =>
-      activeTab === 'system'
+      activeTab === 'groups'
+        ? n.type === 'group'
+        : activeTab === 'system'
         ? n.type === 'system' || n.type === 'org_invite'
         : activeTab === 'dms'
         ? n.type === 'mention' || n.type === 'new_dm'
@@ -127,6 +133,19 @@ export default function NotificationsScreen() {
         ? n.type === 'beacon_match'
         : false,
     );
+    if (activeTab === 'groups') {
+      // Groups: collapse by entityId (one row per chat) — mirror of DMs collapse by conversationId.
+      const seen = new Set<string>();
+      const collapsed: Notification[] = [];
+      for (const n of ofType) {
+        const entityId = (n.data as Record<string, unknown>)?.entityId;
+        const key = entityId != null ? `e:${String(entityId)}` : `n:${n.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        collapsed.push(n);
+      }
+      return collapsed;
+    }
     if (activeTab !== 'dms') return ofType;
     // DMs: collapse by conversation (same logic as old new_dm tab, now spans mention+new_dm).
     const seen = new Set<string>();
@@ -141,6 +160,20 @@ export default function NotificationsScreen() {
     return collapsed;
   }, [notifications, activeTab]);
 
+  // Per-chat unread count for group rows: count unread notifications sharing the same entityId.
+  // Used by the Groups tab row rendering (mirrors how DMs tab shows an unread dot per row).
+  const groupUnreadByEntityId = useMemo(() => {
+    if (activeTab !== 'groups') return {} as Record<string, number>;
+    const counts: Record<string, number> = {};
+    for (const n of notifications) {
+      if (n.type !== 'group' || n.isRead) continue;
+      const entityId = String((n.data as Record<string, unknown>)?.entityId ?? '');
+      if (!entityId) continue;
+      counts[entityId] = (counts[entityId] ?? 0) + 1;
+    }
+    return counts;
+  }, [notifications, activeTab]);
+
   // Clearing a bell tab cascades to the sources those events came from.
   // The API contract is TAB-keyed (?tab=<tab>) per Plan 16-03 W1/W2 LOCKED.
   // readAll('dms') clears BOTH mention AND new_dm rows server-side (W1).
@@ -152,7 +185,9 @@ export default function NotificationsScreen() {
     // DMs tab spans TWO notification types — clear both explicitly.
     // markTypeRead keys on n.type via summaryKeyForType, so passing a tab name
     // ('dms') would match nothing. Call per-type explicitly for DMs.
-    if (activeTab === 'dms') {
+    if (activeTab === 'groups') {
+      markTypeRead('group');
+    } else if (activeTab === 'dms') {
       markTypeRead('mention');
       markTypeRead('new_dm');
     } else if (activeTab === 'matches') {
@@ -162,7 +197,6 @@ export default function NotificationsScreen() {
       // org_invite shares the system tab
       markTypeRead('org_invite');
     }
-    // 'groups' has no stored notification types to clear locally.
 
     try {
       const resp = await notificationsApi.readAll(activeTab);
@@ -204,6 +238,28 @@ export default function NotificationsScreen() {
     notificationsApi.read(notification.id).catch(() => {});
 
     const data = notification.data as Record<string, unknown>;
+
+    // Group notifications (type:'group') carry source+entityId in `data` and
+    // route via the shared routeChatNotificationTap (push-tap + bell-tap converged).
+    if (notification.type === 'group') {
+      // Mark the chat's stored group rows read server-side (C4 coupling).
+      if (data.entityId != null) {
+        const entityId = data.entityId;
+        // Use conversationId path or roomId path depending on source.
+        if (data.source === 'group' && typeof entityId === 'number') {
+          notificationsApi.readContext({ conversationId: entityId }).catch(() => {});
+        } else if (typeof entityId === 'string') {
+          // globe_room and local_chat both use roomId-style read-context.
+          const roomId =
+            data.source === 'local_chat'
+              ? `timezone:${entityId}`
+              : `globe:${entityId}`;
+          notificationsApi.readContext({ roomId }).catch(() => {});
+        }
+      }
+      routeChatNotificationTap(data as unknown as ChatNotification, router);
+      return;
+    }
 
     switch (notification.type) {
       case 'mention':
@@ -306,14 +362,10 @@ export default function NotificationsScreen() {
               <View style={styles.emptyInner}>
                 {activeTab === 'groups' ? <GroupsIcon /> : <BellIcon />}
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                  {activeTab === 'groups' && summaryByTab.groups > 0
-                    ? `${summaryByTab.groups} unread chat${summaryByTab.groups === 1 ? '' : 's'}`
-                    : EMPTY_COPY[activeTab].title}
+                  {EMPTY_COPY[activeTab].title}
                 </Text>
                 <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                  {activeTab === 'groups' && summaryByTab.groups > 0
-                    ? 'Head to Chats to see them.'
-                    : EMPTY_COPY[activeTab].subtitle}
+                  {EMPTY_COPY[activeTab].subtitle}
                 </Text>
               </View>
             </GlassCard>
@@ -324,38 +376,56 @@ export default function NotificationsScreen() {
           data={visibleNotifications}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={{ paddingVertical: SPACING.sm, paddingHorizontal: SPACING.page }}
-          renderItem={({ item, index }) => (
-            <AnimatedEntry delay={index * 30}>
-              <TouchableOpacity
-                style={[
-                  styles.notifRow,
-                  {
-                    backgroundColor: item.isRead ? 'transparent' : colors.surfaceGlass,
-                    borderColor: item.isRead ? 'transparent' : colors.border,
-                  },
-                ]}
-                onPress={() => handleNotificationPress(item)}
-                activeOpacity={0.7}
-              >
-                {!item.isRead && (
-                  <View style={[styles.unreadAccent, { backgroundColor: COLORS.accent }]} />
-                )}
-                <View style={[styles.notifIconContainer, { backgroundColor: `${ICON_COLORS[item.type] ?? '#7A8BA8'}1A` }]}>
-                  {(ICON_MAP[item.type] ?? ICON_MAP.system)()}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.notifTitle, { color: colors.text }]}>{item.title}</Text>
-                  <Text style={[styles.notifBody, { color: colors.textMuted }]} numberOfLines={2}>
-                    {item.body}
-                  </Text>
-                  <Text style={[styles.notifTime, { color: colors.textMuted }]}>
-                    {formatRelativeTime(item.createdAt)}
-                  </Text>
-                </View>
-                {!item.isRead && <View style={styles.unreadDot} />}
-              </TouchableOpacity>
-            </AnimatedEntry>
-          )}
+          renderItem={({ item, index }) => {
+            // Groups tab: show per-chat unread count badge alongside the row.
+            const entityId = activeTab === 'groups'
+              ? String((item.data as Record<string, unknown>)?.entityId ?? '')
+              : '';
+            const groupUnread = activeTab === 'groups' && entityId
+              ? (groupUnreadByEntityId[entityId] ?? 0)
+              : 0;
+            const isUnread = !item.isRead || (activeTab === 'groups' && groupUnread > 0);
+            return (
+              <AnimatedEntry delay={index * 30}>
+                <TouchableOpacity
+                  style={[
+                    styles.notifRow,
+                    {
+                      backgroundColor: isUnread ? colors.surfaceGlass : 'transparent',
+                      borderColor: isUnread ? colors.border : 'transparent',
+                    },
+                  ]}
+                  onPress={() => handleNotificationPress(item)}
+                  activeOpacity={0.7}
+                >
+                  {isUnread && (
+                    <View style={[styles.unreadAccent, { backgroundColor: COLORS.accent }]} />
+                  )}
+                  <View style={[styles.notifIconContainer, { backgroundColor: `${ICON_COLORS[item.type] ?? '#7A8BA8'}1A` }]}>
+                    {(ICON_MAP[item.type] ?? ICON_MAP.system)()}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.notifTitle, { color: colors.text }]}>{item.title}</Text>
+                    <Text style={[styles.notifBody, { color: colors.textMuted }]} numberOfLines={2}>
+                      {item.body}
+                    </Text>
+                    <Text style={[styles.notifTime, { color: colors.textMuted }]}>
+                      {formatRelativeTime(item.createdAt)}
+                    </Text>
+                  </View>
+                  {isUnread && (
+                    activeTab === 'groups' && groupUnread > 1
+                      ? (
+                        <View style={[styles.unreadCountBadge, { backgroundColor: COLORS.accent }]}>
+                          <Text style={styles.unreadCountText}>{groupUnread}</Text>
+                        </View>
+                      )
+                      : <View style={styles.unreadDot} />
+                  )}
+                </TouchableOpacity>
+              </AnimatedEntry>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -459,5 +529,19 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: COLORS.accent,
     marginTop: 6,
+  },
+  unreadCountBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    marginTop: 4,
+  },
+  unreadCountText: {
+    fontSize: 11,
+    fontFamily: FONTS.semiBold,
+    color: '#FFF',
   },
 });
