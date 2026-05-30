@@ -135,6 +135,10 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   applyRoomMessage: (msg) => {
     // Local Chat row — `roomId` is `'timezone:America/New_York'`.
     if (!msg.roomId || !msg.roomId.startsWith('timezone:')) return;
+    // D-16: REST-route join/system announcements arrive as room:message with
+    // kind:'system'. Skip the bubble bump for these — only update lastMessage
+    // so the system line still renders in-thread.
+    const isSystemMsg = (msg as { kind?: string }).kind === 'system';
     const timezoneIana = msg.roomId.replace('timezone:', '');
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
@@ -145,9 +149,8 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     // senderId !== me guard is REQUIRED to prevent sender self-bump.
     const me = useAuthStore.getState().user?.id;
     const alsoBump =
+      !isSystemMsg &&
       msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== timezoneIana;
-    // TEMP(16-UAT): remove after Local Chat bubble verified
-    console.log('[notif-uat] room', { timezoneIana, senderId: msg.senderId, me, alsoBump, matched: get().rows.some((r) => rowMatchesEntity(r, timezoneIana)) });
     // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
     if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, timezoneIana))) {
       get().hydrate();
@@ -160,6 +163,10 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     // Phase 11 D-04: applies to ANY joined regional Globe room row AND Town Square.
     // `applyToRow` is a no-op when no row matches (rowMatchesEntity returns false),
     // so a globe:message for a room the user hasn't joined silently drops here.
+    // D-16: REST-route join/system announcements arrive as globe:message with
+    // kind:'system'. Skip the bubble bump for these — only update lastMessage
+    // so the system line still renders in-thread.
+    const isSystemMsg = (msg as { kind?: string }).kind === 'system';
     // Plan 16-02 deleted the broadcast chat:notification that used to drive
     // plain-message unread bumps. The message-arrival listener must now bump
     // directly — but only for non-self, non-viewing recipients (NOTIF-01).
@@ -171,9 +178,8 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
     const me = useAuthStore.getState().user?.id;
     const alsoBump =
+      !isSystemMsg &&
       msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== slug;
-    // TEMP(16-UAT): remove after Town Square bubble verified
-    console.log('[notif-uat] globe', { slug, senderId: msg.senderId, me, alsoBump, matched: get().rows.some((r) => rowMatchesEntity(r, slug)) });
     // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
     if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, slug))) {
       get().hydrate();
@@ -189,8 +195,6 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const alsoBump = viewing !== msg.conversationId && msg.senderId !== me;
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    // TEMP(16-UAT): remove after DM bubble verified
-    console.log('[notif-uat] dm', { conversationId: msg.conversationId, senderId: msg.senderId, me, alsoBump, matched: get().rows.some((r) => rowMatchesEntity(r, msg.conversationId!)) });
     // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
     if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, msg.conversationId!))) {
       get().hydrate();
