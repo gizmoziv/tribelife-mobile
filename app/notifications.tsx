@@ -306,10 +306,14 @@ export default function NotificationsScreen() {
               <View style={styles.emptyInner}>
                 {activeTab === 'groups' ? <GroupsIcon /> : <BellIcon />}
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>
-                  {EMPTY_COPY[activeTab].title}
+                  {activeTab === 'groups' && summaryByTab.groups > 0
+                    ? `${summaryByTab.groups} unread chat${summaryByTab.groups === 1 ? '' : 's'}`
+                    : EMPTY_COPY[activeTab].title}
                 </Text>
                 <Text style={[styles.emptySubtitle, { color: colors.textMuted }]}>
-                  {EMPTY_COPY[activeTab].subtitle}
+                  {activeTab === 'groups' && summaryByTab.groups > 0
+                    ? 'Head to Chats to see them.'
+                    : EMPTY_COPY[activeTab].subtitle}
                 </Text>
               </View>
             </GlassCard>
