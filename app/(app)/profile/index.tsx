@@ -373,6 +373,7 @@ export default function ProfileScreen() {
     timezoneChatPush: true,
     beaconMatchesPush: true,
     dmPush: true,
+    dmsPush: true,
   });
   const [newsPushEnabled, setNewsPushEnabled] = useState(true); // default true matches DB column default
 
@@ -844,25 +845,11 @@ export default function ProfileScreen() {
             />
             <View style={{ paddingLeft: 16 }}>
               <SettingsRow
-                label="Replies & Mentions"
+                label="Direct Messages"
                 right={
                   <Switch
-                    value={pushEnabled && notifPrefs.mentionsPush}
-                    onValueChange={(v) => updateNotifPref('mentionsPush', v)}
-                    trackColor={{ false: colors.border, true: COLORS.primary }}
-                    thumbColor="#FFF"
-                    disabled={!pushEnabled}
-                  />
-                }
-              />
-              <SettingsRow
-                label="Timezone Chat"
-                right={
-                  <Switch
-                    value={pushEnabled && notifPrefs.timezoneChatPush}
-                    onValueChange={(v) =>
-                      updateNotifPref('timezoneChatPush', v)
-                    }
+                    value={pushEnabled && notifPrefs.dmsPush}
+                    onValueChange={(v) => updateNotifPref('dmsPush', v)}
                     trackColor={{ false: colors.border, true: COLORS.primary }}
                     thumbColor="#FFF"
                     disabled={!pushEnabled}
@@ -877,18 +864,6 @@ export default function ProfileScreen() {
                     onValueChange={(v) =>
                       updateNotifPref('beaconMatchesPush', v)
                     }
-                    trackColor={{ false: colors.border, true: COLORS.primary }}
-                    thumbColor="#FFF"
-                    disabled={!pushEnabled}
-                  />
-                }
-              />
-              <SettingsRow
-                label="Direct Messages"
-                right={
-                  <Switch
-                    value={pushEnabled && notifPrefs.dmPush}
-                    onValueChange={(v) => updateNotifPref('dmPush', v)}
                     trackColor={{ false: colors.border, true: COLORS.primary }}
                     thumbColor="#FFF"
                     disabled={!pushEnabled}
