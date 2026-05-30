@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ChatsRow, ChatNotification } from '@/types';
 import { chats } from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
+import { getZoneForTimezone } from '@/utils/timezoneZones';
 
 // ── Phase 10: useChatsStore ─────────────────────────────────────────────
 // Single source of truth for the Chats screen rows + per-row unread counts
@@ -55,7 +56,7 @@ interface ChatsState {
 function rowMatchesEntity(row: ChatsRow, entityId: string | number): boolean {
   if (row.type === 'dm' || row.type === 'group') return row.conversationId === entityId;
   if (row.type === 'town_square') return entityId === 'town-square';
-  if (row.type === 'local_chat') return row.timezoneIana === entityId;
+  if (row.type === 'local_chat') return row.timezoneIana === entityId || getZoneForTimezone(row.timezoneIana) === entityId;
   if (row.type === 'globe_room') return row.roomSlug === entityId;
   if (row.type === 'timezone_room') return row.zoneSlug === entityId;
   return false;
@@ -145,7 +146,14 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const me = useAuthStore.getState().user?.id;
     const alsoBump =
       msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== timezoneIana;
-    set((s) => ({ rows: applyToRow(s.rows, timezoneIana, lastMessage, alsoBump) }));
+    // TEMP(16-UAT): remove after Local Chat bubble verified
+    console.log('[notif-uat] room', { timezoneIana, senderId: msg.senderId, me, alsoBump, matched: get().rows.some((r) => rowMatchesEntity(r, timezoneIana)) });
+    // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
+    if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, timezoneIana))) {
+      get().hydrate();
+    } else {
+      set((s) => ({ rows: applyToRow(s.rows, timezoneIana, lastMessage, alsoBump) }));
+    }
   },
 
   applyGlobeMessage: (msg) => {
@@ -164,16 +172,31 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const me = useAuthStore.getState().user?.id;
     const alsoBump =
       msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== slug;
-    set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, alsoBump) }));
+    // TEMP(16-UAT): remove after Town Square bubble verified
+    console.log('[notif-uat] globe', { slug, senderId: msg.senderId, me, alsoBump, matched: get().rows.some((r) => rowMatchesEntity(r, slug)) });
+    // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
+    if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, slug))) {
+      get().hydrate();
+    } else {
+      set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, alsoBump) }));
+    }
   },
 
   applyDmMessage: (msg) => {
     if (typeof msg.conversationId !== 'number') return;
     const viewing = get().currentlyViewing;
-    const alsoBump = viewing !== msg.conversationId;
+    const me = useAuthStore.getState().user?.id;
+    const alsoBump = viewing !== msg.conversationId && msg.senderId !== me;
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    set((s) => ({ rows: applyToRow(s.rows, msg.conversationId!, lastMessage, alsoBump) }));
+    // TEMP(16-UAT): remove after DM bubble verified
+    console.log('[notif-uat] dm', { conversationId: msg.conversationId, senderId: msg.senderId, me, alsoBump, matched: get().rows.some((r) => rowMatchesEntity(r, msg.conversationId!)) });
+    // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
+    if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, msg.conversationId!))) {
+      get().hydrate();
+    } else {
+      set((s) => ({ rows: applyToRow(s.rows, msg.conversationId!, lastMessage, alsoBump) }));
+    }
   },
 
   clearRowUnread: (key) => {
