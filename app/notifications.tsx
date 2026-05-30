@@ -21,6 +21,16 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import type { Notification } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
+function GroupsIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="#818CF8" strokeWidth={1.5} strokeLinecap="round" />
+      <Path d="M9 11a4 4 0 100-8 4 4 0 000 8z" stroke="#818CF8" strokeWidth={1.5} />
+      <Path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="#818CF8" strokeWidth={1.5} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
 function MentionIcon() {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -70,20 +80,20 @@ const ICON_COLORS: Record<string, string> = {
   org_invite: COLORS.primary,
 };
 
-type TabKey = 'mention' | 'new_dm' | 'beacon_match' | 'system';
+type TabKey = 'groups' | 'dms' | 'matches' | 'system';
 
 const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'mention', label: 'Mentions' },
-  { key: 'new_dm', label: 'DMs' },
-  { key: 'beacon_match', label: 'Matches' },
+  { key: 'groups', label: 'Groups' },
+  { key: 'dms', label: 'DMs' },
+  { key: 'matches', label: 'Matches' },
   { key: 'system', label: 'System' },
 ];
 
 const EMPTY_COPY: Record<TabKey, { title: string; subtitle: string }> = {
-  mention: { title: 'No mentions yet', subtitle: 'When someone @mentions you in a room, it’ll show up here.' },
-  new_dm: { title: 'No new messages', subtitle: 'New direct messages land here when you’re offline.' },
-  beacon_match: { title: 'No matches yet', subtitle: 'Daily beacon matches will appear here once the matcher runs.' },
-  system: { title: 'All quiet', subtitle: 'System announcements and product updates appear here.' },
+  groups: { title: 'All caught up', subtitle: 'Unread group and community chats will show their count here. Head to Chats to see them.' },
+  dms: { title: 'No new messages', subtitle: 'Mentions, replies, and direct messages land here.' },
+  matches: { title: 'No matches yet', subtitle: 'Daily beacon matches will appear here once the matcher runs.' },
+  system: { title: 'All quiet', subtitle: 'Moderation notices and system announcements appear here.' },
 };
 
 export default function NotificationsScreen() {
@@ -91,7 +101,7 @@ export default function NotificationsScreen() {
   const { notifications, summary, setNotifications, setSummary, markTypeRead, markOneRead } = useNotificationStore();
   const bellCount = useNotificationStore(selectBellCount);
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabKey>('mention');
+  const [activeTab, setActiveTab] = useState<TabKey>('groups');
 
   useEffect(() => {
     notificationsApi.list().then(({ notifications: notifs, unreadCount: count }) => {
@@ -100,16 +110,25 @@ export default function NotificationsScreen() {
     notificationsApi.summary().then(setSummary).catch(() => {});
   }, []);
 
-  // DMs: collapse to one row per conversation. Mentions/matches/system keep
-  // one row per event (that's the right granularity for those types).
-  // org_invite notifications are surfaced in the system tab (WR-03).
+  // Groups tab: no stored notification rows — derived from chatsStore unread state.
+  // DMs tab: collapse to one row per conversation. Mentions fold into DMs.
+  // Matches/System: one row per event.
   const visibleNotifications = useMemo(() => {
+    if (activeTab === 'groups') {
+      // Groups has no stored notification rows — empty list with empty-state copy.
+      return [] as Notification[];
+    }
     const ofType = notifications.filter((n) =>
       activeTab === 'system'
         ? n.type === 'system' || n.type === 'org_invite'
-        : n.type === activeTab,
+        : activeTab === 'dms'
+        ? n.type === 'mention' || n.type === 'new_dm'
+        : activeTab === 'matches'
+        ? n.type === 'beacon_match'
+        : false,
     );
-    if (activeTab !== 'new_dm') return ofType;
+    if (activeTab !== 'dms') return ofType;
+    // DMs: collapse by conversation (same logic as old new_dm tab, now spans mention+new_dm).
     const seen = new Set<string>();
     const collapsed: Notification[] = [];
     for (const n of ofType) {
@@ -122,22 +141,51 @@ export default function NotificationsScreen() {
     return collapsed;
   }, [notifications, activeTab]);
 
-  // Clearing a bell tab cascades to the sources those events came from:
-  // conversations get marked read, globe rooms get their read position
-  // advanced, and the timezone (local chat) counter resets. Cross-type:
-  // clearing DMs on a group chat also clears pending mentions for that same
-  // group, and vice versa — the backend returns the exact source IDs touched.
+  // Clearing a bell tab cascades to the sources those events came from.
+  // The API contract is TAB-keyed (?tab=<tab>) per Plan 16-03 W1/W2 LOCKED.
+  // readAll('dms') clears BOTH mention AND new_dm rows server-side (W1).
+  // readAll('groups') runs the read-position cascade and returns cleared source IDs.
   const handleMarkTabRead = async () => {
     const prev = summary;
-    markTypeRead(activeTab);
+
+    // Optimistic local clear:
+    // DMs tab spans TWO notification types — clear both explicitly.
+    // markTypeRead keys on n.type via summaryKeyForType, so passing a tab name
+    // ('dms') would match nothing. Call per-type explicitly for DMs.
+    if (activeTab === 'dms') {
+      markTypeRead('mention');
+      markTypeRead('new_dm');
+    } else if (activeTab === 'matches') {
+      markTypeRead('beacon_match');
+    } else if (activeTab === 'system') {
+      markTypeRead('system');
+      // org_invite shares the system tab
+      markTypeRead('org_invite');
+    }
+    // 'groups' has no stored notification types to clear locally.
+
     try {
       const resp = await notificationsApi.readAll(activeTab);
 
-      if (resp.clearedConversationIds.length > 0 || resp.clearedTimezoneRooms.length > 0) {
-        // Phase 10: useChatsStore owns DM + local_chat unread; re-hydrate to sync.
+      if (activeTab === 'groups') {
+        // Groups mark-read: zero matching chatsStore rows from the returned IDs.
+        const chatsState = useChatsStore.getState();
+        for (const slug of resp.clearedGlobeSlugs) {
+          chatsState.clearRowUnread({ type: 'globe_room', roomSlug: slug });
+        }
+        for (const convId of resp.clearedConversationIds) {
+          // Groups tab covers group conversations (not 1:1 DMs)
+          chatsState.clearRowUnread({ type: 'group', conversationId: convId });
+        }
+        for (const tz of resp.clearedTimezoneRooms) {
+          chatsState.clearRowUnread({ type: 'local_chat', timezoneIana: tz });
+        }
+      } else if (resp.clearedConversationIds.length > 0 || resp.clearedTimezoneRooms.length > 0) {
+        // DMs/Matches/System: re-hydrate chatsStore if DM sources were touched.
         useChatsStore.getState().hydrate();
       }
-      if (resp.clearedGlobeSlugs.length > 0) {
+
+      if (resp.clearedGlobeSlugs.length > 0 && activeTab !== 'groups') {
         globeApi.unread()
           .then(({ unread }) => useGlobeStore.getState().setUnreadCounts(unread))
           .catch(() => {});
@@ -187,9 +235,9 @@ export default function NotificationsScreen() {
   };
 
   const summaryByTab: Record<TabKey, number> = {
-    mention: summary.mentions,
-    new_dm: summary.dmConversations,
-    beacon_match: summary.beaconMatches,
+    groups: summary.groups,
+    dms: summary.dms,
+    matches: summary.matches,
     system: summary.system,
   };
 
@@ -256,7 +304,7 @@ export default function NotificationsScreen() {
           <AnimatedEntry>
             <GlassCard>
               <View style={styles.emptyInner}>
-                <BellIcon />
+                {activeTab === 'groups' ? <GroupsIcon /> : <BellIcon />}
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>
                   {EMPTY_COPY[activeTab].title}
                 </Text>
