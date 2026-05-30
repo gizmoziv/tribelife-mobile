@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ChatsRow, ChatNotification } from '@/types';
 import { chats } from '@/services/api';
+import { useAuthStore } from '@/store/authStore';
 
 // ── Phase 10: useChatsStore ─────────────────────────────────────────────
 // Single source of truth for the Chats screen rows + per-row unread counts
@@ -136,21 +137,34 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const timezoneIana = msg.roomId.replace('timezone:', '');
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    // No unread bump — `chat:notification` is the authoritative bump signal (D-09).
-    set((s) => ({ rows: applyToRow(s.rows, timezoneIana, lastMessage, false) }));
+    // Plan 16-02 deleted the broadcast chat:notification that used to drive
+    // plain-message unread bumps. The message-arrival listener must now bump
+    // directly — but only for non-self, non-viewing recipients (NOTIF-01).
+    // Plain room:message is broadcast back to the sender's own socket, so the
+    // senderId !== me guard is REQUIRED to prevent sender self-bump.
+    const me = useAuthStore.getState().user?.id;
+    const alsoBump =
+      msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== timezoneIana;
+    set((s) => ({ rows: applyToRow(s.rows, timezoneIana, lastMessage, alsoBump) }));
   },
 
   applyGlobeMessage: (msg) => {
     // Phase 11 D-04: applies to ANY joined regional Globe room row AND Town Square.
     // `applyToRow` is a no-op when no row matches (rowMatchesEntity returns false),
     // so a globe:message for a room the user hasn't joined silently drops here.
-    // No unread bump — Phase 10 D-09 two-signal pattern: chat:notification is the
-    // authoritative bump; globe:message is the lastMessage signal only.
+    // Plan 16-02 deleted the broadcast chat:notification that used to drive
+    // plain-message unread bumps. The message-arrival listener must now bump
+    // directly — but only for non-self, non-viewing recipients (NOTIF-01).
+    // Plain globe:message is broadcast back to the sender's own socket, so the
+    // senderId !== me guard is REQUIRED to prevent sender self-bump.
     const slug = msg.slug ?? msg.roomId?.replace('globe:', '');
     if (!slug) return;
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, false) }));
+    const me = useAuthStore.getState().user?.id;
+    const alsoBump =
+      msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== slug;
+    set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, alsoBump) }));
   },
 
   applyDmMessage: (msg) => {
