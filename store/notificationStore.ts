@@ -34,11 +34,13 @@ export const selectBellCount = (s: NotificationState): number =>
   s.summary.groups + s.summary.dms + s.summary.matches + s.summary.system;
 
 // Maps notification type → summary key.
-// Groups has NO type mapping — it is derived from chatsStore unread state;
-// addNotification must never bump summary.groups.
+// D-14: group rows are stored notification rows (DM-parity) — 'group' maps to
+// the groups tab so an incoming group chat:notification bumps the groups dot
+// locally without a /summary round-trip.
 const summaryKeyForType: Record<string, keyof NotificationSummary | null> = {
   mention: 'dms',
   new_dm: 'dms',
+  group: 'groups',
   beacon_match: 'matches',
   system: 'system',
   org_invite: null, // explicit no-bucket — invites surface only in raw notification list + bell unreadCount
