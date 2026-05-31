@@ -135,28 +135,22 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   applyRoomMessage: (msg) => {
     // Local Chat row — `roomId` is `'timezone:America/New_York'`.
     if (!msg.roomId || !msg.roomId.startsWith('timezone:')) return;
-    // D-16: REST-route join/system announcements arrive as room:message with
-    // kind:'system'. Skip the bubble bump for these — only update lastMessage
-    // so the system line still renders in-thread.
-    const isSystemMsg = (msg as { kind?: string }).kind === 'system';
     const timezoneIana = msg.roomId.replace('timezone:', '');
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    // Plan 16-02 deleted the broadcast chat:notification that used to drive
-    // plain-message unread bumps. The message-arrival listener must now bump
-    // directly — but only for non-self, non-viewing recipients (NOTIF-01).
-    // Plain room:message is broadcast back to the sender's own socket, so the
-    // senderId !== me guard is REQUIRED to prevent sender self-bump.
-    const me = useAuthStore.getState().user?.id;
-    const alsoBump =
-      !isSystemMsg &&
-      msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== timezoneIana;
-    // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
-    if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, timezoneIana))) {
-      get().hydrate();
-    } else {
-      set((s) => ({ rows: applyToRow(s.rows, timezoneIana, lastMessage, alsoBump) }));
-    }
+    // D-09 two-signal invariant: room:message updates lastMessage ONLY; unread
+    // is driven exclusively by applyChatNotification (chat:notification via the
+    // user:<id> room). Plan 16-02 deleted the broadcast chat:notification so
+    // this listener temporarily bumped unread directly — but Plan 16-07
+    // RE-INTRODUCED the per-member chat:notification fan-out (roomHandler.ts
+    // plain-message path), and timezone (Local) rooms are AUTO-JOINED on connect
+    // (socket index.ts), so every non-viewing member now receives BOTH
+    // room:message AND chat:notification. Bumping here too double-counts
+    // (+2/msg — the LOCAL-room form of ISSUE-6, mirroring the applyGlobeMessage
+    // fix). DMs do not double: conversation rooms join on-demand via dm:join,
+    // so non-viewing DM recipients get chat:notification only. (16-11 follow-up)
+    if (lastMessage === null) return;
+    set((s) => ({ rows: applyToRow(s.rows, timezoneIana, lastMessage, false) }));
   },
 
   applyGlobeMessage: (msg) => {
