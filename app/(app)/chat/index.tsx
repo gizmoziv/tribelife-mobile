@@ -1969,6 +1969,9 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: RADIUS.md,
     ...SHADOWS.sm,
+    // Match iOS — see chatsRow note: drop Android Material elevation so the
+    // Chats-list rows render identically on both platforms.
+    ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
   },
   dmRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dmName: { fontSize: 15, fontFamily: FONTS.semiBold },
@@ -2085,6 +2088,12 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: RADIUS.md,
     ...SHADOWS.sm,
+    // Match iOS: drop Android's Material `elevation` (it renders a heavier drop
+    // shadow + a dark-theme elevation-overlay tint that iOS lacks, making the
+    // card look different across platforms). iOS keeps the soft SHADOWS.sm
+    // shadow; separation on Android comes from the surfaceGlass fill. Mirrors
+    // the GlassCard / NewsTile Android-elevation-0 idiom.
+    ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
   },
   // Phase 14 SRCH-02: section label between Title matches / Messages sections
   searchSectionLabel: {
