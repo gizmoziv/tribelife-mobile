@@ -68,7 +68,7 @@ export function routeChatNotificationTap(
       return;
     case 'globe_room':
       router.push({
-        pathname: '/(app)/globe/[roomSlug]',
+        pathname: '/(app)/chat/regional/[roomSlug]',
         params: { roomSlug: data.roomSlug, ...around },
       });
       return;
