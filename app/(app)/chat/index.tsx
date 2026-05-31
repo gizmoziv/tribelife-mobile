@@ -100,6 +100,14 @@ export default function ChatsScreen() {
   const [pillFilter, setPillFilter] = useState<PillFilter>('all');
   const resetFilterToAll = useCallback(() => setPillFilter('all'), []);
 
+  // ISSUE-2: gate the "Unread → All when empty" auto-revert so it only fires
+  // when the user ARRIVES at this screen (navigating back from a chat / tab
+  // switch) and finds nothing unread — NOT when they explicitly tap the Unread
+  // pill. An explicit tap is a deliberate choice: keep them on Unread and show
+  // an empty state. This ref is armed on blur (the user left the screen) and
+  // disarmed the moment any pill is tapped or the revert fires.
+  const revertOnEmptyRef = useRef(false);
+
   // Phase 14 SRCH-02: message search state
   const [messageResults, setMessageResults] = useState<SearchResult[]>([]);
   const [searchCursor, setSearchCursor] = useState<string | null>(null);
@@ -113,6 +121,13 @@ export default function ChatsScreen() {
   useFocusEffect(
     useCallback(() => {
       useChatsStore.getState().hydrate();
+      // ISSUE-2: arm the auto-revert on blur. If the user comes back to find
+      // the Unread filter empty, drop them to All (see the effect below). A
+      // fresh mount (reload) starts disarmed and re-inits pillFilter to 'all',
+      // so reloads land on All naturally without needing this flag.
+      return () => {
+        revertOnEmptyRef.current = true;
+      };
     }, []),
   );
 
@@ -246,9 +261,16 @@ export default function ChatsScreen() {
   );
 
   // ISSUE-2: auto-revert the Unread pill to All when no unread conversations
-  // remain (e.g. user opens the last unread chat and comes back).
+  // remain — but ONLY when the user arrived here via back-navigation / tab
+  // switch (revertOnEmptyRef armed on blur), never on an explicit pill tap.
+  // Driven by this effect (rather than inline in the focus callback) because
+  // hydrate() resolves async: the count can still be > 0 at focus time and
+  // only drop to 0 a render later, which re-fires this effect.
   useEffect(() => {
-    if (pillFilter === 'unread' && unreadConvCount === 0) resetFilterToAll();
+    if (revertOnEmptyRef.current && pillFilter === 'unread' && unreadConvCount === 0) {
+      revertOnEmptyRef.current = false;
+      resetFilterToAll();
+    }
   }, [pillFilter, unreadConvCount, resetFilterToAll]);
 
   // Filtered view by title (case-insensitive substring on the row title only).
@@ -288,6 +310,17 @@ export default function ChatsScreen() {
   }, [resetFilterToAll]);
 
   if (isLoading) return <LoadingState />;
+
+  // ISSUE-2: empty-state copy per active filter. 'all' always has the pinned
+  // rows (Local Chat, Town Square) so it's never empty — null = no message.
+  const emptyText =
+    pillFilter === 'unread'
+      ? 'No unread chats'
+      : pillFilter === 'groups'
+        ? 'No groups yet'
+        : pillFilter === 'dms'
+          ? 'No direct messages yet'
+          : null;
 
   const trimmedQuery = debouncedQuery.trim();
   const isActiveSearch = trimmedQuery.length > 0;
@@ -480,6 +513,11 @@ export default function ChatsScreen() {
               onPress={() => {
                 if (isActive) return;
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                // ISSUE-2: an explicit pill tap is a deliberate choice — cancel
+                // any pending auto-revert so tapping "Unread" with 0 unread
+                // stays on Unread (showing the empty state) instead of bouncing
+                // straight to All.
+                revertOnEmptyRef.current = false;
                 setPillFilter(key);
               }}
               style={[
@@ -508,7 +546,7 @@ export default function ChatsScreen() {
           );
         })}
       </View>
-      <ChatsList data={filteredRows} flatListRef={flatListRef} />
+      <ChatsList data={filteredRows} flatListRef={flatListRef} emptyText={emptyText} />
     </SafeAreaView>
   );
 }
@@ -686,9 +724,11 @@ function MessageResultRow({
 function ChatsList({
   data,
   flatListRef,
+  emptyText,
 }: {
   data: ChatsRow[];
   flatListRef: React.RefObject<FlatList<ChatsRow> | null>;
+  emptyText?: string | null;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -706,6 +746,15 @@ function ChatsList({
       renderItem={renderRow}
       contentContainerStyle={{ paddingVertical: SPACING.sm }}
       keyboardDismissMode="on-drag"
+      ListEmptyComponent={
+        emptyText ? (
+          <View style={styles.emptyMatches}>
+            <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
+              {emptyText}
+            </Text>
+          </View>
+        ) : null
+      }
       ListFooterComponent={<View style={{ height: tabBarSpace }} />}
     />
   );

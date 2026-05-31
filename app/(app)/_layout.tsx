@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter, usePathname } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -340,16 +341,35 @@ export default function AppLayout() {
             if (!navigation.isFocused()) return;
             const onSubScreen = !!pathname && pathname.startsWith('/chat/');
             if (onSubScreen) {
-              // Always navigate to the Chats list root. Do NOT use router.back():
-              // the back target is unreliable — a chat opened from a notification
-              // deep-link is a cross-tab navigate, so its "back" points at whatever
-              // tab the bell was opened from (e.g. Beacon) or the Notifications
-              // screen, not the Chats list. router.navigate (NOT replace) is
-              // deterministic AND reuses the still-mounted chat/index instance, so
-              // the user's search query is preserved. Phase 14: avoid router.replace
-              // (it rebuilds /chat and wipes search).
               e.preventDefault();
-              router.navigate('/(app)/chat');
+              // Land on the Chats LIST root, the same way for EVERY entry path,
+              // by resetting the chat tab's OWN nested stack to a single `index`
+              // route. The two previous approaches each broke one path:
+              //  • router.back() follows back-history — for a chat opened from a
+              //    notification (Notifications lives at the root level and pushes
+              //    /(app)/chat/[id] on top) it pops back into Notifications, not
+              //    the list.
+              //  • router.navigate('/(app)/chat') pushed a fresh `index` ON TOP of
+              //    the sub-screen (nestedIndex 1), which expo-router renders
+              //    WITHOUT the parent tab header (missing-"Chats"-header bug).
+              // A targeted reset makes `index` the stack root (nestedIndex 0 →
+              // header visible) and never touches history, so it can't escape to
+              // Notifications. Trade-off: the list remounts, so an in-progress
+              // search on the list isn't preserved — acceptable when arriving
+              // from a chat.
+              const tabState = navigation.getState();
+              const chatRoute: any = tabState.routes.find((r: any) => r.name === 'chat');
+              const chatStackKey: string | undefined = chatRoute?.state?.key;
+              if (chatStackKey) {
+                navigation.dispatch({
+                  ...CommonActions.reset({ index: 0, routes: [{ name: 'index' }] }),
+                  target: chatStackKey,
+                });
+              } else {
+                // Nested chat stack not initialised yet (not reachable from a
+                // sub-screen, but keeps us on the list if it ever is).
+                router.navigate('/(app)/chat');
+              }
               return;
             }
             useChatsListRefStore.getState().clearAndScrollToTop();
