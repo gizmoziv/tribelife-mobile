@@ -239,9 +239,11 @@ export default function NotificationsScreen() {
 
     const data = notification.data as Record<string, unknown>;
 
-    // Group notifications (type:'group') carry source+entityId in `data` and
+    // Group and mention notifications carry source+entityId in `data` and
     // route via the shared routeChatNotificationTap (push-tap + bell-tap converged).
-    if (notification.type === 'group') {
+    // Mention rows already carry the full source/entityId/conversationId/roomSlug
+    // payload — they must open the target conversation, not the Chats list (ISSUE-5).
+    if (notification.type === 'group' || notification.type === 'mention') {
       // Mark the chat's stored group rows read server-side (C4 coupling).
       if (data.entityId != null) {
         const entityId = data.entityId;
@@ -262,9 +264,6 @@ export default function NotificationsScreen() {
     }
 
     switch (notification.type) {
-      case 'mention':
-        router.push('/(app)/chat');
-        break;
       case 'new_dm':
         if (data.conversationId) {
           router.push({
