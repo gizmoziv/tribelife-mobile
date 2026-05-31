@@ -164,28 +164,20 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     // `applyToRow` is a no-op when no row matches (rowMatchesEntity returns false),
     // so a globe:message for a room the user hasn't joined silently drops here.
     // D-16: REST-route join/system announcements arrive as globe:message with
-    // kind:'system'. Skip the bubble bump for these — only update lastMessage
-    // so the system line still renders in-thread.
+    // kind:'system'. Skip lastMessage update for system msgs.
     const isSystemMsg = (msg as { kind?: string }).kind === 'system';
-    // Plan 16-02 deleted the broadcast chat:notification that used to drive
-    // plain-message unread bumps. The message-arrival listener must now bump
-    // directly — but only for non-self, non-viewing recipients (NOTIF-01).
-    // Plain globe:message is broadcast back to the sender's own socket, so the
-    // senderId !== me guard is REQUIRED to prevent sender self-bump.
     const slug = msg.slug ?? msg.roomId?.replace('globe:', '');
     if (!slug) return;
     const lastMessage =
       msg.content && msg.createdAt ? { preview: msg.content, at: msg.createdAt } : null;
-    const me = useAuthStore.getState().user?.id;
-    const alsoBump =
-      !isSystemMsg &&
-      msg.senderId != null && msg.senderId !== me && get().currentlyViewing !== slug;
-    // Fix 3: if alsoBump but no row matches yet, hydrate so new row surfaces.
-    if (alsoBump && !get().rows.some((r) => rowMatchesEntity(r, slug))) {
-      get().hydrate();
-    } else {
-      set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, alsoBump) }));
-    }
+    // D-09 two-signal invariant: globe:message updates lastMessage ONLY.
+    // Unread bumps are driven exclusively by applyChatNotification (chat:notification
+    // via the user:<id> room). Globe rooms are already in globe-feed auto-join so
+    // every member receives BOTH globe:message AND chat:notification — bumping here
+    // too causes double-count (+2 per message). Removing the bump restores D-09
+    // and matches the applyDmMessage / applyRoomMessage original intent. (ISSUE-6)
+    if (isSystemMsg || lastMessage === null) return;
+    set((s) => ({ rows: applyToRow(s.rows, slug, lastMessage, false) }));
   },
 
   applyDmMessage: (msg) => {
