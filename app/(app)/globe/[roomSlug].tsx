@@ -178,11 +178,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
-  const hasInitialScrolled = useRef(false);
-  // Phase 14: stay snapped to bottom for 1.5s after mount while async layout
-  // shifts settle (avatars, reactions, reply previews).
-  const mountedAtRef = useRef<number>(Date.now());
-  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
+  // Reversed copy of messages for inverted FlatList — newest message is at
+  // visual bottom (index 0 of inverted list = last chronological message).
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  // Pass reversedMessages so scrollToIndex targets the correct inverted index.
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
   const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
@@ -215,12 +215,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
-      // Two-pass scroll-to-end matches Android's `behavior='height'` KAV
-      // timing — the first call fires before the view shrinks; the
-      // 300ms-delayed second call lands on the real post-shrink bottom
-      // (Android's keyboard animation is ~250ms).
-      flatListRef.current?.scrollToEnd({ animated: true });
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300);
+      // Two-pass scroll-to-bottom: inverted list bottom = offset 0.
+      // First call fires before the view shrinks; the 300ms-delayed second
+      // call lands on the real post-shrink bottom (Android ~250ms).
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: false }), 300);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
@@ -323,8 +322,6 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
 
     setActiveRoom(roomSlug);
     setLoadingMessages(true);
-    hasInitialScrolled.current = false;
-    mountedAtRef.current = Date.now(); // restart the snap-to-bottom window
 
     // Mark room as read on entry
     globeApi.markRead(roomSlug).catch(() => {});
@@ -365,13 +362,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
         if (aroundMessageId != null) {
           // Scroll to target message and flash it. FlatList needs a layout
           // pass before scrollToIndex can resolve; retry on failure.
-          const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
-          if (targetIndex >= 0) {
-            hasInitialScrolled.current = true; // prevent scrollToEnd from firing
-            // Mark "not at bottom" so onContentSizeChange's `else if (isAtBottom)`
-            // branch doesn't re-scroll to end after our scrollToIndex. handleScroll
-            // will re-derive the real value once layout settles.
-            setIsAtBottom(false);
+          // With inverted data the visual index is reversed: chronological
+          // index 0 is the visual bottom (last item), so we mirror it.
+          const chronoIndex = msgs.findIndex((m) => m.id === aroundMessageId);
+          if (chronoIndex >= 0) {
+            const targetIndex = msgs.length - 1 - chronoIndex;
             const attemptScroll = (attempt = 0) => {
               try {
                 flatListRef.current?.scrollToIndex({ index: targetIndex, animated: false, viewPosition: 0.5 });
@@ -390,22 +385,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
               }).start(() => setFlashHighlightedId(undefined));
             }, 250);
           }
-        } else {
-          // Belt-and-suspenders scroll-to-bottom retries. For small rooms
-          // (e.g. hawaii-time, ~4 messages) the 100ms attempt is enough —
-          // the whole list lays out in the first pass. For larger rooms
-          // (50-item initial fetch with avatars + reactions + reply
-          // previews), FlatList's windowed renderer only paints ~10 items
-          // initially, so the early scrollToEnd jumps to the bottom of
-          // those ~10, not the real bottom of 50. Each subsequent retry
-          // catches a later windowing pass; combined with the extended
-          // onContentSizeChange snap window below they cover the slow-
-          // render tail.
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 1500);
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 3000);
         }
+        // No else: inverted FlatList opens at the visual bottom (offset 0)
+        // natively — no timed scrollToEnd cascade needed.
       })
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
@@ -700,7 +682,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   );
 
   const scrollToBottom = useCallback(() => {
-    flatListRef.current?.scrollToEnd({ animated: true });
+    // Inverted list: visual bottom = offset 0 (newest messages).
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     resetNewMessageCount();
   }, [resetNewMessageCount]);
 
@@ -743,7 +726,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       setReplyTo(null);
       setIsAtBottom(true);
       resetNewMessageCount();
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      // Inverted list: bottom = offset 0.
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
       sendGlobeTyping(roomSlug, false);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -769,10 +753,10 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     sendGlobeMessage(roomSlug, content, replyToId);
     setInput('');
     setReplyTo(null);
-    // Auto-scroll to bottom after sending
+    // Auto-scroll to bottom after sending (inverted: bottom = offset 0).
     setIsAtBottom(true);
     resetNewMessageCount();
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
     // Stop typing
     sendGlobeTyping(roomSlug, false);
     if (typingTimeoutRef.current) {
@@ -921,38 +905,23 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
         )}
 
         {/* Message list */}
+        {/* inverted: newest message anchors at visual bottom (offset 0).
+            Data is reversed so index 0 = most-recent message; the native
+            inverted prop flips rendering so it appears at the bottom.
+            No timed scrollToEnd cascade or onContentSizeChange re-snap
+            needed — the inverted layout handles initial positioning. */}
         <FlatList
           ref={flatListRef}
+          inverted
           keyboardDismissMode="on-drag"
-          data={messages}
+          data={reversedMessages}
           // Include effectiveIsMember so post-Join the membership-gated props
           // on SwipeableMessage + MessageBubble (long-press, profile press)
           // re-bind without needing a navigation cycle.
-          extraData={[messages, effectiveIsMember]}
+          extraData={[reversedMessages, effectiveIsMember]}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => {
-            // Re-snap to bottom for 5s after mount while async layout
-            // shifts (avatars, reactions, reply previews, windowed
-            // re-renders for 50-item fetches) settle. Was 1.5s — too short
-            // for rooms with 50 messages: FlatList's windowing kept
-            // emitting contentSize events past the cutoff, and the
-            // post-cutoff `else if (isAtBottom)` branch never fires when
-            // we're stranded mid-list (isAtBottom is false). 5s covers the
-            // slow-render tail observed in central-european-time and the
-            // other heavy zones. hasInitialScrolled gets pre-set by the
-            // aroundMessageId path to suppress this so a deep-link doesn't
-            // get fought.
-            if (!hasInitialScrolled.current) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-              if (Date.now() - mountedAtRef.current > 5000) {
-                hasInitialScrolled.current = true;
-              }
-            } else if (isAtBottom) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
