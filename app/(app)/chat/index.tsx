@@ -98,6 +98,7 @@ export default function ChatsScreen() {
   // across launches.
   type PillFilter = 'all' | 'unread' | 'groups' | 'dms';
   const [pillFilter, setPillFilter] = useState<PillFilter>('all');
+  const resetFilterToAll = useCallback(() => setPillFilter('all'), []);
 
   // Phase 14 SRCH-02: message search state
   const [messageResults, setMessageResults] = useState<SearchResult[]>([]);
@@ -244,6 +245,12 @@ export default function ChatsScreen() {
     [rows],
   );
 
+  // ISSUE-2: auto-revert the Unread pill to All when no unread conversations
+  // remain (e.g. user opens the last unread chat and comes back).
+  useEffect(() => {
+    if (pillFilter === 'unread' && unreadConvCount === 0) resetFilterToAll();
+  }, [pillFilter, unreadConvCount, resetFilterToAll]);
+
   // Filtered view by title (case-insensitive substring on the row title only).
   // Title derivation matches ChatsListRow:
   //   - local_chat: timezoneToZoneName(row.timezoneIana)
@@ -263,10 +270,13 @@ export default function ChatsScreen() {
   // setter and the FlatList ref, so the store's action is just a closure
   // around them. Re-register on every render so the closure captures the
   // latest setSearchQuery (no stale-state bug).
+  // ISSUE-3: also reset the pill filter to All so tapping the Chats tab icon
+  // always returns the list to its default state.
   useEffect(() => {
     useChatsListRefStore.setState({
       clearAndScrollToTop: () => {
         setSearchQuery('');
+        resetFilterToAll();
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       },
     });
@@ -275,7 +285,7 @@ export default function ChatsScreen() {
         clearAndScrollToTop: () => { /* no-op after unmount */ },
       });
     };
-  }, []);
+  }, [resetFilterToAll]);
 
   if (isLoading) return <LoadingState />;
 
