@@ -20,6 +20,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import type { Notification, ChatNotification } from '@/types';
+import { getZoneForTimezone, getTimezoneZone } from '@/utils/timezoneZones';
 import Svg, { Path } from 'react-native-svg';
 
 function GroupsIcon() {
@@ -98,6 +99,47 @@ const EMPTY_COPY: Record<TabKey, { title: string; subtitle: string }> = {
   matches: { title: 'No matches yet', subtitle: 'Daily beacon matches will appear here once the matcher runs.' },
   system: { title: 'All quiet', subtitle: 'Moderation notices and system announcements appear here.' },
 };
+
+// Globe room slug → display name (mirror of tribelife-backend/src/config/globeRooms.ts).
+const GLOBE_ROOM_NAMES: Record<string, string> = {
+  'town-square': 'Town Square',
+  'north-america': 'North America',
+  israel: 'Israel',
+  europe: 'Europe',
+  'uk-ireland': 'UK & Ireland',
+  'latin-america': 'Latin America',
+  'australia-nz': 'Australia/NZ',
+  'south-africa': 'South Africa',
+};
+
+// Resolve the chat-room display name for a group/mention notification so the row
+// title can read "@handle in {room}". Group conversations carry a server
+// `groupName`; community rooms carry an IANA timezone (local_chat) or a globe
+// slug (globe_room). Returns null when no room context applies (e.g. 1:1 DMs).
+function roomLabelForNotification(n: Notification): string | null {
+  const d = (n.data ?? {}) as Record<string, unknown>;
+  const groupName = typeof d.groupName === 'string' ? d.groupName.trim() : '';
+  if (groupName) return groupName;
+  if (d.source === 'local_chat' || typeof d.timezoneIana === 'string') {
+    const iana =
+      typeof d.timezoneIana === 'string' ? d.timezoneIana
+      : typeof d.entityId === 'string' ? d.entityId : '';
+    if (iana) {
+      const zone = getTimezoneZone(getZoneForTimezone(iana));
+      if (zone) return zone.displayName;
+    }
+  }
+  if (d.source === 'globe_room' || typeof d.roomSlug === 'string' || typeof d.globeSlug === 'string') {
+    const slug =
+      typeof d.roomSlug === 'string' ? d.roomSlug
+      : typeof d.globeSlug === 'string' ? d.globeSlug
+      : typeof d.entityId === 'string' ? d.entityId : '';
+    if (slug) {
+      return GLOBE_ROOM_NAMES[slug] ?? slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  }
+  return null;
+}
 
 export default function NotificationsScreen() {
   const { colors } = useTheme();
@@ -384,6 +426,11 @@ export default function NotificationsScreen() {
               ? (groupUnreadByEntityId[entityId] ?? 0)
               : 0;
             const isUnread = !item.isRead || (activeTab === 'groups' && groupUnread > 0);
+            // "@handle in {room}" for group/mention rows; bare title otherwise (e.g. 1:1 DMs).
+            const roomLabel = item.type === 'group' || item.type === 'mention'
+              ? roomLabelForNotification(item)
+              : null;
+            const notifTitle = roomLabel ? `${item.title} in ${roomLabel}` : item.title;
             return (
               <AnimatedEntry delay={index * 30}>
                 <TouchableOpacity
@@ -404,7 +451,7 @@ export default function NotificationsScreen() {
                     {(ICON_MAP[item.type] ?? ICON_MAP.system)()}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.notifTitle, { color: colors.text }]}>{item.title}</Text>
+                    <Text style={[styles.notifTitle, { color: colors.text }]}>{notifTitle}</Text>
                     <Text style={[styles.notifBody, { color: colors.textMuted }]} numberOfLines={2}>
                       {item.body}
                     </Text>
