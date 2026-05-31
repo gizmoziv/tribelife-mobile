@@ -1322,6 +1322,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.md,
+    // Match iOS: drop Android's Material elevation (squarish halo behind the
+    // circular send button on Android). Same idiom as the chat-card fix.
+    ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
   },
   // Phase 11 D-12: join CTA bar replacing the composer for non-members.
   joinChatBar: {

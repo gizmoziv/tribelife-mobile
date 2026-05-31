@@ -1958,6 +1958,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.md,
+    // Match iOS: drop Android's Material elevation — on Android it renders a
+    // squarish shadow/overlay halo behind the circular button that iOS lacks.
+    // Same idiom as the chat-card fix (GlassCard/NewsTile).
+    ...(Platform.OS === 'android' ? { elevation: 0 } : {}),
   },
   dmRow: {
     flexDirection: 'row',
