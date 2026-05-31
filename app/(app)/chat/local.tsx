@@ -184,7 +184,9 @@ export default function LocalChatScreen() {
   }, []);
 
   // Clear bell notifications tied to this zone room when the user opens it.
-  useEffect(() => {
+  // Also called on incoming-message-while-focused (ISSUE-7) to advance the
+  // server read-position so live-received messages don't accrue as unread.
+  const resyncReadContext = useCallback(() => {
     notificationsApi.readContext({ roomId })
       .then(({ markedRead }) => {
         if (markedRead.length > 0) {
@@ -198,6 +200,10 @@ export default function LocalChatScreen() {
       })
       .catch(() => { /* silent */ });
   }, [roomId]);
+
+  useEffect(() => {
+    resyncReadContext();
+  }, [resyncReadContext]);
 
   // Mark the room read in globe_read_positions on mount (Plan 09-01/02).
   //
@@ -281,6 +287,11 @@ export default function LocalChatScreen() {
       const offRoom = onRoomMessage((msg) => {
         setMessages((prev) => [...prev, msg]);
         flatListRef.current?.scrollToEnd({ animated: true });
+        // D-17: re-advance server read-position for messages from others while
+        // this screen is focused so live-received messages don't accrue as unread.
+        if (msg.senderId !== user?.id) {
+          resyncReadContext();
+        }
       });
 
       const TYPING_TIMEOUT_MS = 5000;

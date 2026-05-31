@@ -300,6 +300,23 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     }
   }, [user]);
 
+  // Re-advances the server read-position for this Globe room. Called on mount
+  // (via the socket setup useEffect below) and on incoming-message-while-focused
+  // (ISSUE-7 fix) to ensure live-received messages don't accrue as unread.
+  const resyncReadContext = useCallback(() => {
+    notificationsApi
+      .readContext({ roomId: `globe:${roomSlug}` })
+      .then(({ markedRead }) => {
+        if (markedRead.length > 0) {
+          useNotificationStore.getState().markManyRead(markedRead);
+          notificationsApi.summary()
+            .then((s) => useNotificationStore.getState().setSummary(s))
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [roomSlug]);
+
   // ── Socket setup and message loading ────────────────────────────────────
   useEffect(() => {
     if (!roomSlug) return;
@@ -333,17 +350,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     // mentions don't always land in the local notifications[] array, so the
     // store's per-type summary-delta math under-decrements; the server is
     // authoritative for bell-bucket counts.
-    notificationsApi
-      .readContext({ roomId: `globe:${roomSlug}` })
-      .then(({ markedRead }) => {
-        if (markedRead.length > 0) {
-          useNotificationStore.getState().markManyRead(markedRead);
-          notificationsApi.summary()
-            .then((s) => useNotificationStore.getState().setSummary(s))
-            .catch(() => {});
-        }
-      })
-      .catch(() => {});
+    // Also called on incoming-message-while-focused (ISSUE-7) via resyncReadContext.
+    resyncReadContext();
 
     // Load initial messages (keep chronological order -- newest last for inverted FlatList)
     // Phase 14 D-04: pass aroundMessageId for 51-row window fetch
@@ -410,6 +418,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     // Register listeners (outside .then to ensure cleanup works)
     const offMessage = onGlobeMessage((data: GlobeMessage) => {
       addMessage(data);
+      // D-17: re-advance server read-position for messages from others while
+      // this screen is focused so live-received messages don't accrue as unread.
+      if (data.slug === roomSlug && data.senderId !== user?.id) {
+        resyncReadContext();
+      }
     });
 
     const offParticipants = onGlobeParticipants(({ slug, count }) => {

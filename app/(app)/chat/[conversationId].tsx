@@ -291,7 +291,9 @@ export default function DMThreadScreen() {
   // keeps claiming the user has unread notifications for messages they've
   // now seen. Server authoritatively marks them read; the local store
   // update below keeps the bell count in sync without a refetch.
-  useEffect(() => {
+  // Also called on incoming-message-while-focused (ISSUE-7) to advance the
+  // server read-position so live-received messages don't accrue as unread.
+  const resyncReadContext = useCallback(() => {
     if (Number.isNaN(conversationId)) return;
     notificationsApi.readContext({ conversationId })
       .then(({ markedRead }) => {
@@ -307,6 +309,10 @@ export default function DMThreadScreen() {
       })
       .catch(() => { /* silent — bell will recover on next list refetch */ });
   }, [conversationId]);
+
+  useEffect(() => {
+    resyncReadContext();
+  }, [resyncReadContext]);
 
   // Phase 10 D-07: optimistic clear of the matching Chats row's unread +
   // register this screen as currently-viewing (suppresses bump on incoming
@@ -381,6 +387,11 @@ export default function DMThreadScreen() {
         return [...prev, msg];
       });
       flatListRef.current?.scrollToEnd({ animated: true });
+      // D-17: re-advance server read-position for messages from others while
+      // this screen is focused so live-received messages don't accrue as unread.
+      if (msg.senderId !== user?.id) {
+        resyncReadContext();
+      }
     });
 
     // Auto-clear the typing indicator 5s after the last typing:start — guards
