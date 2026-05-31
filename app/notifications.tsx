@@ -279,6 +279,14 @@ export default function NotificationsScreen() {
     markOneRead(notification.id);
     notificationsApi.read(notification.id).catch(() => {});
 
+    // Close the Notifications screen as we act on a row so it isn't left
+    // stacked beneath the destination chat. Notifications opens via
+    // router.push('/notifications') (root stack); tapping a row pushes the chat
+    // on top of it, so the Chats-tab listener's router.back() would surface
+    // Notifications instead of the Chats list. Dismissing here keeps the
+    // already-mounted chat/index below, so its search query is preserved.
+    if (router.canGoBack()) router.back();
+
     const data = notification.data as Record<string, unknown>;
 
     // Group and mention notifications carry source+entityId in `data` and
