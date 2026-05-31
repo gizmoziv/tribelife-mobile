@@ -340,18 +340,16 @@ export default function AppLayout() {
             if (!navigation.isFocused()) return;
             const onSubScreen = !!pathname && pathname.startsWith('/chat/');
             if (onSubScreen) {
-              // Phase 14 Bug 1: do NOT use router.replace — that rebuilds the
-              // /chat route and unmounts ChatsScreen, wiping the user's
-              // search query. router.back() pops the stack so chat/index
-              // (still mounted) gets focus with its searchQuery intact.
-              // Falls back to a navigate if the stack happens to be empty
-              // (e.g. deep-link cold-start).
+              // Always navigate to the Chats list root. Do NOT use router.back():
+              // the back target is unreliable — a chat opened from a notification
+              // deep-link is a cross-tab navigate, so its "back" points at whatever
+              // tab the bell was opened from (e.g. Beacon) or the Notifications
+              // screen, not the Chats list. router.navigate (NOT replace) is
+              // deterministic AND reuses the still-mounted chat/index instance, so
+              // the user's search query is preserved. Phase 14: avoid router.replace
+              // (it rebuilds /chat and wipes search).
               e.preventDefault();
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.navigate('/(app)/chat');
-              }
+              router.navigate('/(app)/chat');
               return;
             }
             useChatsListRefStore.getState().clearAndScrollToTop();
