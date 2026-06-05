@@ -355,9 +355,18 @@ function RootLayoutInner() {
   // because user?.id becomes defined in both paths via setAuth().
   useEffect(() => {
     if (!rcKey || !user?.id) return;
-    Purchases.logIn(String(user.id)).catch((err) => {
-      if (__DEV__) console.warn('[revenuecat] logIn failed', err);
-    });
+    Purchases.logIn(String(user.id))
+      .then(() => {
+        // Populate RevenueCat subscriber attributes so customers are
+        // identifiable in the dashboard and future webhook payloads.
+        if (user.email) Purchases.setEmail(user.email);
+        if (user.name) Purchases.setDisplayName(user.name);
+        // Collects IDFV + IP (IDFA only if ATT is authorized).
+        Purchases.collectDeviceIdentifiers();
+      })
+      .catch((err) => {
+        if (__DEV__) console.warn('[revenuecat] logIn failed', err);
+      });
   }, [user?.id]);
 
   useEffect(() => {
