@@ -349,6 +349,17 @@ function RootLayoutInner() {
     }
   }, [token, user]);
 
+  // ── RevenueCat user identification ───────────────────────────────────────
+  // Tag future purchases with the real numeric user id so the backend webhook
+  // can attribute them directly. Fires on both session restore and fresh login
+  // because user?.id becomes defined in both paths via setAuth().
+  useEffect(() => {
+    if (!rcKey || !user?.id) return;
+    Purchases.logIn(String(user.id)).catch((err) => {
+      if (__DEV__) console.warn('[revenuecat] logIn failed', err);
+    });
+  }, [user?.id]);
+
   useEffect(() => {
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data;

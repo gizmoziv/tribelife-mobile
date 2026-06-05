@@ -583,13 +583,23 @@ export default function ProfileScreen() {
 
       if (isPremiumEntitlement) {
         await refreshSession();
-        const maxBeacons =
-          useAuthStore.getState().capabilities?.limits.maxBeacons ?? 3;
-        Alert.alert(
-          'Welcome to Premium!',
-          `You can now run up to ${maxBeacons} beacons at a time. Thank you for supporting TribeLife!`,
-          [{ text: 'Awesome!' }],
-        );
+        const caps = useAuthStore.getState().capabilities;
+        const isPremiumNow = !!caps?.isPremium;
+        const maxBeacons = caps?.limits.maxBeacons;
+
+        if (isPremiumNow && typeof maxBeacons === 'number') {
+          Alert.alert(
+            'Welcome to Premium!',
+            `You can now run up to ${maxBeacons} beacons at a time. Thank you for supporting TribeLife!`,
+            [{ text: 'Awesome!' }],
+          );
+        } else {
+          Alert.alert(
+            'Purchase Received',
+            'Your purchase went through. Premium will activate shortly — if it does not appear within a few minutes, tap Restore Purchase or contact support.',
+            [{ text: 'OK' }],
+          );
+        }
       }
     } catch (err: any) {
       if (!err.userCancelled) {
@@ -1037,7 +1047,7 @@ export default function ProfileScreen() {
                   <Text
                     style={[styles.premiumDesc, { color: colors.textMuted }]}
                   >
-                    {`\u2022 Run up to ${limits?.maxBeacons ?? 3} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
+                    {`\u2022 Run up to ${limits?.maxBeacons ?? 'more'} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
                   </Text>
                   <Text
                     style={[
