@@ -1,0 +1,159 @@
+// generate-region-globes.mjs
+//
+// BUILD-TIME ONLY — never imported by app/runtime code.
+//
+// Usage: node scripts/generate-region-globes.mjs
+//   Run from tribelife-mobile/ to (re)bake constants/regionGlobes.generated.ts.
+//
+// Data source:
+//   URL:     https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/cultural/ne_110m_admin_0_countries.json
+//   Format:  GeoJSON FeatureCollection (already GeoJSON — no topojson conversion needed)
+//   License: Public Domain (CC0) — Natural Earth data is made with natural earth.
+//            Free vector and raster map data @ naturalearthdata.com.
+//   Vendored at: scripts/vendor/ne_110m_admin_0_countries.json for reproducible offline runs.
+//
+// Per-region TUNABLES: each region entry has { rotateLon, rotateLat, scale }.
+//   rotateLon/rotateLat: the geographic centroid of the region (longitude, latitude).
+//     d3-geo orthographic rotation is [-rotateLon, -rotateLat] (negated convention).
+//   scale: controls the zoom/tight framing — higher = more zoomed in.
+//     These three numbers are the knobs to adjust if a region looks too small or off-center
+//     after viewing on device. Edit, then re-run: node scripts/generate-region-globes.mjs.
+
+import { readFileSync, writeFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import * as d3geo from 'd3-geo';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, '..');
+
+// ── Load vendored geometry ────────────────────────────────────────────────────
+const vendorPath = join(__dirname, 'vendor', 'ne_110m_admin_0_countries.json');
+const rawData = JSON.parse(readFileSync(vendorPath, 'utf8'));
+
+// Determine country-identity key by inspecting the first feature
+const sampleProps = rawData.features[0]?.properties ?? {};
+const identityKey = 'ISO_A2' in sampleProps ? 'ISO_A2' : 'iso_a2';
+console.log(`[generate-region-globes] Using country identity key: ${identityKey}`);
+console.log(`[generate-region-globes] Feature count: ${rawData.features.length}`);
+
+// Data is already GeoJSON FeatureCollection — use directly.
+const worldCollection = rawData;
+
+// ── Region config — 3 prototype slugs only ───────────────────────────────────
+//
+// TUNABLES per region: { rotateLon, rotateLat, scale }
+//   rotateLon: longitude of the region centroid (positive = East)
+//   rotateLat: latitude of the region centroid  (positive = North)
+//   scale:     zoom factor — higher number = more zoomed in, region fills more of disc.
+//              The default sphere (no scale override) at disc size 200 has scale ~100.
+//
+// Adjust these 3 numbers per region, re-run the generator, reload the app.
+const REGION_CONFIG = {
+  'north-america': {
+    // centroid roughly over the US interior / Great Plains
+    rotateLon: 100,
+    rotateLat: 45,
+    scale: 280,
+    // ISO_A2 codes for the highlighted countries
+    countryCodes: ['US', 'CA', 'MX'],
+  },
+  'israel': {
+    // Israel is tiny — tight zoom required
+    rotateLon: -35.2,
+    rotateLat: -31.5,
+    scale: 3800,
+    countryCodes: ['IL'],
+  },
+  'uk-ireland': {
+    // British Isles centroid
+    rotateLon: 4,
+    rotateLat: -54,
+    scale: 1100,
+    countryCodes: ['GB', 'IE'],
+  },
+};
+
+// ── Disc dimensions ───────────────────────────────────────────────────────────
+const WIDTH = 200;
+const HEIGHT = 200;
+const CX = WIDTH / 2;
+const CY = HEIGHT / 2;
+const RADIUS = Math.min(WIDTH, HEIGHT) / 2;
+
+// ── Build paths per region ────────────────────────────────────────────────────
+const results = {};
+
+for (const [slug, cfg] of Object.entries(REGION_CONFIG)) {
+  console.log(`[generate-region-globes] Processing slug: ${slug}`);
+
+  // d3-geo orthographic projection rotated to region centroid.
+  // Convention: rotate takes [-longitude, -latitude].
+  const projection = d3geo.geoOrthographic()
+    .rotate([cfg.rotateLon, cfg.rotateLat])
+    .scale(cfg.scale)
+    .translate([CX, CY])
+    .clipAngle(90);
+
+  const pathGen = d3geo.geoPath(projection);
+
+  // World land — all countries as muted backdrop.
+  const worldPath = pathGen(worldCollection) ?? '';
+
+  // Region highlight — filter to only the region's country set.
+  const regionFeatures = {
+    type: 'FeatureCollection',
+    features: worldCollection.features.filter(
+      (f) => cfg.countryCodes.includes(f.properties[identityKey] ?? ''),
+    ),
+  };
+
+  console.log(
+    `  Found ${regionFeatures.features.length} of ${cfg.countryCodes.length} expected countries: ` +
+    regionFeatures.features.map((f) => f.properties[identityKey]).join(', '),
+  );
+
+  const regionPath = pathGen(regionFeatures) ?? '';
+
+  results[slug] = {
+    world: worldPath,
+    region: regionPath,
+    viewBox: `0 0 ${WIDTH} ${HEIGHT}`,
+  };
+}
+
+// ── Emit constants/regionGlobes.generated.ts ─────────────────────────────────
+const outputPath = join(ROOT, 'constants', 'regionGlobes.generated.ts');
+
+const lines = [
+  '// AUTO-GENERATED by scripts/generate-region-globes.mjs — DO NOT EDIT BY HAND.',
+  '// Re-bake: node scripts/generate-region-globes.mjs',
+  '//',
+  '// Source: Natural Earth 110m Admin-0 Countries (CC0 Public Domain)',
+  '//   https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/cultural/ne_110m_admin_0_countries.json',
+  '// Prototype regions: north-america, israel, uk-ireland only.',
+  '// No d3-geo or topojson imports — plain string literals only.',
+  '',
+  'export type RegionGlobeData = {',
+  '  world: string;',
+  '  region: string;',
+  '  viewBox: string;',
+  '};',
+  '',
+  `export const REGION_GLOBES: Record<string, RegionGlobeData> = {`,
+];
+
+for (const [slug, data] of Object.entries(results)) {
+  lines.push(`  '${slug}': {`);
+  lines.push(`    world: '${data.world}',`);
+  lines.push(`    region: '${data.region}',`);
+  lines.push(`    viewBox: '${data.viewBox}',`);
+  lines.push(`  },`);
+}
+
+lines.push('};');
+lines.push('');
+
+writeFileSync(outputPath, lines.join('\n'), 'utf8');
+console.log(`[generate-region-globes] Wrote ${outputPath}`);
+console.log('[generate-region-globes] Done.');
