@@ -56,7 +56,7 @@ const worldCollection = rawData;
 // projection below. Adjust lon/lat/scale per region, re-run, reload.
 const REGION_CONFIG = {
   'north-america': { lon: -100, lat: 50, scale: 175, match: ['USA', 'CAN', 'MEX'] },
-  'israel':        { lon: 35.2, lat: 31.5, scale: 3800, match: ['ISR'] },
+  'israel':        { lon: 35.2, lat: 31.5, scale: 3800, match: ['ISR', 'PSX'] },
   'europe':        { lon: 12, lat: 50, scale: 300,
                      match: (p) => p.CONTINENT === 'Europe' && !['GBR', 'IRL', 'RUS', 'ISL'].includes(p.ADM0_A3) },
   'uk-ireland':    { lon: -4, lat: 54, scale: 1100, match: ['GBR', 'IRL'] },
