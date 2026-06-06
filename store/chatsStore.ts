@@ -56,7 +56,10 @@ interface ChatsState {
 function rowMatchesEntity(row: ChatsRow, entityId: string | number): boolean {
   if (row.type === 'dm' || row.type === 'group') return row.conversationId === entityId;
   if (row.type === 'town_square') return entityId === 'town-square';
-  if (row.type === 'local_chat') return row.timezoneIana === entityId || getZoneForTimezone(row.timezoneIana) === entityId;
+  if (row.type === 'local_chat')
+    return row.timezoneIana === entityId
+      || row.timezoneZone === entityId
+      || getZoneForTimezone(row.timezoneIana) === entityId;
   if (row.type === 'globe_room') return row.roomSlug === entityId;
   if (row.type === 'timezone_room') return row.zoneSlug === entityId;
   return false;

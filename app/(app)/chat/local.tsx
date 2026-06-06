@@ -173,8 +173,10 @@ export default function LocalChatScreen() {
 
   // Phase 15 (D-01): subscribe to the consolidated zone room (e.g.
   // timezone:eastern-time) so users in NY/Detroit/Toronto see each other's
-  // messages. `user?.timezone` is still raw IANA — translated here.
-  const roomId = `timezone:${getZoneForTimezone(user?.timezone ?? 'UTC')}`;
+  // messages. Phase 17: prefer backend-stamped timezoneZone; fall back to
+  // getZoneForTimezone for old API responses that predate Phase 17.
+  const zoneSlug = user?.timezoneZone ?? getZoneForTimezone(user?.timezone ?? 'UTC');
+  const roomId = `timezone:${zoneSlug}`;
   const zoneName = timezoneToZoneName(user?.timezone ?? 'UTC');
 
   useEffect(() => {
@@ -212,11 +214,12 @@ export default function LocalChatScreen() {
   // using the same canonical slug (via `getZoneForTimezone()` server-side),
   // so passing raw IANA here means the read-mark and the unread-count query
   // never agree on the row key — the unread badge would never clear.
+  // Phase 17: reuse zoneSlug (stamped-first with fallback) instead of recomputing.
   useEffect(() => {
     if (user?.timezone) {
-      chats.markRoomRead(getZoneForTimezone(user.timezone)).catch(() => { /* silent */ });
+      chats.markRoomRead(zoneSlug).catch(() => { /* silent */ });
     }
-  }, [user?.timezone]);
+  }, [zoneSlug]);
 
   // Mark this screen as the active foreground context so the _layout.tsx
   // room:message listener won't increment the Chat tab bubble while the user

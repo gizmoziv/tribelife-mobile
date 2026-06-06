@@ -8,6 +8,9 @@ export interface User {
   avatarUrl: string | null;
   // isPremium removed (TIER-03) — consumers read capabilities.isPremium via useIsPremium()
   timezone: string | null;
+  // Phase 17: backend-stamped canonical zone slug (e.g. 'eastern-time').
+  // Optional — absent on old API responses; fallback to getZoneForTimezone(timezone).
+  timezoneZone?: string | null;
   acceptedTermsAt: string | null;
   handleUpdatedAt: string | null;
   bio: string | null;
@@ -205,6 +208,9 @@ export type ChatsRow =
       type: 'local_chat';
       roomSlug: 'local';
       timezoneIana: string;
+      // Phase 17: backend-stamped canonical zone slug. Optional — absent on old
+      // API responses; fallback to getZoneForTimezone(timezoneIana).
+      timezoneZone?: string;
       unreadCount: number;
       lastMessage: ChatsRowLastMessage | null;
     }

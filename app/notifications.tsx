@@ -125,7 +125,10 @@ function roomLabelForNotification(n: Notification): string | null {
       typeof d.timezoneIana === 'string' ? d.timezoneIana
       : typeof d.entityId === 'string' ? d.entityId : '';
     if (iana) {
-      const zone = getTimezoneZone(getZoneForTimezone(iana));
+      // Phase 17: prefer backend-stamped timezoneZone slug; fall back to
+      // getZoneForTimezone for notifications written before Phase 17.
+      const slug = typeof d.timezoneZone === 'string' ? d.timezoneZone : getZoneForTimezone(iana);
+      const zone = getTimezoneZone(slug);
       if (zone) return zone.displayName;
     }
   }

@@ -9,6 +9,10 @@
 // from the hardcoded zone config to avoid Android Hermes longGeneric drift.
 // The companion `timezoneLabel.ts` continues to handle the runtime locale lookup
 // for human labels — the two files are complementary.
+//
+// Phase 17 NOTE: members arrays are expanded to match the backend file.
+// The offset algorithm (computeStandardOffsetHours, OFFSET_TO_SLUG, FALLBACK_SLUG_CACHE)
+// is NOT mirrored here — Hermes Intl is unreliable for offset computation (Pitfall 4).
 
 export interface TimezoneZone {
   slug: string; // kebab-case, used as room key suffix
@@ -37,6 +41,8 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'America/Nome',
       'America/Sitka',
       'America/Yakutat',
+      // US/Canada completeness 2026-06-06
+      'America/Metlakatla',
     ],
   },
   {
@@ -55,6 +61,18 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'America/Phoenix',
       'America/Boise',
       'America/Mazatlan',
+      // Phase 17: well-known missing sub-zones (standard UTC-7, no DST)
+      'America/Whitehorse',
+      'America/Dawson_Creek',
+      'America/Fort_Nelson',
+      'America/Hermosillo',
+      'America/Cambridge_Bay',
+      // Phase 17 (prod coverage 2026-06-06): offset_fallback promotion — `US/Mountain` is a legacy alias for America/Denver
+      'US/Mountain',
+      // US/Canada completeness 2026-06-06
+      'America/Creston',
+      'America/Dawson',
+      'America/Inuvik',
     ],
   },
   {
@@ -67,6 +85,16 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'America/Mexico_City',
       'America/Regina',
       'America/Indiana/Knox',
+      // Phase 17: well-known missing sub-zones (standard UTC-6)
+      'America/Indiana/Tell_City',
+      'America/North_Dakota/Center',
+      'America/North_Dakota/New_Salem',
+      'America/North_Dakota/Beulah',
+      // US/Canada completeness 2026-06-06
+      'America/Menominee',
+      'America/Rankin_Inlet',
+      'America/Resolute',
+      'America/Swift_Current',
     ],
   },
   {
@@ -79,6 +107,24 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'America/Toronto',
       'America/Indianapolis',
       'America/Kentucky/Louisville',
+      // Phase 17: well-known missing sub-zones (standard UTC-5)
+      'America/Indiana/Indianapolis',
+      'America/Indiana/Marengo',
+      'America/Indiana/Petersburg',
+      'America/Indiana/Vevay',
+      'America/Indiana/Vincennes',
+      'America/Indiana/Winamac',
+      'America/Kentucky/Monticello',
+      'America/Louisville',
+      'America/Cancun',
+      'America/Jamaica',
+      'America/Panama',
+      'America/Grand_Turk',
+      'America/Havana',
+      'America/Nassau',
+      'America/Port-au-Prince',
+      // US/Canada completeness 2026-06-06
+      'America/Iqaluit',
     ],
   },
   {
@@ -90,6 +136,13 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'America/Bermuda',
       'America/Barbados',
       'America/Puerto_Rico',
+      // Phase 17: well-known missing sub-zones (standard UTC-4)
+      'America/Glace_Bay',
+      'America/Moncton',
+      'America/Goose_Bay',
+      // US/Canada completeness 2026-06-06
+      'America/Blanc-Sablon',
+      'America/St_Thomas',
     ],
   },
   {
@@ -149,6 +202,14 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'Atlantic/Reykjavik',
       'Africa/Casablanca',
       'Africa/Abidjan',
+      // Phase 17: well-known missing sub-zones (standard UTC+0)
+      'Europe/Lisbon',
+      'Atlantic/Canary',
+      'Europe/Isle_of_Man',
+      'Europe/Guernsey',
+      'Europe/Jersey',
+      // Phase 17 (prod coverage 2026-06-06): offset_fallback promotion — `Eire` is a legacy alias for Europe/Dublin
+      'Eire',
     ],
   },
   {
@@ -170,6 +231,15 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'Europe/Warsaw',
       'Europe/Prague',
       'Europe/Budapest',
+      // Phase 17: well-known missing sub-zones (standard UTC+1)
+      'Europe/Belgrade',
+      'Europe/Ljubljana',
+      'Europe/Bratislava',
+      'Europe/Zagreb',
+      'Europe/Sarajevo',
+      'Europe/Tirane',
+      // Phase 17 (prod coverage 2026-06-06): offset_fallback promotion — Africa/Lagos (WAT, UTC+1)
+      'Africa/Lagos',
     ],
   },
   {
@@ -183,6 +253,18 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'Africa/Cairo',
       'Africa/Johannesburg',
       'Africa/Harare',
+      // Phase 17: well-known missing sub-zones (standard UTC+2)
+      // NOTE: jerusalem-time (Asia/Jerusalem) stays in its own explicit entry below —
+      // these +2 IANAs are culturally EET, not Israel. Never add Jerusalem here.
+      'Europe/Kyiv',
+      'Europe/Kiev',
+      'Europe/Chisinau',
+      'Europe/Sofia',
+      'Europe/Tallinn',
+      'Europe/Riga',
+      'Europe/Vilnius',
+      'Asia/Nicosia',
+      'Asia/Beirut',
     ],
   },
   {
@@ -201,6 +283,10 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'Asia/Riyadh',
       'Asia/Baghdad',
       'Africa/Nairobi',
+      // Phase 17: well-known missing sub-zones (standard UTC+3)
+      'Asia/Amman',
+      'Asia/Damascus',
+      'Europe/Minsk',
     ],
   },
   // ── Asia / Pacific ───────────────────────────────────────────────────────
@@ -208,7 +294,12 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     slug: 'india-standard-time',
     displayName: 'India Standard Time',
     utcOffsetHours: 5.5,
-    members: ['Asia/Kolkata', 'Asia/Colombo'],
+    members: [
+      'Asia/Kolkata',
+      'Asia/Colombo',
+      // Phase 17: deprecated Kolkata alias — older Android devices emit this
+      'Asia/Calcutta',
+    ],
   },
   {
     slug: 'dubai-time',
@@ -223,6 +314,20 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
   //   members: ['Asia/Karachi'],
   // },
   {
+    slug: 'indochina-time',
+    displayName: 'Southeast Asia Time',
+    utcOffsetHours: 7,
+    members: [
+      'Asia/Bangkok',
+      'Asia/Jakarta',
+      'Asia/Ho_Chi_Minh',
+      'Asia/Saigon',
+      'Asia/Phnom_Penh',
+      'Asia/Vientiane',
+      'Asia/Pontianak',
+    ],
+  },
+  {
     slug: 'china-standard-time',
     displayName: 'China Standard Time',
     utcOffsetHours: 8,
@@ -232,6 +337,8 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'Asia/Hong_Kong',
       'Asia/Taipei',
       'Asia/Kuala_Lumpur',
+      // Phase 17 (prod coverage 2026-06-06): offset_fallback promotion — Asia/Manila (PHT, UTC+8)
+      'Asia/Manila',
     ],
   },
   {
@@ -239,6 +346,12 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
     displayName: 'Japan Standard Time',
     utcOffsetHours: 9,
     members: ['Asia/Tokyo', 'Asia/Seoul'],
+  },
+  {
+    slug: 'australia-central-time',
+    displayName: 'Australian Central Time',
+    utcOffsetHours: 9.5,
+    members: ['Australia/Adelaide', 'Australia/Darwin', 'Australia/Broken_Hill'],
   },
   {
     slug: 'australia-eastern-time',
@@ -249,6 +362,8 @@ export const TIMEZONE_ZONES: TimezoneZone[] = [
       'Australia/Melbourne',
       'Australia/Brisbane',
       'Pacific/Port_Moresby',
+      // Phase 17: well-known missing sub-zone (standard UTC+10)
+      'Australia/Hobart',
     ],
   },
   {
@@ -276,6 +391,13 @@ const IANA_TO_SLUG = new Map<string, ZoneSlug>(
 /**
  * Translate an IANA timezone string to a canonical zone slug.
  * Falls back to 'utc' for any IANA not in the curated map (with console.warn).
+ *
+ * Phase 17 (TZONE-04): This function is now a FALLBACK / display-label helper
+ * only. The backend stamps the resolved slug as `timezoneZone` on every
+ * IANA-bearing API response. Mobile read-sites (local.tsx, chatsStore.ts,
+ * notifications.tsx) prefer the stamped slug and call this only when the field
+ * is absent (old API responses pre-Phase-17). Do NOT add Intl/offset logic here
+ * — Hermes Intl is unreliable for offset computation (Pitfall 4, 17-RESEARCH §1).
  */
 export function getZoneForTimezone(iana: string): ZoneSlug {
   const slug = IANA_TO_SLUG.get(iana);
