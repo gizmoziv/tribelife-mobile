@@ -26,7 +26,7 @@ import { REGION_GLOBES } from '@/constants/regionGlobes.generated';
 // if the glow reads too faint or too harsh at real tile size on device.
 const GLOW_STROKE_WIDTH = 6;   // width of the accent underlay stroke (glow halo)
 const GLOW_STROKE_OPACITY = 0.35; // opacity of the glow underlay
-const WORLD_FILL = 'rgba(100,120,160,0.35)';  // muted world landmass color
+const WORLD_FILL = 'rgba(120,140,175,0.45)';  // muted world landmass color
 const OCEAN_FILL = 'rgba(15,30,70,0.80)';     // disc background (ocean)
 
 export type RegionGlobeProps = {

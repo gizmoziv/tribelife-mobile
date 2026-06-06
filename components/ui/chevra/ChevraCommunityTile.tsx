@@ -18,11 +18,6 @@ import { RegionGlobe } from '@/components/ui/chevra/RegionGlobe';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import type { ChevraRow } from '@/types';
 
-// Prototype allow-list: only these 3 slugs get the globe avatar; all others
-// keep RegionTile. Trivially extended by adding slugs here once the CPO
-// approves the on-device legibility (see scripts/generate-region-globes.mjs).
-const GLOBE_PROTOTYPE_SLUGS = new Set(['north-america', 'israel', 'uk-ireland']);
-
 // Plan 15-05 (TZRM-02): ChevraCommunityTile now renders all three ChevraRow
 // variants — globe_room, group, and the new timezone_room (added by Plan
 // 15-04 backend + types mirror). Paywalled timezone_room rows render with a
@@ -81,9 +76,10 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
     eyebrow = 'COMMUNITY';
     accent = COLORS.primary;
   } else if (item.kind === 'globe_room') {
-    avatar = GLOBE_PROTOTYPE_SLUGS.has(item.slug)
-      ? <RegionGlobe slug={item.slug} size={56} />
-      : <RegionTile slug={item.slug} size={56} />;
+    // All 7 region globes are baked. RegionGlobe self-scopes: it renders the
+    // baked globe for slugs in REGION_GLOBES and falls back to the RegionTile
+    // abbreviation for any slug that isn't (e.g. town-square).
+    avatar = <RegionGlobe slug={item.slug} size={56} />;
     displayName = item.displayName;
     metaCount = item.participantCount;
     metaLabel = 'online';
