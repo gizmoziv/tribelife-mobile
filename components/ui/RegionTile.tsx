@@ -22,12 +22,16 @@ type RegionTileProps = {
   slug: string;
   size?: number;
   showRing?: boolean;
+  // Phase 18: explicit abbreviation override for slugs not in GLOBE_ROOM_VISUALS
+  // (e.g. timezone-zone fallback when a country flag is unavailable). Prevents
+  // the generic '··' placeholder from ever rendering.
+  abbreviation?: string;
 };
 
-export function RegionTile({ slug, size = 44, showRing = true }: RegionTileProps) {
+export function RegionTile({ slug, size = 44, showRing = true, abbreviation: abbrOverride }: RegionTileProps) {
   const { isDark, colors } = useTheme();
   const visual = GLOBE_ROOM_VISUALS[slug];
-  const abbreviation = visual?.abbreviation ?? '··';
+  const abbreviation = visual?.abbreviation ?? abbrOverride ?? '··';
 
   const gradient = isDark ? REGION_TILE_GRADIENT_DARK : REGION_TILE_GRADIENT_LIGHT;
   const labelColor = isDark ? '#FFFFFF' : '#1F2940';

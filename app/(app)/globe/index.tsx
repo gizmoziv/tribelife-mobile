@@ -1,22 +1,19 @@
-import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   SafeAreaView,
   ActivityIndicator,
   TextInput,
-  Dimensions,
   TouchableOpacity,
   Alert,
 } from 'react-native';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import Purchases from 'react-native-purchases';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useGlobeStore } from '@/store/globeStore';
 import { useAuthStore } from '@/store/authStore';
-import { globeApi } from '@/services/api';
 import {
   connectSocket,
   onGlobeParticipants,
@@ -25,217 +22,106 @@ import {
 } from '@/services/socket';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
-import { ChevraCommunityTile } from '@/components/ui/chevra/ChevraCommunityTile';
+import { useChevraSection } from '@/hooks/useChevraSection';
+import { ChevraSection } from '@/components/ui/chevra/ChevraSection';
 import { UpgradeModal } from '@/components/ui/UpgradeModal';
-import type { ChevraRow, ChevraListResponse } from '@/types';
-
-const TILE_GAP = 12;
+import type { ChevraRow } from '@/types';
 
 const TIMEZONE_UPGRADE_BODY =
   'Premium members can join timezone rooms beyond their own — connect with Jews in different parts of the world.';
 
+// Stable key across the three sections (matches the legacy keyExtractor so a row
+// that ever moves between sections can't collide).
+function keyForItem(item: ChevraRow): string {
+  if (item.kind === 'group') return `group_${item.conversationId}`;
+  if (item.kind === 'timezone_room') return `timezone_room_${item.slug}`;
+  return `globe_${item.slug}`;
+}
+
 export default function GlobeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const {
-    rooms,
-    isLoadingRooms,
-    unreadCounts,
-    isMember,
-    setRooms,
-    setLoadingRooms,
-    updateParticipantCount,
-    markRoomRead,
-  } = useGlobeStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [publicGroupRows, setPublicGroupRows] = useState<ChevraRow[]>([]);
-  // Plan 15-05 (TZRM-02): keep timezone_room rows in local state so the
-  // dedicated section/tile can render them with the paywall + join handlers.
-  const [timezoneRoomRows, setTimezoneRoomRows] = useState<
-    Extract<ChevraRow, { kind: 'timezone_room' }>[]
-  >([]);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
-
-  const screenW = Dimensions.get('window').width;
-  const tileWidth = (screenW - SPACING.page * 2 - TILE_GAP) / 2;
-
-  // Tracks whether the first Chevra fetch has succeeded. Drives the
-  // cold-start full-screen spinner; subsequent fetches refresh silently.
-  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedQuery(searchQuery), 200);
     return () => clearTimeout(handle);
   }, [searchQuery]);
 
-  const fetchChevra = useCallback(() => {
-    // Only show the full-screen spinner on cold start (before the first
-    // successful fetch). Subsequent refetches (focus, search-debounce,
-    // member-change) refresh the list silently so the search input keeps
-    // focus and content doesn't flash. `hasLoadedOnceRef` survives empty
-    // result sets (e.g., a search that matches no globe rooms drops
-    // globeStore.rooms to []) so we don't relapse into the cold-start path.
-    if (!hasLoadedOnceRef.current) setLoadingRooms(true);
-    // Phase 14 SRCH-03: pass debouncedQuery to server for title filtering.
-    // Empty/whitespace-only q omits the param (globeApi.rooms trims internally).
-    globeApi
-      .rooms({ q: debouncedQuery })
-      .then((response) => {
-        const data = (response as ChevraListResponse).rooms;
-
-        const globeRoomRows = data.filter(
-          (r): r is Extract<ChevraRow, { kind: 'globe_room' }> =>
-            r.kind === 'globe_room',
-        );
-        const groupRows = data.filter(
-          (r): r is Extract<ChevraRow, { kind: 'group' }> => r.kind === 'group',
-        );
-        // Plan 15-05 (TZRM-02): pluck timezone_room rows into their own bucket
-        // — backend Plan 15-04 already filters caller-native + premium-joined,
-        // so we render whatever the server returns (D-08 trust-server).
-        const tzRoomRows = data.filter(
-          (r): r is Extract<ChevraRow, { kind: 'timezone_room' }> =>
-            r.kind === 'timezone_room',
-        );
-
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const storeRooms = globeRoomRows.map(
-          ({ kind, ...rest }) => rest as Parameters<typeof setRooms>[0][0],
-        );
-        setRooms(storeRooms);
-
-        useGlobeStore
-          .getState()
-          .setMembershipMap(
-            Object.fromEntries(globeRoomRows.map((r) => [r.slug, r.isMember])),
-          );
-
-        setPublicGroupRows(groupRows);
-        setTimezoneRoomRows(tzRoomRows);
-        hasLoadedOnceRef.current = true;
-      })
-      .catch(() => {})
-      .finally(() => setLoadingRooms(false));
-  }, [setRooms, setLoadingRooms, debouncedQuery]);
-
-  // Refetch Chevra when a group member-change notification arrives so the
-  // memberCount on group tiles tracks live joins/leaves instead of waiting
-  // for the next tab focus. Body-suffix match avoids coupling to a structured
-  // event type the backend doesn't currently emit.
-  useEffect(() => {
-    const cleanup = onChatNotification((raw) => {
-      const body = (raw as { body?: string } | null)?.body;
-      if (typeof body === 'string' && /(joined|left) the community$/.test(body)) {
-        fetchChevra();
-      }
-    });
-    return cleanup;
-  }, [fetchChevra]);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchChevra();
-    }, [fetchChevra]),
-  );
-
-  // Phase 14 SRCH-03: refetch when debouncedQuery changes (server-side filter).
-  // useFocusEffect handles initial load; this handles query changes while focused.
-  useEffect(() => {
-    fetchChevra();
-  }, [debouncedQuery]);
-
-  useEffect(() => {
-    const cleanups: (() => void)[] = [];
-
-    connectSocket().then(() => {
-      const offParticipants = onGlobeParticipants(({ slug, count }) => {
-        updateParticipantCount(slug, count);
-      });
-      cleanups.push(offParticipants);
-
-      const offChevraMsg = onChevraGroupMessage((payload) => {
-        setPublicGroupRows((prev) => {
-          const idx = prev.findIndex(
-            (r) =>
-              r.kind === 'group' && r.conversationId === payload.conversationId,
-          );
-          if (idx === -1) return prev;
-          const next = prev.slice();
-          const target = next[idx];
-          if (target.kind !== 'group') return prev;
-          next[idx] = { ...target, lastMessage: payload.lastMessage };
-          return next;
-        });
-      });
-      cleanups.push(offChevraMsg);
-    });
-
-    return () => {
-      cleanups.forEach((fn) => fn());
-    };
-  }, []);
+  // One paging hook per discovery carousel. Each refetches page 0 when
+  // debouncedQuery changes (server-side ?q= filter).
+  const regions = useChevraSection('regions', debouncedQuery);
+  const chavurot = useChevraSection('chavurot', debouncedQuery);
+  const timezones = useChevraSection('timezones', debouncedQuery);
 
   const tabBarSpace = useTabBarSpace();
 
-  const visibleGlobeRooms = useMemo(
-    () =>
-      rooms.filter(
-        (r) => r.slug !== 'town-square' && !(isMember[r.slug] ?? r.isMember),
-      ),
-    [rooms, isMember],
-  );
+  const regionsReset = regions.reset;
+  const chavurotReset = chavurot.reset;
+  const timezonesReset = timezones.reset;
+  const regionsSetRows = regions.setRows;
+  const chavurotSetRows = chavurot.setRows;
 
-  const visiblePublicGroups = useMemo(
-    () => publicGroupRows.filter((r) => r.kind === 'group' && !r.isMember),
-    [publicGroupRows],
-  );
-
-  // Plan 15-05 (TZRM-02): combinedRows now includes timezone_room rows. The
-  // backend already filters caller-native + premium-joined out (Plan 15-04
-  // D-10), so we render whatever arrived. Free callers receive paywalled rows
-  // with lastMessage=null (D-03 server-enforced).
-  const combinedRows = useMemo(
-    (): ChevraRow[] => [
-      ...visibleGlobeRooms.map((r) => ({ kind: 'globe_room' as const, ...r })),
-      ...visiblePublicGroups.filter(
-        (r): r is Extract<ChevraRow, { kind: 'group' }> => r.kind === 'group',
-      ),
-      ...timezoneRoomRows,
-    ],
-    [visibleGlobeRooms, visiblePublicGroups, timezoneRoomRows],
-  );
-
-  // Phase 14 SRCH-03: server now handles filtering via ?q=. combinedRows from
-  // the server response already reflect the query — no client-side .filter needed.
-  const isSearching = debouncedQuery.trim().length > 0;
-  // Defensive dedup by key — a transient state mid-update (multiple fetchChevra
-  // triggers racing) can produce duplicate entries that React flags as
-  // "two children with the same key" under numColumns row grouping.
-  const filteredRows = useMemo(() => {
-    const seen = new Set<string>();
-    const out: ChevraRow[] = [];
-    for (const r of combinedRows) {
-      const key =
-        r.kind === 'group'
-          ? `group_${r.conversationId}`
-          : r.kind === 'timezone_room'
-            ? `timezone_room_${r.slug}`
-            : `globe_${r.slug}`;
-      if (seen.has(key)) {
-        if (__DEV__) console.warn('[chevra] dropped duplicate row', key);
-        continue;
+  // Refresh on tab re-focus (skip the first focus — the hooks already fetched on
+  // mount, so resetting here too would double-fetch).
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
       }
-      seen.add(key);
-      out.push(r);
-    }
-    return out;
-  }, [combinedRows]);
+      regionsReset();
+      chavurotReset();
+      timezonesReset();
+    }, [regionsReset, chavurotReset, timezonesReset]),
+  );
 
-  // Plan 15-05 (TZRM-01): RevenueCat purchase flow — mirror of profile/index.tsx
-  // handleUpgrade (the canonical reference impl). On success we refresh caps so
-  // the user's next Chevra tap fires through the joinable branch.
+  // Live socket updates patched directly onto the relevant section's rows.
+  useEffect(() => {
+    const cleanups: (() => void)[] = [];
+    connectSocket().then(() => {
+      cleanups.push(
+        onGlobeParticipants(({ slug, count }) => {
+          regionsSetRows((prev) =>
+            prev.map((r) =>
+              r.kind === 'globe_room' && r.slug === slug
+                ? { ...r, participantCount: count }
+                : r,
+            ),
+          );
+        }),
+      );
+      cleanups.push(
+        onChevraGroupMessage((payload) => {
+          chavurotSetRows((prev) =>
+            prev.map((r) =>
+              r.kind === 'group' && r.conversationId === payload.conversationId
+                ? { ...r, lastMessage: payload.lastMessage }
+                : r,
+            ),
+          );
+        }),
+      );
+    });
+    return () => cleanups.forEach((fn) => fn());
+  }, [regionsSetRows, chavurotSetRows]);
+
+  // A community join/leave shifts the Chavurot discovery set — refetch page 0.
+  useEffect(() => {
+    return onChatNotification((raw) => {
+      const body = (raw as { body?: string } | null)?.body;
+      if (typeof body === 'string' && /(joined|left) the community$/.test(body)) {
+        chavurotReset();
+      }
+    });
+  }, [chavurotReset]);
+
+  // RevenueCat purchase flow — on success, refresh caps and refetch the
+  // timezones carousel so the paywalled row the user tapped becomes joinable.
   const handleUpgrade = useCallback(async () => {
     try {
       const offerings = await Purchases.getOfferings();
@@ -252,9 +138,7 @@ export default function GlobeScreen() {
         customerInfo.entitlements.active['premium'] !== undefined;
       if (isPremiumEntitlement) {
         await useAuthStore.getState().refreshCapabilities();
-        // Refetch Chevra so the row the user just paywall-tapped on now
-        // appears as joinable (paywalled=false) on next render.
-        fetchChevra();
+        timezonesReset();
       }
     } catch (err: any) {
       if (!err?.userCancelled) {
@@ -264,66 +148,49 @@ export default function GlobeScreen() {
         );
       }
     }
-  }, [fetchChevra]);
+  }, [timezonesReset]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: ChevraRow }) => (
-      <ChevraCommunityTile
-        item={item}
-        width={tileWidth}
-        onPress={() => {
-          if (item.kind === 'group') {
-            router.push({
-              pathname: '/(app)/globe/group/[conversationId]',
-              params: {
-                conversationId: item.conversationId.toString(),
-                isGroup: 'true',
-                groupName: item.name,
-                isMember: item.isMember ? 'true' : 'false',
-                inviteSlug: item.inviteSlug,
-              },
-            });
-            return;
-          }
-          if (item.kind === 'timezone_room') {
-            // Paywalled → UpgradeModal. Eligible → navigate to preview; the
-            // "Join Chat" button on the room screen performs the actual join
-            // (matches the globe_room read-only-preview pattern from Phase 11
-            // D-12). Backend D-08 remains the authoritative gate.
-            if (item.paywalled) {
-              setUpgradeModalVisible(true);
-              return;
-            }
-            router.push(`/(app)/globe/${item.slug}`);
-            return;
-          }
-          // globe_room
-          if ((unreadCounts[item.slug] ?? 0) > 0) markRoomRead(item.slug);
-          router.push(`/globe/${item.slug}`);
-        }}
-      />
-    ),
-    [router, unreadCounts, markRoomRead, tileWidth],
+  const handlePressItem = useCallback(
+    (item: ChevraRow) => {
+      if (item.kind === 'group') {
+        router.push({
+          pathname: '/(app)/globe/group/[conversationId]',
+          params: {
+            conversationId: item.conversationId.toString(),
+            isGroup: 'true',
+            groupName: item.name,
+            isMember: item.isMember ? 'true' : 'false',
+            inviteSlug: item.inviteSlug,
+          },
+        });
+        return;
+      }
+      if (item.kind === 'timezone_room') {
+        // Paywalled → UpgradeModal. Eligible → preview screen; its "Join Chat"
+        // button performs the actual join (backend remains the authoritative gate).
+        if (item.paywalled) {
+          setUpgradeModalVisible(true);
+          return;
+        }
+        router.push(`/(app)/globe/${item.slug}`);
+        return;
+      }
+      // globe_room (region)
+      router.push(`/globe/${item.slug}`);
+    },
+    [router],
   );
 
-  const keyExtractor = useCallback((item: ChevraRow) => {
-    if (item.kind === 'group') return `group_${item.conversationId}`;
-    if (item.kind === 'timezone_room') return `timezone_room_${item.slug}`;
-    return `globe_${item.slug}`;
-  }, []);
-
-  if (isLoadingRooms) {
-    return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
-      >
-        <Stack.Screen options={{ title: 'Chevra', headerBackTitle: 'Back' }} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={COLORS.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const isSearching = debouncedQuery.trim().length > 0;
+  const initialLoading =
+    regions.isLoading && chavurot.isLoading && timezones.isLoading;
+  const allEmpty =
+    !regions.isLoading &&
+    !chavurot.isLoading &&
+    !timezones.isLoading &&
+    regions.rows.length === 0 &&
+    chavurot.rows.length === 0 &&
+    timezones.rows.length === 0;
 
   return (
     <SafeAreaView
@@ -363,25 +230,45 @@ export default function GlobeScreen() {
           )}
         </View>
       </View>
-      {filteredRows.length === 0 && isSearching ? (
+
+      {initialLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
+      ) : allEmpty ? (
         <View style={styles.emptyMatches}>
           <Text style={[styles.emptyMatchesText, { color: colors.textMuted }]}>
-            {'No matches for "' + debouncedQuery + '"'}
+            {isSearching
+              ? 'No matches for "' + debouncedQuery + '"'
+              : 'No communities to discover right now.'}
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={filteredRows}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.listContent}
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
-          // ListHeaderComponent={isSearching ? null : <ChevraTodaySection />}
-          ListFooterComponent={<View style={{ height: tabBarSpace }} />}
-        />
+        >
+          <ChevraSection
+            title="Communities"
+            state={chavurot}
+            onPressItem={handlePressItem}
+            keyForItem={keyForItem}
+          />
+          <ChevraSection
+            title="Timezone Chats"
+            state={timezones}
+            onPressItem={handlePressItem}
+            keyForItem={keyForItem}
+          />
+          <ChevraSection
+            title="Regions"
+            state={regions}
+            onPressItem={handlePressItem}
+            keyForItem={keyForItem}
+          />
+        </ScrollView>
       )}
+
       <UpgradeModal
         visible={upgradeModalVisible}
         onClose={() => setUpgradeModalVisible(false)}
@@ -395,13 +282,8 @@ export default function GlobeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  listContent: {
-    paddingHorizontal: SPACING.page,
+  scrollContent: {
     paddingTop: SPACING.sm,
-  },
-  columnWrapper: {
-    gap: TILE_GAP,
-    marginBottom: TILE_GAP,
   },
   searchRow: {
     paddingHorizontal: SPACING.page,
@@ -416,7 +298,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     fontSize: 14,
   },
-  // Phase 14 polish: clear-X button overlay on Chevra search input
   searchInputWrapper: {
     position: 'relative',
   },

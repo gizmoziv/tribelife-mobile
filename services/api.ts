@@ -16,6 +16,8 @@ import type {
   ReactionGroup,
   ChatsListResponse,
   SearchResponse,
+  ChevraSection,
+  ChevraSectionResponse,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -406,6 +408,18 @@ export const globeApi = {
     const q = opts?.q?.trim();
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request<{ rooms: GlobeRoom[] }>(`/api/globe/rooms${qs}`);
+  },
+
+  // Phase 18: paginated single-section discovery fetch for the Chevra carousels.
+  // Mirrors the same GET /api/globe/rooms endpoint with ?section/limit/offset —
+  // the legacy `rooms()` call (no section) is untouched.
+  section: (opts: { section: ChevraSection; q?: string; offset?: number; limit?: number }) => {
+    const params = new URLSearchParams({ section: opts.section });
+    const q = opts.q?.trim();
+    if (q) params.set('q', q);
+    if (opts.offset != null) params.set('offset', String(opts.offset));
+    if (opts.limit != null) params.set('limit', String(opts.limit));
+    return request<ChevraSectionResponse>(`/api/globe/rooms?${params.toString()}`);
   },
 
   // Phase 14 D-04: aroundMessageId for tap-to-jump from search results.

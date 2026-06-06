@@ -95,6 +95,42 @@ export const GLOBE_ROOM_TINTS: Record<string, string> = Object.fromEntries(
   Object.entries(GLOBE_ROOM_VISUALS).map(([slug, v]) => [slug, v.accent]),
 );
 
+// ── Phase 18: timezone-zone → representative country flag (ISO-3166 alpha-2) ──
+// Timezone discovery tiles render the flag of the main country in each zone
+// instead of the generic '··' RegionTile abbreviation. Keys mirror the backend
+// TIMEZONE_ZONES slugs (tribelife-backend/src/config/timezoneZones.ts). Several
+// North-American zones share 'US' (and the two AU zones share 'AU') by design —
+// the tile's text label ("Pacific Time" etc.) disambiguates them. A slug with no
+// entry here falls back to a derived letter tile (never '··'). 'utc' is never
+// surfaced in discovery so it is intentionally omitted.
+export const TIMEZONE_FLAG_COUNTRY: Record<string, string> = {
+  'hawaii-time': 'US',
+  'alaska-time': 'US',
+  'pacific-time': 'US',
+  'mountain-time': 'US',
+  'central-time': 'US',
+  'eastern-time': 'US',
+  'atlantic-time': 'CA',
+  'newfoundland-time': 'CA',
+  'brasilia-time': 'BR',
+  'argentina-time': 'AR',
+  'chile-time': 'CL',
+  'colombia-peru-time': 'CO',
+  'greenwich-mean-time': 'GB',
+  'central-european-time': 'FR',
+  'eastern-european-time': 'GR',
+  'jerusalem-time': 'IL',
+  'moscow-time': 'RU',
+  'india-standard-time': 'IN',
+  'dubai-time': 'AE',
+  'indochina-time': 'TH',
+  'china-standard-time': 'CN',
+  'japan-standard-time': 'JP',
+  'australia-central-time': 'AU',
+  'australia-eastern-time': 'AU',
+  'new-zealand-time': 'NZ',
+};
+
 export const FONTS = {
   light: 'PlusJakartaSans_300Light',
   regular: 'PlusJakartaSans_400Regular',

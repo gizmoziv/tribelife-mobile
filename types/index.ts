@@ -306,6 +306,21 @@ export interface ChevraListResponse {
   rooms: ChevraRow[];
 }
 
+// ── Phase 18: per-section Chevra pagination ─────────────────────────────────
+// MIRROR: tribelife-backend/src/routes/globe.ts buildChevraSection() response.
+// The Chevra screen now renders three independent horizontal carousels, each
+// paged by offset/limit. `section` echoes the requested carousel; `rows` reuses
+// the existing per-kind ChevraRow shapes.
+export type ChevraSection = 'regions' | 'chavurot' | 'timezones';
+
+export interface ChevraSectionResponse {
+  section: ChevraSection;
+  rows: ChevraRow[];
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
+
 // ── Phase 14: Chat Search — SearchResult discriminated union ───────────────
 // MIRROR: tribelife-backend/src/types/searchResult.ts — keep in sync.
 // Hand-mirrored shape (no shared types package — Phase 10 ChatNotification

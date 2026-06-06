@@ -13,6 +13,7 @@ import {
 } from '@/constants';
 import { useTheme } from '@/contexts/ThemeContext';
 import { RegionTile } from '@/components/ui/RegionTile';
+import { TimezoneFlag } from '@/components/ui/chevra/TimezoneFlag';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import type { ChevraRow } from '@/types';
 
@@ -71,7 +72,7 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
     displayName = item.name;
     metaCount = item.memberCount;
     metaLabel = item.memberCount === 1 ? 'member' : 'members';
-    eyebrow = 'GROUP';
+    eyebrow = 'COMMUNITY';
     accent = COLORS.primary;
   } else if (item.kind === 'globe_room') {
     avatar = <RegionTile slug={item.slug} size={56} />;
@@ -81,8 +82,9 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
     eyebrow = 'REGION';
     accent = GLOBE_ROOM_VISUALS[item.slug]?.accent ?? COLORS.primary;
   } else {
-    // Phase 15 TZRM-02: timezone_room variant
-    avatar = <RegionTile slug={item.slug} size={56} />;
+    // Phase 15 TZRM-02: timezone_room variant.
+    // Phase 18: country flag instead of the '··' RegionTile placeholder.
+    avatar = <TimezoneFlag slug={item.slug} size={56} />;
     displayName = item.displayName;
     metaCount = item.memberCount;
     metaLabel = item.memberCount === 1 ? 'member' : 'members';
