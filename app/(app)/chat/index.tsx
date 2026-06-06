@@ -60,6 +60,8 @@ import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { RegionTile } from '@/components/ui/RegionTile';
 import { LocalRoomTile } from '@/components/ui/LocalRoomTile';
+import { TimezoneFlag } from '@/components/ui/chevra/TimezoneFlag';
+import { RegionGlobe } from '@/components/ui/chevra/RegionGlobe';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
@@ -842,17 +844,22 @@ function ChatsListRow({
     subtitle = row.lastMessage?.preview ?? 'A global space';
     isGlobalRow = true;
   } else if (row.type === 'globe_room') {
-    leadingIcon = <RegionTile slug={row.roomSlug} size={44} />;
+    // quick-260606-qtd: RegionGlobe self-scopes — it renders the baked
+    // orthographic globe only for the prototype slugs present in REGION_GLOBES
+    // (north-america, israel, uk-ireland) and falls back to the RegionTile
+    // abbreviation for all other region slugs (town-square, europe,
+    // latin-america, australia-nz, south-africa). No allow-list needed here.
+    leadingIcon = <RegionGlobe slug={row.roomSlug} size={44} />;
     title = row.displayName;
     subtitle = row.lastMessage?.preview ?? 'Regional community';
     // showLock stays `false` — Globe rooms aren't private (Phase 9 D-05 only applies to groups).
   } else if (row.type === 'timezone_room') {
-    // Phase 15 (TZRM-01): joined non-native timezone room. RegionTile takes
-    // any slug — for timezone slugs (e.g. 'eastern-time') it falls back to
-    // the default '··' abbreviation since GLOBE_ROOM_VISUALS only holds the
-    // 7 globe rooms. UI polish for timezone-specific abbreviations is
-    // additive (not in Plan 15-05 scope).
-    leadingIcon = <RegionTile slug={row.zoneSlug} size={44} />;
+    // Phase 15 (TZRM-01): joined non-native timezone room.
+    // quick-260606-qtd: TimezoneFlag renders the representative country flag for
+    // the zone slug (e.g. 'eastern-time' → US, 'jerusalem-time' → IL) via
+    // TIMEZONE_FLAG_COUNTRY, and gracefully falls back to a RegionTile
+    // abbreviation tile for any zone with no flag mapping (never '··').
+    leadingIcon = <TimezoneFlag slug={row.zoneSlug} size={44} />;
     title = row.displayName;
     subtitle = row.lastMessage?.preview ?? 'Timezone community';
   } else if (row.type === 'dm') {
