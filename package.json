@@ -35,6 +35,7 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.8",
     "expo-localization": "~16.1.0",
+    "expo-location": "~19.0.8",
     "expo-media-library": "~18.2.1",
     "expo-notifications": "~0.31.0",
     "expo-router": "~5.0.0",

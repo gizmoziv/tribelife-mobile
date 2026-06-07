@@ -30,7 +30,8 @@
             ]
           }
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "TribeLife uses your location to show accurate Shabbat candle-lighting times."
       }
     },
     "android": {
@@ -88,7 +89,8 @@
         }
       ],
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "plugins": [
@@ -111,7 +113,13 @@
           "photosPermission": "TribeLife needs access to your photos to set your profile picture."
         }
       ],
-      "expo-build-properties"
+      "expo-build-properties",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TribeLife uses your location to show accurate Shabbat candle-lighting times."
+        }
+      ]
     ],
     "scheme": "tribelife",
     "extra": {

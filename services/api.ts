@@ -547,6 +547,65 @@ export const newsApi = {
     ),
 };
 
+// ── Tribe Today ────────────────────────────────────────────────────────────────
+
+export type ShabbatInfo = {
+  /** Formatted candle-lighting time, e.g. "7:42 PM" */
+  candleLightingTime: string;
+  /** Formatted havdalah time, e.g. "8:51 PM" */
+  havdalahTime: string;
+  /** Human-readable location label, e.g. "New York, US" */
+  locationLabel: string;
+  /** Days until next Shabbat (0 = today/tonight) */
+  daysUntil: number;
+  /** Parsha name in English, e.g. "Parashat Naso" */
+  parshaName: string;
+  /** Parsha name in Hebrew, e.g. "פרשת נשא" */
+  parshaHebrew: string;
+  /** Hebrew calendar date string */
+  hebrewDate: string;
+  /** Gregorian day label, e.g. "Sat, Jun 7" */
+  gregorianLabel: string;
+};
+
+export type DafYomi = {
+  /** Tractate English name, e.g. "Sukkah" */
+  tractate: string;
+  /** Daf page, e.g. "12a" */
+  page: string;
+  /** Full English display name, e.g. "Sukkah 12a" */
+  englishName: string;
+};
+
+export type TodayPayload = {
+  shabbat: ShabbatInfo | null;
+  daf: DafYomi | null;
+  needsLocation: boolean;
+};
+
+export type CityResult = {
+  geonameid: number;
+  label: string;
+};
+
+export type SetLocationBody =
+  | { geonameid: number; source: 'manual' }
+  | { lat: number; lon: number; label: string; source: 'gps' };
+
+export const tribeApi = {
+  today: () =>
+    request<TodayPayload>('/api/tribe/today'),
+
+  searchCities: (q: string) =>
+    request<{ cities: CityResult[] }>('/api/tribe/cities?q=' + encodeURIComponent(q)),
+
+  setLocation: (body: SetLocationBody) =>
+    request<{ ok: true }>('/api/tribe/location', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+};
+
 /**
  * Optimistic reaction toggle for NewsArticle.reactions.
  *
