@@ -404,7 +404,7 @@ export default function AppLayout() {
         options={{
           title: 'News',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="news" color={color} focused={focused} />
+            <GradientTabIcon icon="chai" color={color} focused={focused} />
           ),
           headerTitle: 'News',
         }}
