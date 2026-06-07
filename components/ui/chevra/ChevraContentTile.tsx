@@ -36,16 +36,22 @@ export function ChevraContentTile({
   const mutedColor = isDark ? COLORS.textMuted : COLORS.lightTextMuted;
 
   const Wrapper: React.ElementType = onPress ? Pressable : View;
+  // NOTE: a plain View's `style` does NOT accept a function (only Pressable does).
+  // When there's no onPress, pass a plain style array so `{ width }` is actually
+  // applied — otherwise the tile loses its width and grows to fit its content.
+  const baseStyle = [styles.wrap, SHADOWS.sm, { width }];
 
   return (
     <Wrapper
       onPress={onPress}
-      style={({ pressed }: { pressed?: boolean }) => [
-        styles.wrap,
-        SHADOWS.sm,
-        { width },
-        pressed ? { opacity: 0.85 } : null,
-      ]}
+      style={
+        onPress
+          ? ({ pressed }: { pressed?: boolean }) => [
+              ...baseStyle,
+              pressed ? { opacity: 0.85 } : null,
+            ]
+          : baseStyle
+      }
     >
       <LinearGradient
         colors={[gradient[0], gradient[1]]}
