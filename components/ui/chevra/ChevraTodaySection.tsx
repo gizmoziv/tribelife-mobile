@@ -1,8 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { FONTS, SPACING } from '@/constants';
-import { useTheme } from '@/contexts/ThemeContext';
+import { SPACING } from '@/constants';
 import { ChevraDailyBanner } from './ChevraDailyBanner';
 import { ChevraContentTile } from './ChevraContentTile';
 import type { DailyBanner, ShabbatInfo, DafYomi } from './dailyContent';
@@ -57,7 +56,6 @@ type ChevraTodaySectionProps = {
 };
 
 export function ChevraTodaySection({ banner, shabbat, daf }: ChevraTodaySectionProps) {
-  const { colors } = useTheme();
   const screenW = Dimensions.get('window').width;
   const tileGap = 12;
   const pairWidth = (screenW - SPACING.page * 2 - tileGap) / 2;
@@ -91,14 +89,6 @@ export function ChevraTodaySection({ banner, shabbat, daf }: ChevraTodaySectionP
         />
       </View>
 
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Communities
-        </Text>
-        <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
-          Find your people
-        </Text>
-      </View>
     </View>
   );
 }
@@ -110,19 +100,5 @@ const styles = StyleSheet.create({
   tilePair: {
     flexDirection: 'row',
     gap: 12,
-  },
-  sectionHeader: {
-    marginTop: 18,
-    marginBottom: 4,
-  },
-  sectionTitle: {
-    fontFamily: FONTS.bold,
-    fontSize: 20,
-    letterSpacing: 0.2,
-  },
-  sectionSub: {
-    fontFamily: FONTS.regular,
-    fontSize: 13,
-    marginTop: 2,
   },
 });
