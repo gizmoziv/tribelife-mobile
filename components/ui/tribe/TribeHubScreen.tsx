@@ -10,9 +10,13 @@
 //   1. TribeTodaySection (18-03 wires real data)
 //   2. TribeNewsSection  (18-04 builds horizontal carousel)
 //
-// The outer ScrollView is vertical; 18-04's inner FlatList will be horizontal
+// The outer ScrollView is vertical; 18-04's inner FlatList is horizontal
 // (no nested same-axis VirtualizedList warning).
-import React, { useCallback, useEffect, useState } from 'react';
+//
+// Phase 18-04: banner tap now triggers a real carousel refresh via
+// newsSectionRefreshRef — the ref is passed as onBannerRefresh prop to
+// TribeNewsSection which calls it after a successful re-fetch.
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -38,6 +42,10 @@ export function TribeHubScreen() {
   // is mounted. The OS push for the same event is suppressed by the handler
   // in services/pushNotifications.ts (foreground + ctx.type==='tribe').
   const [hasNewArticles, setHasNewArticles] = useState(false);
+
+  // Ref to trigger a carousel refresh without lifting all pagination state.
+  // TribeNewsSection sets this via its onSetRefresh prop.
+  const newsSectionRefreshRef = useRef<(() => Promise<void>) | null>(null);
 
   // Tell the push-notification handler we're on the tribe tab so it suppresses
   // OS banners for news_breaking pushes — we surface them in-app instead.
@@ -69,8 +77,9 @@ export function TribeHubScreen() {
   }, []);
 
   const handleBannerTap = useCallback(() => {
-    // Dismiss the banner; 18-04 will wire a real refresh here.
     setHasNewArticles(false);
+    // Trigger a real carousel refresh (18-04 wired via newsSectionRefreshRef).
+    newsSectionRefreshRef.current?.();
   }, []);
 
   return (
@@ -91,7 +100,9 @@ export function TribeHubScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]}
       >
         <TribeTodaySection />
-        <TribeNewsSection />
+        <TribeNewsSection
+          onSetRefresh={(fn) => { newsSectionRefreshRef.current = fn; }}
+        />
       </ScrollView>
     </SafeAreaView>
   );
