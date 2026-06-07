@@ -39,14 +39,14 @@ export default function NewsScreen() {
 
   // In-app banner shown when a news_breaking push arrives while this screen
   // is mounted. The OS push for the same event is suppressed by the handler
-  // in services/pushNotifications.ts (foreground + ctx.type==='news').
+  // in services/pushNotifications.ts (foreground + ctx.type==='tribe').
   const [hasNewArticles, setHasNewArticles] = useState(false);
 
   // Tell the push-notification handler we're on the news tab so it suppresses
   // OS banners for news_breaking pushes — we surface them in-app instead.
   useEffect(() => {
     const setContext = useForegroundContextStore.getState().setContext;
-    setContext({ type: 'news' });
+    setContext({ type: 'tribe' });
     return () => setContext({ type: 'none' });
   }, []);
 

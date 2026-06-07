@@ -16,7 +16,7 @@ function isCurrentlyViewing(ctx: ForegroundContext, data: Record<string, unknown
     const dataConvId = Number(data.conversationId);
     return !Number.isNaN(dataConvId) && dataConvId === ctx.conversationId;
   }
-  if (ctx.type === 'news' && type === 'news_breaking') {
+  if (ctx.type === 'tribe' && type === 'news_breaking') {
     return true;
   }
   return false;

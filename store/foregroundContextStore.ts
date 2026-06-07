@@ -7,7 +7,7 @@ export type ForegroundContext =
   | { type: 'chat'; conversationId: number }
   | { type: 'localChat' }
   | { type: 'globe'; roomSlug: string }
-  | { type: 'news' }
+  | { type: 'tribe' }
   | { type: 'none' };
 
 interface State {

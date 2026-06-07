@@ -282,7 +282,7 @@ function RootLayoutInner() {
               deepLinkHandled = true;
             } else if (nData?.type === 'news_breaking') {
               setTimeout(() => router.push({
-                pathname: '/(app)/news',
+                pathname: '/(app)/tribe',
                 params: nData?.articleId ? { highlightArticleId: String(nData.articleId) } : {},
               }), 500);
               deepLinkHandled = true;
@@ -390,7 +390,7 @@ function RootLayoutInner() {
         router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
       } else if (data?.type === 'news_breaking') {
         router.push({
-          pathname: '/(app)/news',
+          pathname: '/(app)/tribe',
           params: data?.articleId ? { highlightArticleId: String(data.articleId) } : {},
         });
       } else if (data?.type === 'org_invite' && data?.token) {
