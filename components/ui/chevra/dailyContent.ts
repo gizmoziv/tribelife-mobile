@@ -1,10 +1,8 @@
-// Stubbed daily Jewish content for Chevra v2.
-// TODO: wire to a server endpoint backed by Hebcal (Hebrew date, parsha,
-// candle-lighting per region) and Sefaria (Daf Yomi). The Rabbi's note is
-// editorial — needs a CMS or a daily-pull job.
-//
-// Keeping shape and call-site stable so swapping the data source later is
-// a one-file change.
+// dailyContent.ts — type definitions for daily Jewish content.
+// The mock function implementations have been retired in Plan 18-03.
+// All live data now flows from /api/tribe/today via tribeApi.today().
+// Types are kept here for backward-compat import paths used by
+// ChevraDailyBanner and ChevraTodaySection.
 
 export type DailyBanner = {
   hebrewDate: string;        // Localized Hebrew date string
@@ -16,14 +14,18 @@ export type DailyBanner = {
 export type ShabbatInfo = {
   candleLightingTime: string;   // e.g. "7:42 PM"
   havdalahTime: string;         // e.g. "8:51 PM"
-  region: string;               // e.g. "New York"
+  locationLabel: string;        // e.g. "New York, US"
   daysUntil: number;            // 0 = today, 1 = tomorrow…
+  parshaName: string;           // e.g. "Parashat Naso"
+  parshaHebrew: string;         // e.g. "פרשת נשא"
+  hebrewDate: string;           // e.g. "ה׳ סיון ה׳תשפ״ו"
+  gregorianLabel: string;       // e.g. "Sat, Jun 7"
 };
 
 export type DafYomi = {
   tractate: string;
   page: string;       // e.g. "12a"
-  englishName: string; // e.g. "Sukkah"
+  englishName: string; // e.g. "Sukkah 12a"
 };
 
 export type RabbiNote = {
@@ -31,37 +33,3 @@ export type RabbiNote = {
   preview: string;     // 1–2 sentence teaser
   author: string;
 };
-
-export function getDailyBanner(): DailyBanner {
-  return {
-    hebrewDate: "ה׳ סיון ה׳תשפ״ו",
-    gregorianLabel: "Today",
-    parshaName: "Parashat Naso",
-    parshaHebrew: "פרשת נשא",
-  };
-}
-
-export function getShabbatInfo(): ShabbatInfo {
-  return {
-    candleLightingTime: "7:42 PM",
-    havdalahTime: "8:51 PM",
-    region: "New York",
-    daysUntil: 3,
-  };
-}
-
-export function getDafYomi(): DafYomi {
-  return {
-    tractate: "Sukkah",
-    page: "12a",
-    englishName: "Sukkah 12a",
-  };
-}
-
-export function getRabbiNote(): RabbiNote {
-  return {
-    title: "A note from the Rabbi",
-    preview: "Every encounter you'll have today is a chance to bring a little more light into the world.",
-    author: "Rabbi Ari Levine",
-  };
-}

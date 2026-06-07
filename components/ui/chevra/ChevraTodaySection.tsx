@@ -1,16 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { FONTS, SPACING } from '@/constants';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ChevraDailyBanner } from './ChevraDailyBanner';
 import { ChevraContentTile } from './ChevraContentTile';
-import { ChevraWideTile } from './ChevraWideTile';
-import { getShabbatInfo, getDafYomi, getRabbiNote } from './dailyContent';
+import type { DailyBanner, ShabbatInfo, DafYomi } from './dailyContent';
 
 const SHABBAT_ACCENT = '#E5A23A';
 const DAF_ACCENT = '#8C7AD9';
-const RABBI_ACCENT = '#F59E0B';
 
 function CandleIcon() {
   return (
@@ -49,66 +47,49 @@ function BookIcon() {
   );
 }
 
-function ScrollIcon() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M6 4h10a2 2 0 012 2v14M6 4a2 2 0 00-2 2v12a2 2 0 002 2h10"
-        stroke={RABBI_ACCENT}
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-      />
-      <Circle cx={18} cy={20} r={2} stroke={RABBI_ACCENT} strokeWidth={1.5} />
-    </Svg>
-  );
-}
+type ChevraTodaySectionProps = {
+  /** Live banner data (Hebrew date, parsha) from the server. */
+  banner: DailyBanner;
+  /** Shabbat candle-lighting info. Null when location not yet set. */
+  shabbat: ShabbatInfo | null;
+  /** Daf Yomi for today. Null when unavailable. */
+  daf: DafYomi | null;
+};
 
-export function ChevraTodaySection() {
+export function ChevraTodaySection({ banner, shabbat, daf }: ChevraTodaySectionProps) {
   const { colors } = useTheme();
   const screenW = Dimensions.get('window').width;
   const tileGap = 12;
   const pairWidth = (screenW - SPACING.page * 2 - tileGap) / 2;
 
-  const shabbat = getShabbatInfo();
-  const daf = getDafYomi();
-  const rabbi = getRabbiNote();
-
-  const shabbatLabel =
-    shabbat.daysUntil === 0
+  const shabbatLabel = shabbat
+    ? shabbat.daysUntil === 0
       ? 'Tonight'
-      : `In ${shabbat.daysUntil} day${shabbat.daysUntil === 1 ? '' : 's'}`;
+      : `In ${shabbat.daysUntil} day${shabbat.daysUntil === 1 ? '' : 's'}`
+    : '—';
 
   return (
     <View style={styles.container}>
-      <ChevraDailyBanner />
+      <ChevraDailyBanner banner={banner} />
 
       <View style={styles.tilePair}>
         <ChevraContentTile
           width={pairWidth}
           eyebrow={`Shabbat · ${shabbatLabel}`}
-          primary={shabbat.candleLightingTime}
-          secondary={`Candle lighting · ${shabbat.region}`}
+          primary={shabbat ? shabbat.candleLightingTime : '—'}
+          secondary={shabbat ? `Candle lighting · ${shabbat.locationLabel}` : 'Location not set'}
           glyph={<CandleIcon />}
           accent={SHABBAT_ACCENT}
         />
         <ChevraContentTile
           width={pairWidth}
           eyebrow="Daf Yomi"
-          primary={daf.englishName}
-          secondary={`Today's page · ${daf.tractate}`}
+          primary={daf ? daf.englishName : '—'}
+          secondary={daf ? `Today's page · ${daf.tractate}` : 'Unavailable'}
           glyph={<BookIcon />}
           accent={DAF_ACCENT}
         />
       </View>
-
-      <ChevraWideTile
-        eyebrow="From the Rabbi"
-        title={rabbi.title}
-        body={rabbi.preview}
-        footer={`— ${rabbi.author}`}
-        glyph={<ScrollIcon />}
-        accent={RABBI_ACCENT}
-      />
 
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>

@@ -10,11 +10,18 @@ import {
   REGION_TILE_GRADIENT_LIGHT,
 } from '@/constants';
 import { useTheme } from '@/contexts/ThemeContext';
-import { getDailyBanner } from './dailyContent';
+import type { DailyBanner } from './dailyContent';
 
-export function ChevraDailyBanner() {
+// Re-export the type so callers importing from ChevraDailyBanner don't need dailyContent.
+export type { DailyBanner };
+
+type ChevraDailyBannerProps = {
+  /** Live banner data from the server. When omitted renders an empty/skeleton state. */
+  banner: DailyBanner;
+};
+
+export function ChevraDailyBanner({ banner }: ChevraDailyBannerProps) {
   const { isDark } = useTheme();
-  const banner = getDailyBanner();
 
   const gradient = isDark ? REGION_TILE_GRADIENT_DARK : REGION_TILE_GRADIENT_LIGHT;
   const accent = '#E5A23A';
