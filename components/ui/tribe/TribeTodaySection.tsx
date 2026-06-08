@@ -69,7 +69,9 @@ export function TribeTodaySection() {
       <View style={styles.section}>
         <Text style={[styles.title, { color: colors.text }]}>Today</Text>
         <View style={[styles.errorBox, { backgroundColor: colors.surface }]}>
-          <Text style={[styles.errorText, { color: colors.textMuted }]}>{error}</Text>
+          <Text style={[styles.errorText, { color: colors.textMuted }]}>
+            {error}
+          </Text>
         </View>
       </View>
     );
@@ -79,21 +81,18 @@ export function TribeTodaySection() {
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.title, { color: colors.text }]}>Today</Text>
+      {/* <Text style={[styles.title, { color: colors.text }]}>Today</Text> */}
 
       <View style={styles.content}>
         {/* Parsha banner + Daf Yomi tiles — always rendered, never blocked by location */}
-        <ChevraTodaySection
+        {/* <ChevraTodaySection
           banner={banner}
           shabbat={data?.shabbat ?? null}
           daf={data?.daf ?? null}
-        />
+        /> */}
 
         {/* Candle-lighting card — prompts for location if needed, shows times once set */}
-        <CandleLightingCard
-          today={data}
-          onChanged={fetchToday}
-        />
+        <CandleLightingCard today={data} onChanged={fetchToday} />
       </View>
     </View>
   );
