@@ -98,6 +98,7 @@ export default function GroupInfoScreen() {
         .then(({ groups }) => {
           const found = groups.find((g) => g.id === conversationId);
           if (found) {
+            setGroupIconUrl(found.groupIconUrl ?? null); // myGroups returns the icon — show it even without an inviteSlug param
             setResolvedSlug(found.inviteSlug);
             setPublicMemberCount(found.memberCount);
             setPublicIsMember(true); // myGroups only returns groups the user is in
