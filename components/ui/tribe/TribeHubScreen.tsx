@@ -33,6 +33,7 @@ import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
 import { TribeTodaySection } from './TribeTodaySection';
 import { TribeNewsSection } from './TribeNewsSection';
+import { TribeSurveySection } from './TribeSurveySection';
 
 export function TribeHubScreen() {
   const { colors } = useTheme();
@@ -103,6 +104,7 @@ export function TribeHubScreen() {
         <TribeNewsSection
           onSetRefresh={(fn) => { newsSectionRefreshRef.current = fn; }}
         />
+        <TribeSurveySection />
       </ScrollView>
     </SafeAreaView>
   );
