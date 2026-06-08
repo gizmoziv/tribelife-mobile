@@ -81,31 +81,42 @@ export default function GroupInfoScreen() {
   }, [conversationId]);
 
   useEffect(() => {
-    if (inviteSlug) {
-      groupsApi.getInfo(inviteSlug)
-        .then(({ group }) => {
-          setGroupIconUrl(group.groupIconUrl ?? null);
-          setResolvedSlug(group.inviteSlug);
-          setPublicMemberCount(group.memberCount);
-          setPublicIsMember(group.isMember);
-          setIsPublic(group.isPublic);
-          setAdminInfo(group.admin ?? null);
-        })
-        .catch(() => {});
-    } else {
-      // Route param was empty — fall back to myGroups() to find the canonical slug.
-      groupsApi.myGroups()
-        .then(({ groups }) => {
-          const found = groups.find((g) => g.id === conversationId);
-          if (found) {
-            setGroupIconUrl(found.groupIconUrl ?? null); // myGroups returns the icon — show it even without an inviteSlug param
-            setResolvedSlug(found.inviteSlug);
-            setPublicMemberCount(found.memberCount);
-            setPublicIsMember(true); // myGroups only returns groups the user is in
-          }
-        })
-        .catch(() => {});
+    let cancelled = false;
+
+    // getInfo(slug) is the single source of truth for the full Group Info payload
+    // (icon, member count, membership, visibility, admin). Some navigations into
+    // this screen don't thread the inviteSlug param, so resolve it ourselves —
+    // prefer the route param, otherwise look it up from the user's own groups —
+    // then always load the complete payload. This keeps every field populated
+    // regardless of how the user arrived (fixes blank icon + missing visibility
+    // chooser when opened without a slug).
+    async function loadGroupInfo(): Promise<void> {
+      try {
+        let slug = inviteSlug;
+        if (!slug) {
+          const { groups } = await groupsApi.myGroups();
+          if (cancelled) return;
+          slug = groups.find((g) => g.id === conversationId)?.inviteSlug ?? '';
+        }
+        if (!slug) return; // non-member without a slug — nothing more we can load
+
+        const { group } = await groupsApi.getInfo(slug);
+        if (cancelled) return;
+        setGroupIconUrl(group.groupIconUrl ?? null);
+        setResolvedSlug(group.inviteSlug);
+        setPublicMemberCount(group.memberCount);
+        setPublicIsMember(group.isMember);
+        setIsPublic(group.isPublic);
+        setAdminInfo(group.admin ?? null);
+      } catch {
+        // Non-fatal: the members[] effect still populates the core list.
+      }
     }
+
+    void loadGroupInfo();
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId, inviteSlug]);
 
   const handleUploadIcon = useCallback(async () => {
