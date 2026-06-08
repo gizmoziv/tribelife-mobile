@@ -592,6 +592,29 @@ export type SetLocationBody =
   | { geonameid: number; source: 'manual' }
   | { lat: number; lon: number; label: string; source: 'gps' };
 
+export type SurveyOption = {
+  id: number;
+  label: string;
+  isOther: boolean;
+  displayOrder: number;
+  count: number;
+};
+
+export type SurveyPayload = {
+  survey: {
+    id: number;
+    questionText: string;
+    options: SurveyOption[];
+    hasVoted: boolean;
+    votedOptionId: number | null;
+  } | null;
+};
+
+export type VoteBody = {
+  optionId: number;
+  otherText?: string;
+};
+
 export const tribeApi = {
   today: () =>
     request<TodayPayload>('/api/tribe/today'),
@@ -602,6 +625,15 @@ export const tribeApi = {
   setLocation: (body: SetLocationBody) =>
     request<{ ok: true }>('/api/tribe/location', {
       method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  survey: () =>
+    request<SurveyPayload>('/api/tribe/survey'),
+
+  vote: (body: VoteBody) =>
+    request<{ ok: true }>('/api/tribe/survey/vote', {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
 };
