@@ -606,12 +606,12 @@ export type SurveyPayload = {
     questionText: string;
     options: SurveyOption[];
     hasVoted: boolean;
-    votedOptionId: number | null;
+    votedOptionIds: number[];
   } | null;
 };
 
 export type VoteBody = {
-  optionId: number;
+  optionIds: number[];
   otherText?: string;
 };
 

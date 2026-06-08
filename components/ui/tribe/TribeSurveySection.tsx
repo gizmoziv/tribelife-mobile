@@ -33,8 +33,8 @@ export function TribeSurveySection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Votable-branch local UI state
-  const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null);
+  // Votable-branch local UI state (multi-select: Set of chosen option ids)
+  const [selectedOptionIds, setSelectedOptionIds] = useState<Set<number>>(new Set());
   const [otherText, setOtherText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -60,16 +60,18 @@ export function TribeSurveySection() {
   // ── Submit handler ─────────────────────────────────────────────────────────
 
   const handleSubmit = useCallback(async () => {
-    if (selectedOptionId === null) return;
+    if (selectedOptionIds.size === 0) return;
     const survey = data?.survey;
     if (!survey) return;
 
-    const chosenOption = survey.options.find(o => o.id === selectedOptionId);
-    if (!chosenOption) return;
+    const ids = [...selectedOptionIds];
+    const hasOtherSelected = survey.options.some(
+      o => o.isOther && selectedOptionIds.has(o.id),
+    );
 
     const body: VoteBody = {
-      optionId: selectedOptionId,
-      ...(chosenOption.isOther ? { otherText: otherText.trim() } : {}),
+      optionIds: ids,
+      ...(hasOtherSelected ? { otherText: otherText.trim() } : {}),
     };
 
     setSubmitting(true);
@@ -89,11 +91,11 @@ export function TribeSurveySection() {
 
     // On success or 409: re-fetch so the server-driven hasVoted flips the view
     setLoading(true);
-    setSelectedOptionId(null);
+    setSelectedOptionIds(new Set());
     setOtherText('');
     setSubmitting(false);
     await fetchSurvey();
-  }, [selectedOptionId, otherText, data, fetchSurvey]);
+  }, [selectedOptionIds, otherText, data, fetchSurvey]);
 
   // ── Loading state ──────────────────────────────────────────────────────────
 
@@ -141,7 +143,7 @@ export function TribeSurveySection() {
             const pct = totalVotes > 0
               ? Math.round((option.count / totalVotes) * 100)
               : 0;
-            const isOwn = option.id === survey.votedOptionId;
+            const isOwn = survey.votedOptionIds.includes(option.id);
             return (
               <View key={option.id} style={styles.barRow}>
                 <View style={styles.barLabelRow}>
@@ -186,11 +188,12 @@ export function TribeSurveySection() {
 
   // ── Votable — chip grid + Other field + Submit (D-04/D-05/D-06) ───────────
 
-  const selectedOption = survey.options.find(o => o.id === selectedOptionId);
-  const isOtherSelected = selectedOption?.isOther ?? false;
+  const isOtherSelected = survey.options.some(
+    o => o.isOther && selectedOptionIds.has(o.id),
+  );
   const submitDisabled =
     submitting ||
-    selectedOptionId === null ||
+    selectedOptionIds.size === 0 ||
     (isOtherSelected && otherText.trim() === '');
 
   return (
@@ -199,10 +202,10 @@ export function TribeSurveySection() {
         {survey.questionText}
       </Text>
       <View style={styles.content}>
-        {/* 2×2 chip grid */}
+        {/* 2×2 chip grid — tapping toggles selection (multi-select) */}
         <View style={styles.chipGrid}>
           {survey.options.map(option => {
-            const selected = option.id === selectedOptionId;
+            const selected = selectedOptionIds.has(option.id);
             return (
               <Pressable
                 key={option.id}
@@ -215,8 +218,19 @@ export function TribeSurveySection() {
                 ]}
                 onPress={() => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedOptionId(option.id);
-                  if (!option.isOther) setOtherText('');
+                  setSelectedOptionIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(option.id)) {
+                      next.delete(option.id);
+                    } else {
+                      next.add(option.id);
+                    }
+                    return next;
+                  });
+                  // Clear Other text when Other chip is deselected
+                  if (option.isOther && selectedOptionIds.has(option.id)) {
+                    setOtherText('');
+                  }
                   setSubmitError(null);
                 }}
               >
