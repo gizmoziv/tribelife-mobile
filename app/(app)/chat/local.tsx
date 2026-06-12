@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -159,17 +159,23 @@ export default function LocalChatScreen() {
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
-  const hasScrolledRef = useRef(false);
-  // Phase 14: row heights settle async (avatars, reactions). Stay snapped to
-  // bottom for the first 1.5s after mount so we land on the actual newest
-  // message rather than 5–10 rows above it.
-  const mountedAtRef = useRef<number>(Date.now());
-  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, messages);
+  // Reversed copy for the inverted FlatList — index 0 = newest message =
+  // visual bottom. Inverting fixes the up/down "jump": the list opens at the
+  // bottom natively, so the old timed scrollToEnd cascade + onContentSizeChange
+  // re-snap loop (which fought FlatList's windowed layout) are removed. Same
+  // fix already shipped for the Globe/Town Square screen (ISSUE-8, 45ea975).
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
   const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
   const highlightAnim = useRef(new Animated.Value(0)).current;
+  // Older-message pagination (load-on-scroll-to-top). With the inverted list,
+  // onEndReached fires at the visual top and fetches messages older than the
+  // oldest one currently loaded (keyset `before=<ISO>` cursor on the room API).
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   // Phase 15 (D-01): subscribe to the consolidated zone room (e.g.
   // timezone:eastern-time) so users in NY/Detroit/Toronto see each other's
@@ -247,13 +253,19 @@ export default function LocalChatScreen() {
   );
 
   useEffect(() => {
-    chat.getRoomMessages(roomId, aroundMessageId != null ? { aroundMessageId } : undefined).then(({ messages: msgs }) => {
+    chat.getRoomMessages(roomId, aroundMessageId != null ? { aroundMessageId } : undefined).then(({ messages: msgs, hasMore: more }) => {
       setMessages(msgs);
+      setHasMore(more ?? true);
       setIsLoading(false);
+      // Inverted list opens at the visual bottom (offset 0) natively, so there
+      // is NO scrollToEnd cascade for the default open (that cascade fighting
+      // windowed layout is what caused the jump). Only an aroundMessageId
+      // deep-link needs an explicit scroll — mirror the chronological index
+      // into the reversed/inverted index (length - 1 - chronoIndex).
       if (aroundMessageId != null) {
-        const targetIndex = msgs.findIndex((m) => m.id === aroundMessageId);
-        if (targetIndex >= 0) {
-          hasScrolledRef.current = true; // prevent scrollToEnd from firing
+        const chronoIndex = msgs.findIndex((m) => m.id === aroundMessageId);
+        if (chronoIndex >= 0) {
+          const targetIndex = msgs.length - 1 - chronoIndex;
           // FlatList needs at least one layout pass before scrollToIndex can
           // resolve. Retry up to 5 times in case items below targetIndex
           // haven't been measured yet.
@@ -274,13 +286,7 @@ export default function LocalChatScreen() {
               useNativeDriver: false,
             }).start(() => setFlashHighlightedId(undefined));
           }, 250);
-        } else {
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
         }
-      } else {
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
       }
     }).catch(() => setIsLoading(false));
 
@@ -289,7 +295,8 @@ export default function LocalChatScreen() {
     connectSocket().then(() => {
       const offRoom = onRoomMessage((msg) => {
         setMessages((prev) => [...prev, msg]);
-        flatListRef.current?.scrollToEnd({ animated: true });
+        // Inverted list: visual bottom = offset 0 (newest message).
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
         // D-17: re-advance server read-position for messages from others while
         // this screen is focused so live-received messages don't accrue as unread.
         if (msg.senderId !== user?.id) {
@@ -400,8 +407,9 @@ export default function LocalChatScreen() {
   // animation is ~250ms).
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300);
+      // Inverted list: visual bottom = offset 0.
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: false }), 300);
     });
     return () => { showSub.remove(); };
   }, []);
@@ -626,6 +634,24 @@ export default function LocalChatScreen() {
     }, 1500);
   };
 
+  // Load older messages when the user scrolls to the visual top (onEndReached
+  // on the inverted list). Keyset cursor = the oldest currently-loaded row's
+  // createdAt; the room API returns the previous page ascending + a hasMore flag.
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore || loadingOlder || messages.length === 0) return;
+    const oldest = messages[0]; // messages is chronological (oldest first)
+    setLoadingOlder(true);
+    chat.getRoomMessages(roomId, { before: oldest.createdAt })
+      .then(({ messages: older, hasMore: more }) => {
+        if (older.length > 0) {
+          setMessages((prev) => [...older, ...prev]);
+        }
+        setHasMore(more ?? false);
+      })
+      .catch(() => { /* silent — keep the current list on failure */ })
+      .finally(() => setLoadingOlder(false));
+  }, [hasMore, loadingOlder, messages, roomId]);
+
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
     const isFlash = item.id === flashHighlightedId;
@@ -690,25 +716,33 @@ export default function LocalChatScreen() {
         {/* Redundant timezone GlowBadge removed in Phase 9 hotfix 2 —
             the Stack.Screen headerTitle (zoneName) already shows the room name. */}
 
+        {/* Inverted: newest message anchors at the visual bottom (offset 0).
+            Data is reversed so index 0 = most-recent message; the native
+            `inverted` prop flips rendering so it appears at the bottom — no
+            timed scrollToEnd cascade or onContentSizeChange re-snap loop needed
+            (that loop fought FlatList's windowed layout and caused the up/down
+            "jump" in the timezone rooms; same fix as Globe/Town Square,
+            ISSUE-8). onEndReached fires at the VISUAL TOP for an inverted list,
+            so it is our "load older messages" trigger; the spinner renders via
+            ListFooterComponent, which for an inverted list sits at the top. */}
         <FlatList
           ref={flatListRef}
+          inverted
           keyboardDismissMode="on-drag"
-          data={messages}
-          extraData={messages}
+          data={reversedMessages}
+          extraData={reversedMessages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => {
-            // Phase 14: re-snap to bottom for 1.5s after mount while async
-            // layout shifts (avatars, reactions, reply previews) settle.
-            // hasScrolledRef gets pre-set by the aroundMessageId path to
-            // suppress this so a deep-link doesn't get fought.
-            if (hasScrolledRef.current || messages.length === 0) return;
-            flatListRef.current?.scrollToEnd({ animated: false });
-            if (Date.now() - mountedAtRef.current > 1500) {
-              hasScrolledRef.current = true;
-            }
-          }}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={
+            loadingOlder ? (
+              <View style={styles.loadingOlder}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              </View>
+            ) : null
+          }
           onScrollToIndexFailed={(info) => {
             // Approximate scroll first so the target index becomes viewable,
             // then re-attempt scrollToIndex once items have been measured.
@@ -1004,6 +1038,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   messageList: { paddingHorizontal: 12, paddingVertical: 8 },
+  loadingOlder: { paddingVertical: 12, alignItems: 'center' },
   typingContainer: {
     paddingHorizontal: SPACING.page,
     paddingBottom: 4,

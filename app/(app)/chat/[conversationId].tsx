@@ -16,6 +16,7 @@ import {
   Animated,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
@@ -96,6 +97,11 @@ export default function DMThreadScreen() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   const keyboardBehavior = useKeyboardBehavior();
+  // Deterministic header offset (header + safe-area top) from navigation config.
+  // Replaces the KAV `automaticOffset`, whose async screen-position measurement
+  // raced the not-yet-laid-out Stack header on the cold-start notification path
+  // and left the input behind the keyboard until an app restart.
+  const headerHeight = useHeaderHeight();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // ── D-09: Preview-to-join state (mirrors v1.7 Phase 11 D-12 pattern) ───────
   const [isMember, setIsMember] = useState<boolean>(initialIsMember);
@@ -856,13 +862,18 @@ export default function DMThreadScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
-        // `react-native-keyboard-controller`'s KAV uses native keyboard
-        // frame listeners (works on Android edge-to-edge where RN's
-        // built-in KAV silently no-ops since SDK 53). `automaticOffset`
-        // measures the screen position natively — including the Stack
-        // header above this SafeAreaView — so no manual offset is needed.
+        // `react-native-keyboard-controller`'s KAV uses native keyboard frame
+        // listeners (works on Android edge-to-edge where RN's built-in KAV
+        // silently no-ops since SDK 53). We pass an EXPLICIT, deterministic
+        // `keyboardVerticalOffset` (the navigation header height, which includes
+        // the safe-area top) instead of `automaticOffset`. `automaticOffset`
+        // measures the view's on-screen position lazily; on the cold-start
+        // push-notification path the Stack header above this SafeAreaView isn't
+        // laid out yet when it measures, so it captured a stale/0 offset and the
+        // keyboard covered the input until an app restart. `useHeaderHeight()`
+        // is read from navigation config, so there is no layout race.
         // See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
-        automaticOffset
+        keyboardVerticalOffset={headerHeight}
       >
         <FlatList
           ref={flatListRef}
