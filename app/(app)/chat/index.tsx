@@ -331,6 +331,22 @@ export default function ChatsScreen() {
     };
   }, [resetFilterToAll]);
 
+  // Phase 20 (Search Behavior): when a query is active and the Archive pill is
+  // NOT selected, surface archived chats that match — tagged "Archived".
+  // When Archive pill IS selected, search already scopes to archivedRows via
+  // pillFilteredRows, so no extra section is needed.
+  // NOTE: this useMemo must remain ABOVE any early returns so the hook call
+  // count stays constant across renders (Rules of Hooks).
+  const archivedMatchRows = useMemo(() => {
+    if (pillFilter === 'archive') return [];
+    const q = debouncedQuery.trim().toLowerCase();
+    if (!q) return [];
+    return archivedRows.filter((row) => {
+      const tokens = chatsRowSearchTokens(row);
+      return tokens.includes(q);
+    });
+  }, [archivedRows, debouncedQuery, pillFilter]);
+
   if (isLoading) return <LoadingState />;
 
   // ISSUE-2: empty-state copy per active filter. 'all' always has the pinned
@@ -350,20 +366,6 @@ export default function ChatsScreen() {
   const trimmedQuery = debouncedQuery.trim();
   const isActiveSearch = trimmedQuery.length > 0;
   const isMessageSearch = trimmedQuery.length >= 3;
-
-  // Phase 20 (Search Behavior): when a query is active and the Archive pill is
-  // NOT selected, surface archived chats that match — tagged "Archived".
-  // When Archive pill IS selected, search already scopes to archivedRows via
-  // pillFilteredRows, so no extra section is needed.
-  const archivedMatchRows = useMemo(() => {
-    if (pillFilter === 'archive') return [];
-    const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return [];
-    return archivedRows.filter((row) => {
-      const tokens = chatsRowSearchTokens(row);
-      return tokens.includes(q);
-    });
-  }, [archivedRows, debouncedQuery, pillFilter]);
 
   // Determine empty state: both sections empty and a query is present
   const bothEmpty = filteredRows.length === 0 && messageResults.length === 0 && archivedMatchRows.length === 0 && !isSearching;
