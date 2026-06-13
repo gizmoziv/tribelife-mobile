@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ChatsRow, ChatNotification } from '@/types';
-import { chats } from '@/services/api';
+import { chat, chats } from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
 import { getZoneForTimezone } from '@/utils/timezoneZones';
 
@@ -43,6 +43,10 @@ interface ChatsState {
   loading: boolean;
   currentlyViewing: string | number | null;
   _hydrating: boolean;
+  // Phase 20: per-user archive state
+  archivedRows: ChatsRow[];
+  archivedLoading: boolean;
+  _loadingArchived: boolean;
   hydrate: () => Promise<void>;
   applyChatNotification: (n: ChatNotification) => void;
   applyRoomMessage: (msg: { roomId?: string; senderId?: number; content?: string; createdAt?: string }) => void;
@@ -50,6 +54,10 @@ interface ChatsState {
   applyDmMessage: (msg: { conversationId?: number; senderId?: number; content?: string; createdAt?: string }) => void;
   clearRowUnread: (key: RowKey) => void;
   setCurrentlyViewing: (entityId: string | number | null) => void;
+  // Phase 20: archive actions
+  loadArchivedRows: () => Promise<void>;
+  archiveRow: (conversationId: number) => Promise<void>;
+  unarchiveRow: (conversationId: number) => Promise<void>;
 }
 
 // Per-row matcher: returns true if `row` is the row identified by `entityId`.
@@ -96,6 +104,10 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   loading: true,
   currentlyViewing: null,
   _hydrating: false,
+  // Phase 20: archive state — starts empty, lazy-loaded on Archive pill tap
+  archivedRows: [],
+  archivedLoading: false,
+  _loadingArchived: false,
 
   hydrate: async () => {
     if (get()._hydrating) return; // dedupe rapid AppState 'active' toggles
@@ -199,6 +211,76 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   },
 
   setCurrentlyViewing: (entityId) => set({ currentlyViewing: entityId }),
+
+  // Phase 20: load archived rows — lazy, deduped via _loadingArchived guard.
+  // Silent on error (mirrors hydrate() catch pattern).
+  loadArchivedRows: async () => {
+    if (get()._loadingArchived) return;
+    set({ _loadingArchived: true, archivedLoading: true });
+    try {
+      const { rows } = await chats.listArchived();
+      set({ archivedRows: rows, archivedLoading: false });
+    } catch {
+      set({ archivedLoading: false });
+    } finally {
+      set({ _loadingArchived: false });
+    }
+  },
+
+  // Phase 20: optimistically move a dm/group row from rows → archivedRows,
+  // then confirm with the server. Rolls back via hydrate() + loadArchivedRows()
+  // on API failure.
+  archiveRow: async (conversationId: number) => {
+    const current = get().rows;
+    const target = current.find(
+      (r) => (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId,
+    );
+    if (!target) return; // no-op gracefully if not found or not dm/group
+
+    // Optimistic: remove from main list, prepend to archived list with isUserArchived true
+    const archivedTarget: ChatsRow = { ...target, isUserArchived: true } as ChatsRow;
+    set((s) => ({
+      rows: s.rows.filter(
+        (r) => !((r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId),
+      ),
+      archivedRows: [archivedTarget, ...s.archivedRows],
+    }));
+
+    try {
+      await chat.archive(conversationId);
+    } catch {
+      // Roll back: re-sync both lists from server
+      get().hydrate();
+      get().loadArchivedRows();
+    }
+  },
+
+  // Phase 20: optimistically remove a row from archivedRows, call unarchive,
+  // then hydrate() so the row reappears in the main list (server cleared archived_at).
+  // Rolls back via loadArchivedRows() + hydrate() on failure.
+  unarchiveRow: async (conversationId: number) => {
+    const hasRow = get().archivedRows.some(
+      (r) => (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId,
+    );
+    if (!hasRow) return; // no-op gracefully if not found
+
+    // Optimistic: remove from archived list
+    set((s) => ({
+      archivedRows: s.archivedRows.filter(
+        (r) => !((r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId),
+      ),
+    }));
+
+    try {
+      await chat.unarchive(conversationId);
+      // On success, hydrate main list so the unarchived row surfaces
+      get().hydrate();
+    } catch {
+      // Roll back: re-sync both lists from server
+      get().loadArchivedRows();
+      get().hydrate();
+    }
+  },
 }));
 
 // ── Derived selectors ───────────────────────────────────────────────────
