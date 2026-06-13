@@ -186,6 +186,13 @@ export const chat = {
   hideConversation: (conversationId: number) =>
     request<{ ok: true }>(`/api/chat/conversations/${conversationId}/hide`, { method: 'PUT' }),
 
+  // Phase 20: per-user archive for dm/group conversations.
+  archive: (conversationId: number) =>
+    request<{ ok: true }>(`/api/chat/conversations/${conversationId}/archive`, { method: 'PUT' }),
+
+  unarchive: (conversationId: number) =>
+    request<{ ok: true }>(`/api/chat/conversations/${conversationId}/unarchive`, { method: 'PUT' }),
+
   translateMessage: (messageId: number, targetLanguage: string) =>
     request<{ translation: string; cached: boolean }>(`/api/chat/translate/${messageId}`, {
       method: 'POST',
@@ -221,6 +228,10 @@ export const chats = {
       method: 'POST',
       body: JSON.stringify({ roomSlug }),
     }),
+
+  // Phase 20: fetch archived conversations (dm + group only).
+  listArchived: () =>
+    request<ChatsListResponse>('/api/chats/archived'),
 };
 
 // ── Beacons ────────────────────────────────────────────────────────────────

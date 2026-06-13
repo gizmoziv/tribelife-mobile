@@ -226,6 +226,9 @@ export type ChatsRow =
       partner: { handle: string; avatarUrl: string | null };
       unreadCount: number;
       lastMessage: ChatsRowLastMessage | null;
+      // Phase 20: per-user archive flag. Mirrors backend types/chats.ts.
+      // Distinct from conversations.isArchived (group-admin archive — different concept).
+      isUserArchived?: boolean;
     }
   | {
       type: 'group';
@@ -237,6 +240,9 @@ export type ChatsRow =
       lastMessage: ChatsRowLastMessage | null;
       isPublic: boolean;
       isArchived: boolean;
+      // Phase 20: per-user archive flag. Mirrors backend types/chats.ts.
+      // Distinct from isArchived above (group-admin archive — different concept).
+      isUserArchived?: boolean;
     }
   // Phase 11 D-04: joined regional Globe room (Town Square stays its own
   // `town_square` variant — pinned position, gold tint). One row per
@@ -263,6 +269,10 @@ export type ChatsRow =
 export interface ChatsListResponse {
   rows: ChatsRow[];
 }
+
+// Phase 20: PillFilter type centralized here so store + UI import from one place.
+// Previously declared inline in chat/index.tsx; Plan 20-04 imports from here.
+export type PillFilter = 'all' | 'unread' | 'groups' | 'dms' | 'archive';
 
 // ── Phase 12: Chevra Discovery Row ─────────────────────────────────────────
 // Separate from ChatsRow — uses `kind` discriminator (not `type`) per D-13.
