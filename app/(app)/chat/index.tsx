@@ -349,6 +349,16 @@ export default function ChatsScreen() {
     });
   }, [archivedRows, debouncedQuery, pillFilter]);
 
+  // Phase 20: set of archived dm/group conversationIds — lets the Messages
+  // search section tag content matches that belong to an archived chat.
+  const archivedConversationIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const row of archivedRows) {
+      if (row.type === 'dm' || row.type === 'group') ids.add(row.conversationId);
+    }
+    return ids;
+  }, [archivedRows]);
+
   if (isLoading) return <LoadingState />;
 
   // ISSUE-2: empty-state copy per active filter. 'all' always has the pinned
@@ -464,6 +474,10 @@ export default function ChatsScreen() {
                         result={result}
                         queryString={trimmedQuery}
                         colors={colors}
+                        showArchivedTag={
+                          (result.source === 'dm' || result.source === 'group') &&
+                          archivedConversationIds.has(result.conversationId)
+                        }
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                           if (result.source === 'dm' || result.source === 'group') {
@@ -741,11 +755,13 @@ function MessageResultRow({
   queryString,
   colors,
   onPress,
+  showArchivedTag = false,
 }: {
   result: SearchResult;
   queryString: string;
   colors: ReturnType<typeof useTheme>['colors'];
   onPress: () => void;
+  showArchivedTag?: boolean;
 }) {
   const spans = snippet(result.content, queryString);
   const relTime = formatRelativeTime(result.createdAt);
@@ -758,12 +774,19 @@ function MessageResultRow({
     >
       <AvatarCircle name={result.senderHandle} size={40} showRing={false} />
       <View style={{ flex: 1 }}>
-        <Text
-          numberOfLines={1}
-          style={{ fontSize: 15, fontFamily: FONTS.semiBold, color: colors.text }}
-        >
-          {`@${result.senderHandle} · ${result.chatTitle} · ${relTime}`}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            numberOfLines={1}
+            style={{ flexShrink: 1, fontSize: 15, fontFamily: FONTS.semiBold, color: colors.text }}
+          >
+            {`@${result.senderHandle} · ${result.chatTitle} · ${relTime}`}
+          </Text>
+          {showArchivedTag && (
+            <View style={[styles.archivedPill, { backgroundColor: colors.textMuted + '22' }]}>
+              <Text style={[styles.archivedPillText, { color: colors.textMuted }]}>Archived</Text>
+            </View>
+          )}
+        </View>
         <Text numberOfLines={2} style={{ marginTop: 2 }}>
           {spans.map((s, i) =>
             s.highlighted ? (
