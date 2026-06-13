@@ -139,12 +139,14 @@ export default function ChatsScreen() {
   );
 
   // Phase 20: lazy-load archived rows when the Archive pill is tapped, and
-  // refresh them every time focus returns while Archive is the active pill.
+  // also whenever a search becomes active — cross-pill search surfaces archived
+  // chats in their own "Archived Chats" section, which needs archivedRows
+  // populated even when the user never opened the Archive pill this session.
   useEffect(() => {
-    if (pillFilter === 'archive') {
+    if (pillFilter === 'archive' || debouncedQuery.trim().length > 0) {
       loadArchivedRows();
     }
-  }, [pillFilter, loadArchivedRows]);
+  }, [pillFilter, debouncedQuery, loadArchivedRows]);
 
   // 200ms debounce on the search input (per CONTEXT.md D-06)
   useEffect(() => {
