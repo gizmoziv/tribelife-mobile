@@ -55,7 +55,7 @@ import {
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import type { ChatsRow } from '@/types';
+import type { ChatsRow, PillFilter } from '@/types';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { RegionTile } from '@/components/ui/RegionTile';
@@ -71,6 +71,7 @@ import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
+import { SwipeableChatRow } from '@/components/ui/chat/SwipeableChatRow';
 import type { Message, Conversation, ReactionGroup } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
@@ -90,15 +91,19 @@ export default function ChatsScreen() {
   // useState fetch with a Zustand subscription.
   const rows = useChatsStore((s) => s.rows);
   const isLoading = useChatsStore((s) => s.loading);
+  const archivedRows = useChatsStore((s) => s.archivedRows);
+  const archivedLoading = useChatsStore((s) => s.archivedLoading);
+  const loadArchivedRows = useChatsStore((s) => s.loadArchivedRows);
+  const archiveRow = useChatsStore((s) => s.archiveRow);
+  const unarchiveRow = useChatsStore((s) => s.unarchiveRow);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
 
-  // Filter pills: All | Unread | Groups | DMs (single-select, default 'all').
-  // Tapping the selected pill is a no-op (handled inline in the chip
-  // Pressable.onPress below). State is component-local; not persisted
-  // across launches.
-  type PillFilter = 'all' | 'unread' | 'groups' | 'dms';
+  // Filter pills: All | Unread | Groups | DMs | Archive (single-select, default 'all').
+  // PillFilter type is defined in @/types (Plan 20-03). Tapping the selected
+  // pill is a no-op (handled inline in the chip Pressable.onPress below).
+  // State is component-local; not persisted across launches.
   const [pillFilter, setPillFilter] = useState<PillFilter>('all');
   const resetFilterToAll = useCallback(() => setPillFilter('all'), []);
 
@@ -132,6 +137,14 @@ export default function ChatsScreen() {
       };
     }, []),
   );
+
+  // Phase 20: lazy-load archived rows when the Archive pill is tapped, and
+  // refresh them every time focus returns while Archive is the active pill.
+  useEffect(() => {
+    if (pillFilter === 'archive') {
+      loadArchivedRows();
+    }
+  }, [pillFilter, loadArchivedRows]);
 
   // 200ms debounce on the search input (per CONTEXT.md D-06)
   useEffect(() => {
@@ -228,6 +241,13 @@ export default function ChatsScreen() {
       return at < bt ? 1 : -1;
     };
 
+    // Phase 20: Archive pill — render archivedRows (already dm+group only from
+    // the backend). Search filter (filteredRows below) then applies within
+    // archived rows when this pill is active.
+    if (pillFilter === 'archive') {
+      return archivedRows.slice().sort(byLastMessageDesc);
+    }
+
     if (pillFilter === 'unread') {
       return rows.filter((r) => r.unreadCount > 0).slice().sort(byLastMessageDesc);
     }
@@ -253,7 +273,7 @@ export default function ChatsScreen() {
     }
     tail.sort(byLastMessageDesc);
     return [...localChat, ...townSquare, ...tail];
-  }, [rows, pillFilter]);
+  }, [rows, archivedRows, pillFilter]);
 
   // Total count of conversations with unread messages — drives the numeric
   // badge on the Unread pill. Counts rows, not messages (matches WhatsApp).
@@ -315,6 +335,7 @@ export default function ChatsScreen() {
 
   // ISSUE-2: empty-state copy per active filter. 'all' always has the pinned
   // rows (Local Chat, Town Square) so it's never empty — null = no message.
+  // Phase 20: archive pill shows loading state while fetching, then empty copy.
   const emptyText =
     pillFilter === 'unread'
       ? 'No unread chats'
@@ -322,14 +343,30 @@ export default function ChatsScreen() {
         ? 'No groups yet'
         : pillFilter === 'dms'
           ? 'No direct messages yet'
-          : null;
+          : pillFilter === 'archive'
+            ? (archivedLoading ? null : 'No archived chats')
+            : null;
 
   const trimmedQuery = debouncedQuery.trim();
   const isActiveSearch = trimmedQuery.length > 0;
   const isMessageSearch = trimmedQuery.length >= 3;
 
+  // Phase 20 (Search Behavior): when a query is active and the Archive pill is
+  // NOT selected, surface archived chats that match — tagged "Archived".
+  // When Archive pill IS selected, search already scopes to archivedRows via
+  // pillFilteredRows, so no extra section is needed.
+  const archivedMatchRows = useMemo(() => {
+    if (pillFilter === 'archive') return [];
+    const q = debouncedQuery.trim().toLowerCase();
+    if (!q) return [];
+    return archivedRows.filter((row) => {
+      const tokens = chatsRowSearchTokens(row);
+      return tokens.includes(q);
+    });
+  }, [archivedRows, debouncedQuery, pillFilter]);
+
   // Determine empty state: both sections empty and a query is present
-  const bothEmpty = filteredRows.length === 0 && messageResults.length === 0 && !isSearching;
+  const bothEmpty = filteredRows.length === 0 && messageResults.length === 0 && archivedMatchRows.length === 0 && !isSearching;
 
   // Show the two-section search layout when there is any query
   // (Title matches always shows for any length; Messages section only >= 3 chars)
@@ -384,6 +421,19 @@ export default function ChatsScreen() {
                 </Text>
                 {filteredRows.map((row) => (
                   <ChatsListRow key={chatsRowKey(row)} row={row} colors={colors} router={router} />
+                ))}
+              </>
+            )}
+
+            {/* Phase 20: Archived Chats section — shown when not on Archive pill
+                and the query matches archived dm/group rows. */}
+            {archivedMatchRows.length > 0 && (
+              <>
+                <Text style={[styles.searchSectionLabel, { color: colors.textMuted }]}>
+                  Archived Chats
+                </Text>
+                {archivedMatchRows.map((row) => (
+                  <ChatsListRow key={'archived-' + chatsRowKey(row)} row={row} colors={colors} router={router} showArchivedTag />
                 ))}
               </>
             )}
@@ -505,8 +555,13 @@ export default function ChatsScreen() {
         </View>
       </View>
       <View style={styles.pillsRow}>
-        {(['all', 'unread', 'groups', 'dms'] as const).map((key) => {
-          const label = key === 'all' ? 'All' : key === 'unread' ? 'Unread' : key === 'groups' ? 'Groups' : 'DMs';
+        {(['all', 'unread', 'groups', 'dms', 'archive'] as const).map((key) => {
+          const label =
+            key === 'all' ? 'All' :
+            key === 'unread' ? 'Unread' :
+            key === 'groups' ? 'Groups' :
+            key === 'archive' ? 'Archive' :
+            'DMs';
           const isActive = pillFilter === key;
           const badge = key === 'unread' ? unreadConvCount : 0;
           return (
@@ -548,7 +603,14 @@ export default function ChatsScreen() {
           );
         })}
       </View>
-      <ChatsList data={filteredRows} flatListRef={flatListRef} emptyText={emptyText} />
+      <ChatsList
+        data={filteredRows}
+        flatListRef={flatListRef}
+        emptyText={emptyText}
+        pillFilter={pillFilter}
+        archiveRow={archiveRow}
+        unarchiveRow={unarchiveRow}
+      />
     </SafeAreaView>
   );
 }
@@ -727,18 +789,46 @@ function ChatsList({
   data,
   flatListRef,
   emptyText,
+  pillFilter,
+  archiveRow,
+  unarchiveRow,
 }: {
   data: ChatsRow[];
   flatListRef: React.RefObject<FlatList<ChatsRow> | null>;
   emptyText?: string | null;
+  pillFilter?: PillFilter;
+  archiveRow?: (conversationId: number) => Promise<void>;
+  unarchiveRow?: (conversationId: number) => Promise<void>;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
+  const isArchiveView = pillFilter === 'archive';
 
   const renderRow = useCallback(({ item }: { item: ChatsRow }) => {
-    return <ChatsListRow row={item} colors={colors} router={router} />;
-  }, [colors, router]);
+    // Only dm and group rows are archivable — room rows render without swipe.
+    const isArchivable = item.type === 'dm' || item.type === 'group';
+    const conversationId = isArchivable ? item.conversationId : null;
+
+    const handleAction = () => {
+      if (!conversationId) return;
+      if (isArchiveView) {
+        unarchiveRow?.(conversationId);
+      } else {
+        archiveRow?.(conversationId);
+      }
+    };
+
+    return (
+      <SwipeableChatRow
+        enabled={isArchivable}
+        actionLabel={isArchiveView ? 'Unarchive' : 'Archive'}
+        onAction={handleAction}
+      >
+        <ChatsListRow row={item} colors={colors} router={router} />
+      </SwipeableChatRow>
+    );
+  }, [colors, router, isArchiveView, archiveRow, unarchiveRow]);
 
   return (
     <FlatList
@@ -781,10 +871,13 @@ function ChatsListRow({
   row,
   colors,
   router,
+  showArchivedTag = false,
 }: {
   row: ChatsRow;
   colors: ReturnType<typeof useTheme>['colors'];
   router: ReturnType<typeof useRouter>;
+  /** When true, renders an Archived pill inline next to the row title (used in cross-pill search results). */
+  showArchivedTag?: boolean;
 }) {
   const onPress = useCallback(() => {
     Keyboard.dismiss();
@@ -907,6 +1000,11 @@ function ChatsListRow({
             {isGroupRow && <GroupPill />}
             {isGroupRow && !groupIsPublic && <PrivatePill />}
             {row.type === 'group' && row.isArchived && (
+              <View style={[styles.archivedPill, { backgroundColor: colors.textMuted + '22' }]}>
+                <Text style={[styles.archivedPillText, { color: colors.textMuted }]}>Archived</Text>
+              </View>
+            )}
+            {showArchivedTag && (
               <View style={[styles.archivedPill, { backgroundColor: colors.textMuted + '22' }]}>
                 <Text style={[styles.archivedPillText, { color: colors.textMuted }]}>Archived</Text>
               </View>
