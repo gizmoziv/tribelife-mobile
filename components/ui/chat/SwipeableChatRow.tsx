@@ -26,6 +26,8 @@ interface SwipeableChatRowProps {
   actionLabel: string;
   /** Called when the user taps the action button. */
   onAction: () => void;
+  /** Opaque background for the sliding row so the button stays hidden at rest. */
+  backgroundColor: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -34,13 +36,22 @@ export function SwipeableChatRow({
   enabled,
   actionLabel,
   onAction,
+  backgroundColor,
 }: SwipeableChatRowProps) {
   // Pass-through for non-archivable rows (local_chat, town_square, etc.)
   if (!enabled) {
     return <>{children}</>;
   }
 
-  return <SwipeableChatRowInner actionLabel={actionLabel} onAction={onAction}>{children}</SwipeableChatRowInner>;
+  return (
+    <SwipeableChatRowInner
+      actionLabel={actionLabel}
+      onAction={onAction}
+      backgroundColor={backgroundColor}
+    >
+      {children}
+    </SwipeableChatRowInner>
+  );
 }
 
 // Inner component holds the animated state — split out so the refs/responder
@@ -49,10 +60,12 @@ function SwipeableChatRowInner({
   children,
   actionLabel,
   onAction,
+  backgroundColor,
 }: {
   children: React.ReactNode;
   actionLabel: string;
   onAction: () => void;
+  backgroundColor: string;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   // Tracks whether the row is currently snapped open
@@ -158,10 +171,12 @@ function SwipeableChatRowInner({
         </TouchableOpacity>
       </View>
 
-      {/* Row content slides left to reveal the button */}
+      {/* Row content slides left to reveal the button. Opaque background so the
+          button stays fully hidden behind the row at rest (chat rows themselves
+          use a translucent glass fill that would let the button show through). */}
       <Animated.View
         {...panResponder.panHandlers}
-        style={{ transform: [{ translateX }] }}
+        style={{ backgroundColor, transform: [{ translateX }] }}
       >
         {children}
       </Animated.View>

@@ -826,6 +826,7 @@ function ChatsList({
         enabled={isArchivable}
         actionLabel={isArchiveView ? 'Unarchive' : 'Archive'}
         onAction={handleAction}
+        backgroundColor={colors.background}
       >
         <ChatsListRow row={item} colors={colors} router={router} />
       </SwipeableChatRow>
