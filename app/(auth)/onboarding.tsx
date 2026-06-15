@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -51,6 +51,23 @@ export default function OnboardingScreen() {
   const latestHandleRef = useRef('');
   const handleInputRef = useRef<any>(null);
   const [showGlobeCta, setShowGlobeCta] = useState(false);
+
+  // Referral field state
+  const [recognizedRef, setRecognizedRef] = useState<string | null>(null);
+  const [recognizedSource, setRecognizedSource] = useState<'handle_code' | 'profile_share' | 'group_invite' | null>(null);
+  const [typedReferrer, setTypedReferrer] = useState('');
+
+  // Read captured attribution from AsyncStorage on mount to decide read-only vs editable
+  useEffect(() => {
+    AsyncStorage.multiGet(['attributionRef', 'attributionSource']).then(([[, ref], [, source]]) => {
+      if (ref) {
+        setRecognizedRef(ref);
+        setRecognizedSource((source as 'handle_code' | 'profile_share' | 'group_invite' | null) ?? null);
+      }
+    }).catch(() => {/* silent — field stays editable */});
+  }, []);
+
+  const isReadOnlyRef = !!recognizedRef;
 
   const detectedTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
 
@@ -110,32 +127,42 @@ export default function OnboardingScreen() {
 
     setIsSubmitting(true);
     try {
-      // Phase 13: read both attribution keys in parallel and pass both to the
-      // backend. Cast `attributionSource` to the typed union — runtime origin
-      // (extractAndStoreAttribution / clipboard recovery / legacy migration)
-      // constrains the value; backend Zod rejects anything outside the enum.
-      const [attributionRef, attributionSource] = await Promise.all([
-        AsyncStorage.getItem('attributionRef'),
-        AsyncStorage.getItem('attributionSource'),
-      ]);
+      // Resolve referral values from component state (populated on mount).
+      // recognized ref → keep its captured source (handle_code/profile_share/group_invite)
+      // organic typed  → use manual_entry source
+      // empty organic  → omit both (same as original organic flow)
+      let referralCode: string | undefined;
+      let attributionSource: 'handle_code' | 'profile_share' | 'group_invite' | 'manual_entry' | undefined;
+
+      if (recognizedRef) {
+        referralCode = recognizedRef;
+        attributionSource = recognizedSource ?? undefined;
+      } else if (typedReferrer.trim()) {
+        referralCode = typedReferrer.trim().toLowerCase();
+        attributionSource = 'manual_entry';
+      }
+
       await auth.onboarding(
         handle,
         detectedTimezone,
         true,
-        attributionRef ?? undefined,
-        (attributionSource as 'handle_code' | 'profile_share' | 'group_invite' | null) ?? undefined,
+        referralCode,
+        attributionSource,
       );
       completeOnboarding({
         handle,
         timezone: detectedTimezone,
         acceptedTermsAt: new Date().toISOString(),
       });
-      // Clear on success ONLY — failed submits keep both keys so a retry
-      // preserves attribution.
-      await Promise.all([
-        AsyncStorage.removeItem('attributionRef'),
-        AsyncStorage.removeItem('attributionSource'),
-      ]);
+      // Clear AsyncStorage attribution on success ONLY (recognized ref case).
+      // For organic typed there is nothing in AsyncStorage to clear.
+      // Failed submits keep the keys so a retry preserves attribution.
+      if (recognizedRef) {
+        await Promise.all([
+          AsyncStorage.removeItem('attributionRef'),
+          AsyncStorage.removeItem('attributionSource'),
+        ]);
+      }
       // Deferred deep-link: if a /g/:slug interstitial wrote a pending group
       // slug to the clipboard before install, recoverAttributionFromClipboard
       // (in _layout.tsx) has already persisted it to AsyncStorage. Consume it
@@ -294,6 +321,33 @@ export default function OnboardingScreen() {
                     </View>
                   </View>
                 </GlassCard>
+
+                {/* Referral field — read-only when ref captured, editable in organic case */}
+                {isReadOnlyRef ? (
+                  <GlassCard>
+                    <View style={styles.referralReadOnlyRow}>
+                      <Text style={styles.referralLabel}>Referred by</Text>
+                      <Text style={styles.referralHandle}>@{recognizedRef}</Text>
+                    </View>
+                  </GlassCard>
+                ) : (
+                  <View>
+                    <Text style={styles.referralLabel}>Referred by</Text>
+                    <View style={[styles.inputContainer, styles.referralInputContainer]}>
+                      <TextInput
+                        style={[styles.input, styles.referralInput]}
+                        placeholder="their handle"
+                        placeholderTextColor={COLORS.textMuted}
+                        value={typedReferrer}
+                        onChangeText={(text) => setTypedReferrer(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        maxLength={30}
+                      />
+                    </View>
+                    <Text style={styles.referralHint}>Optional — leave blank to skip</Text>
+                  </View>
+                )}
 
                 <Text style={[styles.hint, { color: colors.textMuted }]}>
                   Your timezone determines which local chat room you'll be placed in. You can change this later.
@@ -500,5 +554,37 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 15,
     fontFamily: FONTS.medium,
+  },
+  referralReadOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  referralLabel: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.textMuted,
+    marginBottom: 6,
+  },
+  referralHandle: {
+    fontSize: 15,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+  },
+  referralInputContainer: {
+    borderColor: COLORS.textMuted,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 0,
+  },
+  referralInput: {
+    fontSize: 16,
+    color: COLORS.text,
+    fontFamily: FONTS.regular,
+  },
+  referralHint: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    color: COLORS.textMuted,
+    marginTop: 4,
   },
 });
