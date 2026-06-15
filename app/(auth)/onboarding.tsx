@@ -40,7 +40,7 @@ type HandleResult = 'none' | 'invalid' | 'available' | 'taken';
 export default function OnboardingScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { completeOnboarding } = useAuthStore();
+  const { completeOnboarding, refreshSession } = useAuthStore();
 
   const [handle, setHandle] = useState('');
   const [handleResult, setHandleResult] = useState<HandleResult>('none');
@@ -154,6 +154,7 @@ export default function OnboardingScreen() {
         timezone: detectedTimezone,
         acceptedTermsAt: new Date().toISOString(),
       });
+      await refreshSession();
       // Clear AsyncStorage attribution on success ONLY (recognized ref case).
       // For organic typed there is nothing in AsyncStorage to clear.
       // Failed submits keep the keys so a retry preserves attribution.
