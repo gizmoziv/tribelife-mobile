@@ -97,7 +97,7 @@ export const auth = {
     timezone: string,
     acceptedTerms: boolean,
     referralCode?: string,
-    attributionSource?: 'handle_code' | 'profile_share' | 'group_invite',
+    attributionSource?: 'handle_code' | 'profile_share' | 'group_invite' | 'manual_entry',
   ) =>
     request('/api/auth/onboarding', {
       method: 'POST',
