@@ -27,7 +27,9 @@ import { useLocalSearchParams, useNavigation, useRouter, usePathname } from 'exp
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
-import { chat, moderationApi, reactionsApi, notificationsApi, groupsApi } from '@/services/api';
+import { chat, moderationApi, reactionsApi, notificationsApi, groupsApi, pins } from '@/services/api';
+import { PinnedBar } from '@/components/ui/chat/PinnedBar';
+import { usePinnedMessage } from '@/hooks/usePinnedMessage';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useChatsStore } from '@/store/chatsStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -153,6 +155,11 @@ export default function DMThreadScreen() {
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
+  // Phase 22: the current user's role in a group (D-02).
+  // Fetched on mount for group conversations so we can gate Pin/Unpin
+  // via myGroupRole only (D-05 — staff flag must NOT be the authority
+  // in DM/group screens; only globe + local chat rooms use it).
+  const [myGroupRole, setMyGroupRole] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const hasScrolledRef = useRef(false);
   // Phase 14 bug: row heights settle async (image avatars, reaction strips,
@@ -319,6 +326,61 @@ export default function DMThreadScreen() {
   useEffect(() => {
     resyncReadContext();
   }, [resyncReadContext]);
+
+  // Phase 22 D-02: fetch the caller's role in this group so we can gate
+  // Pin/Unpin via role alone (D-05 — staff flag not used in this screen).
+  useEffect(() => {
+    if (!isGroup || !user?.id) return;
+    let cancelled = false;
+    groupsApi.members(conversationId).then(({ members }) => {
+      if (cancelled) return;
+      const me = members.find((m) => m.userId === user.id);
+      setMyGroupRole(me?.role ?? null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [conversationId, isGroup, user?.id]);
+
+  // Phase 22: load-around for jump-to-pin (reuses chat.getConversationMessages)
+  const loadAroundForPin = useCallback(async (messageId: number) => {
+    try {
+      const { messages: msgs } = await chat.getConversationMessages(conversationId, { aroundMessageId: messageId });
+      setMessages(msgs);
+    } catch {
+      // silent — bar stays visible
+    }
+  }, [conversationId]);
+
+  const { pinnedMessage, setPinnedMessage, jumpToPinned } = usePinnedMessage({
+    conversationId,
+    messages,
+    flatListRef,
+    loadAround: loadAroundForPin,
+    scrollToMessage,
+  });
+
+  // Phase 22 D-02/D-04: pin/unpin handlers — authority per surface.
+  // DM: either participant (no role check needed).
+  // Group: only admin (myGroupRole === 'admin').
+  // D-05: community-room-only flag must NOT gate pin in DM/group screens.
+  const handleDmPin = useCallback(async (msg: Message) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const { pin } = await pins.pin({ messageId: msg.id, conversationId });
+      setPinnedMessage(pin);
+    } catch (err: any) {
+      Alert.alert('Could not pin', err?.message ?? 'Please try again.');
+    }
+  }, [conversationId, setPinnedMessage]);
+
+  const handleDmUnpin = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await pins.unpin({ conversationId });
+      setPinnedMessage(null);
+    } catch (err: any) {
+      Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
+    }
+  }, [conversationId, setPinnedMessage]);
 
   // Phase 10 D-07: optimistic clear of the matching Chats row's unread +
   // register this screen as currently-viewing (suppresses bump on incoming
@@ -875,6 +937,20 @@ export default function DMThreadScreen() {
         // See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
         keyboardVerticalOffset={headerHeight}
       >
+        {/* Pinned bar — sticky above message stream (D-11), visible to all */}
+        {pinnedMessage && (
+          <PinnedBar
+            pin={pinnedMessage}
+            canUnpin={
+              isGroup
+                ? myGroupRole === 'admin'
+                : true /* DM: either participant (D-04) */
+            }
+            onTap={jumpToPinned}
+            onUnpin={handleDmUnpin}
+          />
+        )}
+
         <FlatList
           ref={flatListRef}
           keyboardDismissMode="on-drag"
@@ -1023,6 +1099,21 @@ export default function DMThreadScreen() {
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }
             : undefined}
+          onPin={(() => {
+            // D-04: DM — either participant can pin. D-02: Group — admin only.
+            // D-05: authority is role-based only; community-room flag not used.
+            const canPin = isGroup ? myGroupRole === 'admin' : true;
+            const isSystem = selectedMessage?.kind === 'system';
+            const alreadyPinned = pinnedMessage?.messageId === selectedMessage?.id;
+            return canPin && !isSystem && !alreadyPinned && selectedMessage
+              ? () => handleDmPin(selectedMessage)
+              : undefined;
+          })()}
+          onUnpin={(() => {
+            const canPin = isGroup ? myGroupRole === 'admin' : true;
+            const alreadyPinned = pinnedMessage?.messageId === selectedMessage?.id;
+            return canPin && alreadyPinned ? handleDmUnpin : undefined;
+          })()}
           messageContent={selectedMessage?.content ?? ''}
         />
         <LanguagePicker

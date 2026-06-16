@@ -30,7 +30,9 @@ import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { TIMEZONE_ZONES } from '@/utils/timezoneZones';
-import { chat, globeApi, notificationsApi, reactionsApi } from '@/services/api';
+import { chat, globeApi, notificationsApi, reactionsApi, pins } from '@/services/api';
+import { PinnedBar } from '@/components/ui/chat/PinnedBar';
+import { usePinnedMessage } from '@/hooks/usePinnedMessage';
 import { useNotificationStore } from '@/store/notificationStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
@@ -50,6 +52,7 @@ import {
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
+  onRoomPinned,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
@@ -140,7 +143,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       parent?.setOptions({ headerShown: true });
     };
   }, [navigation]);
-  const { user } = useAuthStore();
+  const { user, capabilities } = useAuthStore();
   const {
     rooms,
     messages,
@@ -286,6 +289,49 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   }, [roomSlug, isJoining, setIsMember]);
 
   const globeRoomId = `globe:${roomSlug}`;
+
+  // ── Pinned message — load-around for jump (reuses the globe API) ──────────
+  const loadAroundForPin = useCallback(async (messageId: number) => {
+    setLoadingMessages(true);
+    try {
+      const { messages: msgs, hasMore } = await globeApi.messages(roomSlug!, undefined, 50, messageId);
+      setMessages(msgs);
+      if (!hasMore) prependMessages([], hasMore);
+    } catch {
+      // silent — bar stays visible, user can retry
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [roomSlug, setMessages, prependMessages, setLoadingMessages]);
+
+  const { pinnedMessage, setPinnedMessage, jumpToPinned } = usePinnedMessage({
+    roomId: globeRoomId,
+    messages,
+    flatListRef,
+    loadAround: loadAroundForPin,
+    scrollToMessage,
+  });
+
+  // ── Pin / unpin handlers (community room = staff only, D-07) ─────────────
+  const handleGlobePin = useCallback(async (msg: GlobeMessage) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const { pin } = await pins.pin({ messageId: msg.id, roomId: globeRoomId });
+      setPinnedMessage(pin);
+    } catch (err: any) {
+      Alert.alert('Could not pin', err?.message ?? 'Please try again.');
+    }
+  }, [globeRoomId, setPinnedMessage]);
+
+  const handleGlobeUnpin = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await pins.unpin({ roomId: globeRoomId });
+      setPinnedMessage(null);
+    } catch (err: any) {
+      Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
+    }
+  }, [globeRoomId, setPinnedMessage]);
 
   // ── Check client-side age gate on mount ─────────────────────────────────
   useEffect(() => {
@@ -904,6 +950,16 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           </View>
         )}
 
+        {/* Pinned bar — sticky above message stream (D-11), visible to everyone */}
+        {pinnedMessage && (
+          <PinnedBar
+            pin={pinnedMessage}
+            canUnpin={capabilities?.isStaff === true}
+            onTap={jumpToPinned}
+            onUnpin={handleGlobeUnpin}
+          />
+        )}
+
         {/* Message list */}
         {/* inverted: newest message anchors at visual bottom (offset 0).
             Data is reversed so index 0 = most-recent message; the native
@@ -1089,6 +1145,19 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }
             : undefined}
+          onPin={
+            capabilities?.isStaff === true &&
+            selectedMessage?.kind !== 'system' &&
+            pinnedMessage?.messageId !== selectedMessage?.id
+              ? () => selectedMessage && handleGlobePin(selectedMessage)
+              : undefined
+          }
+          onUnpin={
+            capabilities?.isStaff === true &&
+            pinnedMessage?.messageId === selectedMessage?.id
+              ? handleGlobeUnpin
+              : undefined
+          }
           messageContent={selectedMessage?.content ?? ''}
         />
         <LanguagePicker

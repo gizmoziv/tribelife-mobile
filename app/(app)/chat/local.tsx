@@ -24,7 +24,9 @@ import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect, useNavigation, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { chat, moderationApi, reactionsApi, notificationsApi, chats } from '@/services/api';
+import { chat, moderationApi, reactionsApi, notificationsApi, chats, pins } from '@/services/api';
+import { PinnedBar } from '@/components/ui/chat/PinnedBar';
+import { usePinnedMessage } from '@/hooks/usePinnedMessage';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
@@ -126,7 +128,7 @@ function LocalChatHeader({
 // without falling through to [conversationId].tsx — which caused a backend 500.
 export default function LocalChatScreen() {
   const { colors } = useTheme();
-  const { user } = useAuthStore();
+  const { user, capabilities } = useAuthStore();
   const keyboardBehavior = useKeyboardBehavior();
   const router = useRouter();
   const navigation = useNavigation();
@@ -212,6 +214,45 @@ export default function LocalChatScreen() {
   useEffect(() => {
     resyncReadContext();
   }, [resyncReadContext]);
+
+  // Phase 22: load-around for jump-to-pin (reuses chat.getRoomMessages)
+  const loadAroundForPin = useCallback(async (messageId: number) => {
+    try {
+      const { messages: msgs } = await chat.getRoomMessages(roomId, { aroundMessageId: messageId });
+      setMessages(msgs);
+    } catch {
+      // silent — bar stays visible
+    }
+  }, [roomId]);
+
+  const { pinnedMessage, setPinnedMessage, jumpToPinned } = usePinnedMessage({
+    roomId,
+    messages,
+    flatListRef,
+    loadAround: loadAroundForPin,
+    scrollToMessage,
+  });
+
+  // Phase 22: pin/unpin handlers — community room = staff only (same as globe)
+  const handleLocalPin = useCallback(async (msg: Message) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const { pin } = await pins.pin({ messageId: msg.id, roomId });
+      setPinnedMessage(pin);
+    } catch (err: any) {
+      Alert.alert('Could not pin', err?.message ?? 'Please try again.');
+    }
+  }, [roomId, setPinnedMessage]);
+
+  const handleLocalUnpin = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await pins.unpin({ roomId });
+      setPinnedMessage(null);
+    } catch (err: any) {
+      Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
+    }
+  }, [roomId, setPinnedMessage]);
 
   // Mark the room read in globe_read_positions on mount (Plan 09-01/02).
   //
@@ -716,6 +757,16 @@ export default function LocalChatScreen() {
         {/* Redundant timezone GlowBadge removed in Phase 9 hotfix 2 —
             the Stack.Screen headerTitle (zoneName) already shows the room name. */}
 
+        {/* Pinned bar — sticky above message stream (D-11), visible to all */}
+        {pinnedMessage && (
+          <PinnedBar
+            pin={pinnedMessage}
+            canUnpin={capabilities?.isStaff === true}
+            onTap={jumpToPinned}
+            onUnpin={handleLocalUnpin}
+          />
+        )}
+
         {/* Inverted: newest message anchors at the visual bottom (offset 0).
             Data is reversed so index 0 = most-recent message; the native
             `inverted` prop flips rendering so it appears at the bottom — no
@@ -808,6 +859,19 @@ export default function LocalChatScreen() {
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }
             : undefined}
+          onPin={
+            capabilities?.isStaff === true &&
+            selectedMessage?.kind !== 'system' &&
+            pinnedMessage?.messageId !== selectedMessage?.id
+              ? () => selectedMessage && handleLocalPin(selectedMessage)
+              : undefined
+          }
+          onUnpin={
+            capabilities?.isStaff === true &&
+            pinnedMessage?.messageId === selectedMessage?.id
+              ? handleLocalUnpin
+              : undefined
+          }
           messageContent={selectedMessage?.content ?? ''}
         />
         <LanguagePicker
