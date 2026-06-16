@@ -253,7 +253,7 @@ export function MessageBubble({
   }
 
   return (
-    <View style={[styles.container, isMe && styles.containerMe, highlighted && styles.highlighted]}>
+    <View style={[styles.container, isMe && styles.containerMe]}>
       {/* Avatar */}
       {!isMe && showAvatar && (
         <TouchableOpacity onPress={onProfilePress} activeOpacity={0.7}>
@@ -266,7 +266,7 @@ export function MessageBubble({
         </TouchableOpacity>
       )}
 
-      <View style={isMe ? styles.bubbleWrapMe : styles.bubbleWrap}>
+      <View style={[isMe ? styles.bubbleWrapMe : styles.bubbleWrap, highlighted && styles.highlighted]}>
         {/* Sender name */}
         {!isMe && (
           <TouchableOpacity onPress={onProfilePress} activeOpacity={0.7}>
@@ -425,18 +425,32 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     flexDirection: 'row-reverse',
   },
+  // Phase 22 (BUG-C): jump-to-pinned flash highlight. Applied to the BUBBLE
+  // WRAPPER (not the full row) so the tint+ring hugs the message itself and
+  // reads symmetrically for own and others' messages — no avatar-gutter offset
+  // box, no negative margins, no layout shift (transparent border reserved so
+  // toggling the highlight border doesn't reflow the bubble).
   highlighted: {
-    backgroundColor: 'rgba(232, 146, 47, 0.15)',
-    borderRadius: 20,
-    paddingHorizontal: 4,
-    marginHorizontal: -4,
+    backgroundColor: 'rgba(232, 146, 47, 0.16)',
+    borderColor: 'rgba(232, 146, 47, 0.55)',
   },
+  // Phase 22 (BUG-C): reserve the highlight ring's border+padding space always
+  // (transparent by default) so toggling `highlighted` only swaps colors and
+  // never reflows the bubble — no layout shift during the flash.
   bubbleWrap: {
     flexShrink: 1,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: 18,
+    padding: 3,
   },
   bubbleWrapMe: {
     flexShrink: 1,
     alignItems: 'flex-end',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: 18,
+    padding: 3,
   },
   senderHandle: {
     fontSize: 12,
