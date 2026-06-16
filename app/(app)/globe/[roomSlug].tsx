@@ -52,7 +52,6 @@ import {
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
-  onRoomPinned,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
