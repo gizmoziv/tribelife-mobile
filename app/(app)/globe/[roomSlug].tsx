@@ -1002,8 +1002,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
               <MentionAutocomplete
                 text={input}
                 selection={selection}
-                scope="globe"
-                contextId={roomSlug}
+                scope={timezoneZone ? 'timezone' : 'globe'}
+                contextId={timezoneZone ? (timezoneZone.members[0] ?? roomSlug) : roomSlug}
                 onSelect={(newText, newCursor) => {
                   setInput(newText);
                   setSelection({ start: newCursor, end: newCursor });
