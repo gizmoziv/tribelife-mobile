@@ -544,6 +544,36 @@ export const orgsApi = {
     ),
 };
 
+// ── Pins ───────────────────────────────────────────────────────────────────
+export interface PinnedMessageRow {
+  messageId: number;
+  pinnedAt: string;
+  previewText: string | null;
+  pinnedMediaUrl: string | null;
+  pinnedSenderHandle: string | null;
+}
+
+export const pins = {
+  getPin: (params: { roomId?: string; conversationId?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.roomId) qs.set('roomId', params.roomId);
+    if (params.conversationId != null) qs.set('conversationId', String(params.conversationId));
+    return request<{ pin: PinnedMessageRow | null }>(`/api/pins?${qs.toString()}`);
+  },
+
+  pin: (body: { messageId: number; roomId?: string; conversationId?: number }) =>
+    request<{ ok: true; pin: PinnedMessageRow }>('/api/pins', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  unpin: (body: { roomId?: string; conversationId?: number }) =>
+    request<{ ok: true }>('/api/pins', {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    }),
+};
+
 // ── News ────────────────────────────────────────────────────────────────────
 export const newsApi = {
   feed: (before?: string) =>

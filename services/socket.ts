@@ -276,3 +276,32 @@ export function onMediaRejected(cb: (data: { messageId: number; category: string
   socket?.on('message:media_rejected', cb);
   return () => { socket?.off('message:media_rejected', cb); };
 }
+
+// ── Pinned messages ─────────────────────────────────────────────────────────
+import type { PinnedMessageRow } from './api';
+
+export interface PinEventPayload {
+  action: 'pin' | 'unpin';
+  roomId?: string;
+  conversationId?: number;
+  slug?: string;
+  pin: PinnedMessageRow | null;
+}
+
+/** Listener for timezone room pin events (room:pinned). */
+export function onRoomPinned(cb: (payload: PinEventPayload) => void): () => void {
+  socket?.on('room:pinned', cb);
+  return () => socket?.off('room:pinned', cb);
+}
+
+/** Listener for DM / group conversation pin events (dm:pinned). */
+export function onDmPinned(cb: (payload: PinEventPayload) => void): () => void {
+  socket?.on('dm:pinned', cb);
+  return () => socket?.off('dm:pinned', cb);
+}
+
+/** Listener for Globe room pin events (globe:pinned). */
+export function onGlobePinned(cb: (payload: PinEventPayload) => void): () => void {
+  socket?.on('globe:pinned', cb);
+  return () => socket?.off('globe:pinned', cb);
+}

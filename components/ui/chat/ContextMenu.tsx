@@ -32,6 +32,10 @@ interface ContextMenuProps {
   isOwn?: boolean;           // default false — controls Edit row visibility
   onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
   onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
+  // Phase 22: pin/unpin — pass undefined (NEVER a no-op arrow) for non-empowered users
+  // so the row is completely absent from the menu for users who can't pin.
+  onPin?: () => void;        // optional — shown only when caller passes a defined handler
+  onUnpin?: () => void;      // optional — shown only when the message is the current pin AND caller is empowered
   messageContent: string;
 }
 
@@ -45,6 +49,8 @@ export function ContextMenu({
   isOwn = false,
   onReport,
   onTranslate,
+  onPin,
+  onUnpin,
   messageContent,
 }: ContextMenuProps) {
   const { colors } = useTheme();
@@ -96,6 +102,16 @@ export function ContextMenu({
 
   const handleTranslate = () => {
     onTranslate?.();
+    onClose();
+  };
+
+  const handlePin = () => {
+    onPin?.();
+    onClose();
+  };
+
+  const handleUnpin = () => {
+    onUnpin?.();
     onClose();
   };
 
@@ -161,6 +177,28 @@ export function ContextMenu({
               >
                 <Text style={styles.actionIcon}>&#x21A9;</Text>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Reply</Text>
+              </TouchableOpacity>
+            )}
+
+            {onPin && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handlePin}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x1F4CC;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Pin</Text>
+              </TouchableOpacity>
+            )}
+
+            {onUnpin && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleUnpin}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x1F4CC;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Unpin</Text>
               </TouchableOpacity>
             )}
 
