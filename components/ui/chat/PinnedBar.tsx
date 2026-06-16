@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import Svg, { Path, Line } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
 import { COLORS, FONTS, RADIUS, SHADOWS, SPACING } from '@/constants';
 import type { PinnedMessageRow } from '@/services/api';
@@ -27,78 +27,61 @@ function formatPinDate(pinnedAt: string): string {
   return `${month} ${day}, ${pinYear}`;
 }
 
-// ── Leading pin indicator (filled pushpin) ──────────────────────────────────
-// A real pushpin: circular head at top-right, shaft angling down-left,
-// needle pointing down from the clip. Filled for visual weight.
+// ── Leading pin indicator (Lucide "pin") ────────────────────────────────────
+// A clear, recognizable down-pointing pushpin. Stroked so it tints to theme.
 function PinFilledIcon({ color }: { color: string }) {
   return (
-    <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
-      {/* Pin head (circle) */}
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M15 3a3 3 0 0 1 0 6H9a3 3 0 0 1 0-6h6z"
-        fill={color}
-      />
-      {/* Pin body / clip */}
-      <Path
-        d="M12 9v6"
-        stroke={color}
-        strokeWidth={2.5}
-        strokeLinecap="round"
-      />
-      {/* Base plate */}
-      <Path
-        d="M8 15h8l-1.5 5H9.5L8 15z"
-        fill={color}
-      />
-      {/* Needle */}
-      <Line
-        x1="12"
-        y1="20"
-        x2="12"
-        y2="23"
+        d="M12 17v5"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
 }
 
-// ── Unpin action icon (outline pushpin) ──────────────────────────────────────
-// Same geometry but stroked, used as the "remove pin" affordance.
+// ── Unpin action icon (Lucide "pin-off" — slashed pushpin) ───────────────────
+// A pushpin with a diagonal strike-through: the recognizable "remove pin" glyph.
 function UnpinIcon({ color }: { color: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-      {/* Pin head (circle outline) */}
       <Path
-        d="M15 3a3 3 0 0 1 0 6H9a3 3 0 0 1 0-6h6z"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinejoin="round"
-      />
-      {/* Pin shaft */}
-      <Path
-        d="M12 9v6"
+        d="M12 17v5"
         stroke={color}
         strokeWidth={1.8}
         strokeLinecap="round"
-      />
-      {/* Base plate */}
-      <Path
-        d="M8 15h8l-1.5 5H9.5L8 15z"
-        stroke={color}
-        strokeWidth={1.8}
         strokeLinejoin="round"
       />
-      {/* Needle */}
-      <Line
-        x1="12"
-        y1="20"
-        x2="12"
-        y2="23"
+      <Path
+        d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89"
         stroke={color}
         strokeWidth={1.8}
         strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="m2 2 20 20"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
