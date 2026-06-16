@@ -553,6 +553,15 @@ export interface PinnedMessageRow {
   pinnedSenderHandle: string | null;
 }
 
+/**
+ * The kind='system' "{handle} pinned/unpinned a message" line the backend
+ * creates+emits and now also returns from POST/DELETE /api/pins. Reuses the
+ * chat `Message` shape (carries id/content/senderHandle/kind/mentions/etc.) and
+ * adds `slug` for the globe-room branch so the Globe screen's GlobeMessage
+ * append is consistent. Possibly null when no system line was created.
+ */
+export type PinSystemMessage = Message & { slug?: string };
+
 export const pins = {
   getPin: (params: { roomId?: string; conversationId?: number }) => {
     const qs = new URLSearchParams();
@@ -562,13 +571,13 @@ export const pins = {
   },
 
   pin: (body: { messageId: number; roomId?: string; conversationId?: number }) =>
-    request<{ ok: true; pin: PinnedMessageRow }>('/api/pins', {
+    request<{ ok: true; pin: PinnedMessageRow; systemMessage: PinSystemMessage | null }>('/api/pins', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
   unpin: (body: { roomId?: string; conversationId?: number }) =>
-    request<{ ok: true }>('/api/pins', {
+    request<{ ok: true; systemMessage: PinSystemMessage | null }>('/api/pins', {
       method: 'DELETE',
       body: JSON.stringify(body),
     }),

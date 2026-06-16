@@ -237,8 +237,15 @@ export default function LocalChatScreen() {
   const handleLocalPin = useCallback(async (msg: Message) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const { pin } = await pins.pin({ messageId: msg.id, roomId });
+      const { pin, systemMessage } = await pins.pin({ messageId: msg.id, roomId });
       setPinnedMessage(pin);
+      // Phase 22 (BUG-A): append the actor's own pin system line immediately,
+      // deduped by id against the room:message socket echo. Inverted list →
+      // scroll to visual bottom (offset 0).
+      if (systemMessage) {
+        setMessages((prev) => (prev.some((m) => m.id === systemMessage.id) ? prev : [...prev, systemMessage]));
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }
     } catch (err: any) {
       Alert.alert('Could not pin', err?.message ?? 'Please try again.');
     }
@@ -247,8 +254,12 @@ export default function LocalChatScreen() {
   const handleLocalUnpin = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await pins.unpin({ roomId });
+      const { systemMessage } = await pins.unpin({ roomId });
       setPinnedMessage(null);
+      if (systemMessage) {
+        setMessages((prev) => (prev.some((m) => m.id === systemMessage.id) ? prev : [...prev, systemMessage]));
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }
     } catch (err: any) {
       Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
     }
@@ -335,7 +346,9 @@ export default function LocalChatScreen() {
 
     connectSocket().then(() => {
       const offRoom = onRoomMessage((msg) => {
-        setMessages((prev) => [...prev, msg]);
+        // Phase 22 (BUG-A): dedup by id so the local-chat optimistic pin-system
+        // append + this socket echo don't double the same line.
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
         // Inverted list: visual bottom = offset 0 (newest message).
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
         // D-17: re-advance server read-position for messages from others while

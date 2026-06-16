@@ -365,8 +365,15 @@ export default function DMThreadScreen() {
   const handleDmPin = useCallback(async (msg: Message) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const { pin } = await pins.pin({ messageId: msg.id, conversationId });
+      const { pin, systemMessage } = await pins.pin({ messageId: msg.id, conversationId });
       setPinnedMessage(pin);
+      // Phase 22 (BUG-A): append the actor's own pin system line immediately
+      // (deduped by id against the dm:message socket echo via the same guard
+      // used in onDirectMessage) so the pinner sees it without leaving+re-entering.
+      if (systemMessage) {
+        setMessages((prev) => (prev.some((m) => m.id === systemMessage.id) ? prev : [...prev, systemMessage]));
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }
     } catch (err: any) {
       Alert.alert('Could not pin', err?.message ?? 'Please try again.');
     }
@@ -375,8 +382,12 @@ export default function DMThreadScreen() {
   const handleDmUnpin = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await pins.unpin({ conversationId });
+      const { systemMessage } = await pins.unpin({ conversationId });
       setPinnedMessage(null);
+      if (systemMessage) {
+        setMessages((prev) => (prev.some((m) => m.id === systemMessage.id) ? prev : [...prev, systemMessage]));
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }
     } catch (err: any) {
       Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
     }

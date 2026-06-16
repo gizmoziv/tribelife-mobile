@@ -30,7 +30,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { TIMEZONE_ZONES } from '@/utils/timezoneZones';
-import { chat, globeApi, notificationsApi, reactionsApi, pins } from '@/services/api';
+import { chat, globeApi, notificationsApi, reactionsApi, pins, type PinSystemMessage } from '@/services/api';
 import { PinnedBar } from '@/components/ui/chat/PinnedBar';
 import { usePinnedMessage } from '@/hooks/usePinnedMessage';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -312,25 +312,56 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   });
 
   // ── Pin / unpin handlers (community room = staff only, D-07) ─────────────
+  // Phase 22 (BUG-A): map the API's system message into the GlobeMessage shape
+  // and append via globeStore.addMessage (dedups by id at store L68), so the
+  // actor sees their own pin line immediately, deduped against the socket echo.
+  const appendPinSystemMessage = useCallback(
+    (systemMessage: PinSystemMessage | null) => {
+      if (!systemMessage) return;
+      const gm: GlobeMessage = {
+        id: systemMessage.id,
+        content: systemMessage.content,
+        senderId: systemMessage.senderId,
+        senderName: systemMessage.senderName ?? systemMessage.senderHandle,
+        senderHandle: systemMessage.senderHandle,
+        senderAvatar: systemMessage.senderAvatar ?? null,
+        createdAt: systemMessage.createdAt,
+        slug: systemMessage.slug ?? roomSlug!,
+        replyToId: systemMessage.replyToId ?? null,
+        replyTo: systemMessage.replyTo ?? null,
+        kind: 'system',
+      };
+      addMessage(gm);
+      // Inverted list: visual bottom = offset 0 (newest). Inline the scroll
+      // rather than calling scrollToBottom (declared later — avoid TDZ in the
+      // dependency array evaluated during render).
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      resetNewMessageCount();
+    },
+    [addMessage, resetNewMessageCount, roomSlug],
+  );
+
   const handleGlobePin = useCallback(async (msg: GlobeMessage) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const { pin } = await pins.pin({ messageId: msg.id, roomId: globeRoomId });
+      const { pin, systemMessage } = await pins.pin({ messageId: msg.id, roomId: globeRoomId });
       setPinnedMessage(pin);
+      appendPinSystemMessage(systemMessage);
     } catch (err: any) {
       Alert.alert('Could not pin', err?.message ?? 'Please try again.');
     }
-  }, [globeRoomId, setPinnedMessage]);
+  }, [globeRoomId, setPinnedMessage, appendPinSystemMessage]);
 
   const handleGlobeUnpin = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await pins.unpin({ roomId: globeRoomId });
+      const { systemMessage } = await pins.unpin({ roomId: globeRoomId });
       setPinnedMessage(null);
+      appendPinSystemMessage(systemMessage);
     } catch (err: any) {
       Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
     }
-  }, [globeRoomId, setPinnedMessage]);
+  }, [globeRoomId, setPinnedMessage, appendPinSystemMessage]);
 
   // ── Check client-side age gate on mount ─────────────────────────────────
   useEffect(() => {
