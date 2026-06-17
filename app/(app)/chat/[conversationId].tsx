@@ -946,7 +946,13 @@ export default function DMThreadScreen() {
         // keyboard covered the input until an app restart. `useHeaderHeight()`
         // is read from navigation config, so there is no layout race.
         // See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
-        keyboardVerticalOffset={headerHeight}
+        // ANDROID: pass 0, not headerHeight. On Android edge-to-edge the
+        // keyboard-controller reads the native keyboard frame and SafeAreaView
+        // already accounts for the top inset, so adding the header height (which
+        // itself includes the safe-area top) double-counts and leaves a large
+        // gap between the composer and the keyboard. globe/local use 0 on
+        // Android for the same reason; iOS still needs the header offset.
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
         {/* Pinned bar — sticky above message stream (D-11), visible to all */}
         {pinnedMessage && (
