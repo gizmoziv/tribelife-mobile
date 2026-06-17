@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,14 +16,14 @@ import {
   Animated,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useNavigation, useRouter, usePathname } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter, usePathname, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
@@ -99,12 +99,14 @@ export default function DMThreadScreen() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   const keyboardBehavior = useKeyboardBehavior();
-  // Deterministic header offset (header + safe-area top) from navigation config.
-  // Replaces the KAV `automaticOffset`, whose async screen-position measurement
-  // raced the not-yet-laid-out Stack header on the cold-start notification path
-  // and left the input behind the keyboard until an app restart.
-  const headerHeight = useHeaderHeight();
+  const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Inline-header DM title resolution: when the DM is opened without a `handle`
+  // param (e.g. from a notification tap), the other participant's handle is
+  // discovered asynchronously from the first loaded message. Hold it in state
+  // so the inline header title re-renders reactively (mirrors how the old
+  // native-header path called navigation.setOptions after the load).
+  const [resolvedHandle, setResolvedHandle] = useState<string | null>(null);
   // ── D-09: Preview-to-join state (mirrors v1.7 Phase 11 D-12 pattern) ───────
   const [isMember, setIsMember] = useState<boolean>(initialIsMember);
   const [isJoining, setIsJoining] = useState<boolean>(false);
@@ -189,115 +191,84 @@ export default function DMThreadScreen() {
     };
   }, [navigation]);
 
-  useEffect(() => {
-    const goBack = () => {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(app)/chat');
-      }
-    };
-    navigation.setOptions({
-      headerStyle: {
-        backgroundColor: colors.background,
-        shadowColor: 'transparent',
-        elevation: 0,
-      },
-      headerTintColor: colors.text,
-      headerTitleStyle: { fontFamily: FONTS.semiBold, fontSize: 16 },
-      headerLeft: () => (
-        <TouchableOpacity onPress={goBack} hitSlop={8} style={styles.backButton}>
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-            <Path d="M15 18l-6-6 6-6" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, colors]);
+  // Inline-header back control — preserves the prior native-header goBack:
+  // pop the stack if possible, else replace into the Chats list root.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(app)/chat');
+    }
+  }, [router]);
 
-  useEffect(() => {
+  // ── Inline-header title (replaces the native-header navigation.setOptions) ──
+  // Group: groupName (+ "[Archived]" suffix when archived).
+  // DM: "@<handle> & You", where <handle> comes from the route param or, on the
+  // notification-tap path where no handle param exists, the async-resolved
+  // other-participant handle (set in the message-load effect below).
+  const headerTitle = useMemo(() => {
     if (isGroup && groupName) {
-      // D-11: append "[Archived]" indicator to the title when the group is archived.
-      navigation.setOptions({ title: isArchived ? `${groupName} [Archived]` : groupName });
-    } else if (handle) {
-      navigation.setOptions({ title: `@${handle} & You` });
+      return isArchived ? `${groupName} [Archived]` : groupName;
     }
-  }, [handle, isGroup, groupName, isArchived]);
+    const dmHandle = handle ?? resolvedHandle;
+    if (dmHandle) return `@${dmHandle} & You`;
+    return '';
+  }, [isGroup, groupName, isArchived, handle, resolvedHandle]);
 
-  useEffect(() => {
-    if (isGroup) {
-      navigation.setOptions({
-        headerRight: () => (
-          <TouchableOpacity
-            onPress={() => router.push({
-              pathname: '/(app)/group/[conversationId]',
-              params: { conversationId: conversationId.toString(), groupName, inviteSlug, from: pathname },
-            })}
-            hitSlop={8}
-            style={{ paddingRight: 12 }}
-          >
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M12 6.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
-              <Path d="M12 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
-              <Path d="M12 20.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
-            </Svg>
-          </TouchableOpacity>
-        ),
-      });
-      return;
-    }
+  // ── Inline-header right-side menu (replaces the native headerRight) ──────────
+  // Group: 3-dot (vertical) → open the group info/management screen.
+  // DM: 3-dot (horizontal) → Report / Block action sheet for the other user.
+  const handleGroupMenu = useCallback(() => {
+    router.push({
+      pathname: '/(app)/group/[conversationId]',
+      params: { conversationId: conversationId.toString(), groupName, inviteSlug, from: pathname },
+    });
+  }, [router, conversationId, groupName, inviteSlug, pathname]);
 
+  const handleDmMenu = useCallback(() => {
     const otherMsg = messages.find((m) => m.senderId !== user?.id);
     const otherUserId = otherMsg?.senderId;
     const otherHandle = handle ?? otherMsg?.senderHandle ?? 'user';
-
     if (!otherUserId) return;
+    Alert.alert(`@${otherHandle}`, 'What would you like to do?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Report User',
+        onPress: () => {
+          moderationApi.report(otherUserId, 'profile', 'Reported from DM conversation')
+            .then(() => Alert.alert('Reported', 'Thank you. We will review this within 24 hours.'));
+        },
+      },
+      {
+        text: 'Block User',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Block User', `Block @${otherHandle}? You won't see their messages anymore.`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Block',
+              style: 'destructive',
+              onPress: () => {
+                moderationApi.blockUser(otherUserId)
+                  .then(() => {
+                    Alert.alert('Blocked', `@${otherHandle} has been blocked.`);
+                    router.back();
+                  });
+              },
+            },
+          ]);
+        },
+      },
+    ]);
+  }, [messages, handle, user?.id, router]);
 
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => {
-            Alert.alert(`@${otherHandle}`, 'What would you like to do?', [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Report User',
-                onPress: () => {
-                  moderationApi.report(otherUserId, 'profile', 'Reported from DM conversation')
-                    .then(() => Alert.alert('Reported', 'Thank you. We will review this within 24 hours.'));
-                },
-              },
-              {
-                text: 'Block User',
-                style: 'destructive',
-                onPress: () => {
-                  Alert.alert('Block User', `Block @${otherHandle}? You won't see their messages anymore.`, [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Block',
-                      style: 'destructive',
-                      onPress: () => {
-                        moderationApi.blockUser(otherUserId)
-                          .then(() => {
-                            Alert.alert('Blocked', `@${otherHandle} has been blocked.`);
-                            router.back();
-                          });
-                      },
-                    },
-                  ]);
-                },
-              },
-            ]);
-          }}
-          hitSlop={8}
-          style={{ paddingRight: 12 }}
-        >
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-            <Path d="M12 13a1 1 0 100-2 1 1 0 000 2zM19 13a1 1 0 100-2 1 1 0 000 2zM5 13a1 1 0 100-2 1 1 0 000 2z" fill={colors.textMuted} />
-          </Svg>
-        </TouchableOpacity>
-      ),
-    });
-  }, [messages, handle, user?.id, isGroup, conversationId]);
+  // DM menu is only actionable once we know the other participant. Mirrors the
+  // old native-header behavior where headerRight was only set after otherUserId
+  // resolved — here we simply hide the button until then.
+  const dmMenuReady = useMemo(
+    () => !isGroup && messages.some((m) => m.senderId !== user?.id),
+    [isGroup, messages, user?.id],
+  );
 
   // Opening a chat directly (not via a notification tap) should still clear
   // any bell notifications tied to this conversation — otherwise the badge
@@ -417,7 +388,9 @@ export default function DMThreadScreen() {
       if (!isGroup && !handle && msgs.length > 0) {
         const otherMsg = msgs.find((m) => m.senderId !== user?.id);
         if (otherMsg?.senderHandle) {
-          navigation.setOptions({ title: `@${otherMsg.senderHandle} & You` });
+          // Drive the inline-header title reactively (was navigation.setOptions
+          // on the native header). headerTitle useMemo picks this up.
+          setResolvedHandle(otherMsg.senderHandle);
         }
       }
       if (aroundMessageId != null) {
@@ -932,27 +905,36 @@ export default function DMThreadScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Phase 22 (BUG fix): disable the native Stack header and render an
+          inline header instead. The native Stack header is incompatible with
+          react-native-keyboard-controller's KAV offset math on Android (the
+          keyboard overlapped/gapped the composer). The globe/local chat screens
+          already use this inline-header pattern and avoid the keyboard correctly
+          with keyboardVerticalOffset={0}; this brings the DM/group screen in line. */}
+      <Stack.Screen options={{ headerShown: false }} />
+      <ChatHeader
+        title={headerTitle}
+        onBack={goBack}
+        colors={colors}
+        insetsTop={insets.top}
+        isGroup={isGroup}
+        onGroupMenu={handleGroupMenu}
+        onDmMenu={handleDmMenu}
+        showDmMenu={dmMenuReady}
+      />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={keyboardBehavior}
         // `react-native-keyboard-controller`'s KAV uses native keyboard frame
         // listeners (works on Android edge-to-edge where RN's built-in KAV
-        // silently no-ops since SDK 53). We pass an EXPLICIT, deterministic
-        // `keyboardVerticalOffset` (the navigation header height, which includes
-        // the safe-area top) instead of `automaticOffset`. `automaticOffset`
-        // measures the view's on-screen position lazily; on the cold-start
-        // push-notification path the Stack header above this SafeAreaView isn't
-        // laid out yet when it measures, so it captured a stale/0 offset and the
-        // keyboard covered the input until an app restart. `useHeaderHeight()`
-        // is read from navigation config, so there is no layout race.
-        // See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
-        // ANDROID: 0 — matches the globe/local chat screens, which use the same
-        // keyboard-controller KAV + useKeyboardBehavior and avoid the keyboard
-        // correctly with offset 0 (the keyboard is avoided at the bottom; the
-        // top Stack header is irrelevant to that). iOS keeps headerHeight to
-        // preserve the cold-start push-notification offset fix (the input was
-        // landing behind the keyboard on the notification-launch path otherwise).
-        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+        // silently no-ops since SDK 53). With the native Stack header removed
+        // (inline header now sits inside this SafeAreaView, exactly like the
+        // globe/local chat screens), the offset is 0 on BOTH platforms — the
+        // keyboard is avoided at the bottom and there is no native header above
+        // the SafeAreaView to compensate for. This matches globe/[roomSlug].tsx
+        // and chat/local.tsx, which use offset 0 and work correctly on iOS and
+        // Android. See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
+        keyboardVerticalOffset={0}
       >
         {/* Pinned bar — sticky above message stream (D-11), visible to all */}
         {pinnedMessage && (
@@ -1144,16 +1126,109 @@ export default function DMThreadScreen() {
   );
 }
 
+// ── Inline header ─────────────────────────────────────────────────────────────
+// Mirrors globe/[roomSlug].tsx's CustomHeader: back pill (left), centered title,
+// and a right-side slot. Here the right slot is the 3-dot overflow menu (group
+// vs DM variant) instead of globe's participant count. Top padding uses the
+// safe-area inset on Android so the status bar is cleared (replaces what the
+// native Stack header did); iOS gets it from the enclosing SafeAreaView.
+interface ChatHeaderProps {
+  title: string;
+  onBack: () => void;
+  colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
+  insetsTop: number;
+  isGroup: boolean;
+  onGroupMenu: () => void;
+  onDmMenu: () => void;
+  showDmMenu: boolean;
+}
+
+function ChatHeader({ title, onBack, colors, insetsTop, isGroup, onGroupMenu, onDmMenu, showDmMenu }: ChatHeaderProps) {
+  return (
+    <View
+      style={[
+        styles.headerRow,
+        {
+          paddingTop: (Platform.OS === 'android' ? insetsTop : 0) + 6,
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      <Pressable
+        onPress={onBack}
+        hitSlop={8}
+        style={({ pressed }) => [
+          styles.headerBackPill,
+          { backgroundColor: colors.surfaceGlass, opacity: pressed ? 0.8 : 1 },
+          SHADOWS.sm,
+        ]}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+          <Path d="M15 18l-6-6 6-6" stroke={COLORS.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      </Pressable>
+      <View style={styles.headerTitleWrap} pointerEvents="none">
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+      </View>
+      {/* Right slot: group → 3-dot (vertical) opens group screen; DM → 3-dot
+          (horizontal) opens Report/Block sheet. The DM menu is hidden until the
+          other participant is known (mirrors the old headerRight gate). A fixed-
+          width spacer keeps the title centered when no button is shown. */}
+      {isGroup ? (
+        <TouchableOpacity onPress={onGroupMenu} hitSlop={8} style={styles.headerMenuButton}>
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 6.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
+            <Path d="M12 13.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
+            <Path d="M12 20.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" fill={colors.text} />
+          </Svg>
+        </TouchableOpacity>
+      ) : showDmMenu ? (
+        <TouchableOpacity onPress={onDmMenu} hitSlop={8} style={styles.headerMenuButton}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 13a1 1 0 100-2 1 1 0 000 2zM19 13a1 1 0 100-2 1 1 0 000 2zM5 13a1 1 0 100-2 1 1 0 000 2z" fill={colors.textMuted} />
+          </Svg>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.headerMenuButton} />
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  // ── Inline header ──────────────────────────────────────────────────────────
+  headerRow: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.page,
+    paddingBottom: 10,
+  },
+  headerBackPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+  },
+  headerTitleWrap: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontFamily: FONTS.semiBold,
+  },
+  headerMenuButton: {
+    width: 44,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   messageList: { paddingHorizontal: 12, paddingVertical: 12 },
   typingContainer: {
