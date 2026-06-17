@@ -22,7 +22,7 @@ import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useNavigation, useRouter, usePathname, Stack } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter, usePathname, useFocusEffect, Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
@@ -304,22 +304,37 @@ export default function DMThreadScreen() {
 
   // Phase 22 D-02: fetch the caller's role in this group so we can gate
   // Pin/Unpin via role alone (D-05 — staff flag not used in this screen).
-  useEffect(() => {
-    if (!isGroup || !user?.id) return;
-    let cancelled = false;
-    groupsApi.members(conversationId).then(({ members }) => {
-      if (cancelled) return;
-      const me = members.find((m) => m.userId === user.id);
-      setMyGroupRole(me?.role ?? null);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [conversationId, isGroup, user?.id]);
+  // WR-03: re-fetch on focus (not just mount) so a demotion that happened
+  // while the screen was backgrounded is reflected — otherwise a demoted user
+  // keeps a stale Unpin affordance and hits a confusing server 403. A failed
+  // fetch leaves the prior role intact (rather than nulling it on a transient
+  // blip) so a real admin doesn't lose pin controls on a network hiccup.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isGroup || !user?.id) return;
+      let cancelled = false;
+      groupsApi.members(conversationId).then(({ members }) => {
+        if (cancelled) return;
+        const me = members.find((m) => m.userId === user.id);
+        setMyGroupRole(me?.role ?? null);
+      }).catch(() => { /* keep prior role on transient error */ });
+      return () => { cancelled = true; };
+    }, [conversationId, isGroup, user?.id]),
+  );
 
   // Phase 22: load-around for jump-to-pin (reuses chat.getConversationMessages)
+  // WR-01: merge the around-window into the existing list (dedupe by id,
+  // re-sort ascending) instead of wholesale replacement, so the previously
+  // loaded recent tail is not discarded when jumping to an old pinned message.
   const loadAroundForPin = useCallback(async (messageId: number) => {
     try {
       const { messages: msgs } = await chat.getConversationMessages(conversationId, { aroundMessageId: messageId });
-      setMessages(msgs);
+      setMessages((prev) => {
+        const byId = new Map<number, Message>();
+        for (const m of prev) byId.set(m.id, m);
+        for (const m of msgs) byId.set(m.id, m);
+        return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+      });
     } catch {
       // silent — bar stays visible
     }
@@ -351,9 +366,20 @@ export default function DMThreadScreen() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }
     } catch (err: any) {
+      // WR-03: a 403 here usually means the caller's admin role changed since
+      // the screen loaded (stale Pin affordance). Surface a clearer hint and
+      // re-sync the cached role so the controls update.
+      if (err?.status === 403 && isGroup && user?.id) {
+        groupsApi.members(conversationId).then(({ members }) => {
+          const me = members.find((m) => m.userId === user.id);
+          setMyGroupRole(me?.role ?? null);
+        }).catch(() => {});
+        Alert.alert('Could not pin', 'You no longer have permission to pin in this group.');
+        return;
+      }
       Alert.alert('Could not pin', err?.message ?? 'Please try again.');
     }
-  }, [conversationId, setPinnedMessage]);
+  }, [conversationId, isGroup, user?.id, setPinnedMessage]);
 
   const handleDmUnpin = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -366,9 +392,18 @@ export default function DMThreadScreen() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }
     } catch (err: any) {
+      // WR-03: clearer message + role re-sync on the stale-admin 403 case.
+      if (err?.status === 403 && isGroup && user?.id) {
+        groupsApi.members(conversationId).then(({ members }) => {
+          const me = members.find((m) => m.userId === user.id);
+          setMyGroupRole(me?.role ?? null);
+        }).catch(() => {});
+        Alert.alert('Could not unpin', 'You no longer have permission to unpin in this group.');
+        return;
+      }
       Alert.alert('Could not unpin', err?.message ?? 'Please try again.');
     }
-  }, [conversationId, setPinnedMessage]);
+  }, [conversationId, isGroup, user?.id, setPinnedMessage]);
 
   // Phase 10 D-07: optimistic clear of the matching Chats row's unread +
   // register this screen as currently-viewing (suppresses bump on incoming
