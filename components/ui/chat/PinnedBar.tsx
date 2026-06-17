@@ -99,10 +99,11 @@ export interface PinnedBarProps {
 export function PinnedBar({ pin, canUnpin, onTap, onUnpin }: PinnedBarProps) {
   const { colors } = useTheme();
 
-  const preview =
-    pin.previewText && pin.previewText.length > 60
-      ? `${pin.previewText.slice(0, 60)}…`
-      : (pin.previewText ?? '');
+  // WR-06: the server already caps previewText and appends an ellipsis when it
+  // truncates (PIN_PREVIEW_MAX_LEN in pins.ts), so render it verbatim. The old
+  // client-side `> 60` re-truncation was dead (server hard-capped at 60) and
+  // long messages were silently cut with no truncation indicator.
+  const preview = pin.previewText ?? '';
 
   return (
     <TouchableOpacity
