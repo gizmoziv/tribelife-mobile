@@ -1,9 +1,8 @@
 import { Stack } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { COLORS, FONTS } from '@/constants';
 
 export default function ChatLayout() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <Stack
@@ -16,16 +15,18 @@ export default function ChatLayout() {
       <Stack.Screen
         name="[conversationId]"
         options={{
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.surface },
-          headerTintColor: colors.text,
-          headerTitleStyle: { fontFamily: FONTS.semiBold },
+          // Inline ChatHeader inside the screen (same pattern as
+          // globe/[roomSlug].tsx + local). headerShown MUST be false at the
+          // route level — otherwise the native header renders for a frame
+          // during the iOS push transition (white flash + content jump) before
+          // the in-screen <Stack.Screen headerShown:false> override applies.
+          headerShown: false,
           presentation: 'card',
         }}
       />
-      {/* local and town-square render their own inline custom headers
-          (same pattern as globe/[roomSlug].tsx — CustomHeader). They
-          inherit headerShown: false from the default screenOptions above. */}
+      {/* [conversationId], local, and town-square all render their own inline
+          custom headers (same pattern as globe/[roomSlug].tsx — CustomHeader),
+          inheriting headerShown: false. */}
     </Stack>
   );
 }
