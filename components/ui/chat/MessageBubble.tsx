@@ -101,7 +101,7 @@ export function MessageBubble({
   showTranslation,
   onToggleTranslation,
 }: MessageBubbleProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const { user } = useAuthStore();
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -283,7 +283,7 @@ export function MessageBubble({
               colors={[...COLORS.gradientPrimary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={styles.bubble}
+              style={[styles.bubble, !isDark && SHADOWS.sm]}
             >
               {/* Reply preview inside bubble */}
               {/* Reply quotes intentionally freeze to original content — edit feature does not rewrite replyTo.content (PLAN 260517-hiy). */}
@@ -333,6 +333,7 @@ export function MessageBubble({
           ) : (
             <View style={[
               styles.bubble,
+              !isDark && SHADOWS.sm,
               { backgroundColor: colors.surfaceGlass },
               mentionsMe && styles.bubbleMentionsMe,
             ]}>
@@ -462,7 +463,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    ...SHADOWS.sm,
+    // Shadow applied inline only in light mode — in dark mode SHADOWS.sm
+    // renders as a grey halo box around the bubble (#pin-uat).
   },
   // Bubble-level offset so the left accent bar has room without overlapping
   // the text. No background tint — Android light mode doesn't composite rgba
