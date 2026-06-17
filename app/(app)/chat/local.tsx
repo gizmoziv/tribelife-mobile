@@ -1151,7 +1151,10 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     flex: 1,
-    borderRadius: RADIUS.pill,
+    // Moderate radius (not RADIUS.pill): ~half the single-line height so it
+    // still looks pill-like when short, but becomes a clean rounded rectangle
+    // when multiline text grows the box — a full pill clips wrapped text.
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     overflow: 'hidden',
   },
