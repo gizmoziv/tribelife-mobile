@@ -18,7 +18,6 @@ import {
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
-import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -98,7 +97,6 @@ export default function DMThreadScreen() {
   const pathname = usePathname();
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
-  const keyboardBehavior = useKeyboardBehavior();
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // Inline-header DM title resolution: when the DM is opened without a `handle`
@@ -958,7 +956,13 @@ export default function DMThreadScreen() {
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={keyboardBehavior}
+        // STABLE behavior — intentionally NOT useKeyboardBehavior's
+        // height→undefined toggle. On this screen that toggle left the KAV stuck
+        // at its shrunk (keyboard-open) height after the keyboard collapsed: the
+        // message list + composer floated mid-screen with empty space below.
+        // A stable behavior restores to full height on hide (keyboardHeight=0).
+        // iOS 'padding' (settles synchronously), Android 'height' (edge-to-edge).
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         // `react-native-keyboard-controller`'s KAV uses native keyboard frame
         // listeners (works on Android edge-to-edge where RN's built-in KAV
         // silently no-ops since SDK 53). With the native Stack header removed
@@ -997,6 +1001,11 @@ export default function DMThreadScreen() {
         <FlatList
           ref={flatListRef}
           inverted
+          // flex:1 so the inverted list fills the space between the PinnedBar and
+          // the composer. Without an explicit fill style the list collapsed to
+          // content height and the composer floated mid-screen (confirmed via a
+          // background-color diagnostic: giving the list a style made it fill).
+          style={styles.messageListFill}
           keyboardDismissMode="on-drag"
           data={reversedMessages}
           extraData={reversedMessages}
@@ -1272,6 +1281,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  messageListFill: { flex: 1 },
   messageList: { paddingHorizontal: 12, paddingVertical: 12 },
   loadingOlder: { paddingVertical: 12, alignItems: 'center' },
   typingContainer: {
