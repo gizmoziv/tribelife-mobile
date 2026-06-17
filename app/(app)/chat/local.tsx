@@ -216,10 +216,18 @@ export default function LocalChatScreen() {
   }, [resyncReadContext]);
 
   // Phase 22: load-around for jump-to-pin (reuses chat.getRoomMessages)
+  // WR-01: merge the around-window into the existing list (dedupe by id,
+  // re-sort ascending) instead of wholesale replacement, so the previously
+  // loaded recent tail is not discarded when jumping to an old pinned message.
   const loadAroundForPin = useCallback(async (messageId: number) => {
     try {
       const { messages: msgs } = await chat.getRoomMessages(roomId, { aroundMessageId: messageId });
-      setMessages(msgs);
+      setMessages((prev) => {
+        const byId = new Map<number, Message>();
+        for (const m of prev) byId.set(m.id, m);
+        for (const m of msgs) byId.set(m.id, m);
+        return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+      });
     } catch {
       // silent — bar stays visible
     }

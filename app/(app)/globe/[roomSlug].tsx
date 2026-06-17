@@ -290,11 +290,19 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const globeRoomId = `globe:${roomSlug}`;
 
   // ── Pinned message — load-around for jump (reuses the globe API) ──────────
+  // WR-01: merge the around-window into the existing list (dedupe by id,
+  // re-sort ascending) instead of wholesale replacement, so the previously
+  // loaded recent tail is not discarded when jumping to an old pinned message.
   const loadAroundForPin = useCallback(async (messageId: number) => {
     setLoadingMessages(true);
     try {
       const { messages: msgs, hasMore } = await globeApi.messages(roomSlug!, undefined, 50, messageId);
-      setMessages(msgs);
+      const current = useGlobeStore.getState().messages;
+      const byId = new Map<number, typeof msgs[number]>();
+      for (const m of current) byId.set(m.id, m);
+      for (const m of msgs) byId.set(m.id, m);
+      const merged = Array.from(byId.values()).sort((a, b) => a.id - b.id);
+      setMessages(merged);
       if (!hasMore) prependMessages([], hasMore);
     } catch {
       // silent — bar stays visible, user can retry
