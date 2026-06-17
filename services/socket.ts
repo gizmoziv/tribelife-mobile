@@ -280,6 +280,10 @@ export function onMediaRejected(cb: (data: { messageId: number; category: string
 // ── Pinned messages ─────────────────────────────────────────────────────────
 import type { PinnedMessageRow } from './api';
 
+// WR-02 / IN-02: keep this in lock-step with the backend source of truth at
+// tribelife-backend/src/services/pinAnnounce.ts (interface PinEventPayload).
+// `pin` reuses PinnedMessageRow (api.ts), which mirrors the backend pin shape
+// including `id`. Drift here silently breaks live pin updates.
 export interface PinEventPayload {
   action: 'pin' | 'unpin';
   roomId?: string;

@@ -545,7 +545,12 @@ export const orgsApi = {
 };
 
 // ── Pins ───────────────────────────────────────────────────────────────────
+// WR-02: keep field-for-field aligned with the backend pin row + PinEventPayload
+// (tribelife-backend/src/routes/pins.ts + src/services/pinAnnounce.ts). The
+// socket payload's `pin` is assigned directly to state typed as PinnedMessageRow,
+// so the shapes must match — `id` is included because the backend returns it.
 export interface PinnedMessageRow {
+  id: number;
   messageId: number;
   pinnedAt: string;
   previewText: string | null;
