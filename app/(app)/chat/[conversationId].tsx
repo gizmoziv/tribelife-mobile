@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
@@ -105,7 +104,6 @@ export default function DMThreadScreen() {
   // raced the not-yet-laid-out Stack header on the cold-start notification path
   // and left the input behind the keyboard until an app restart.
   const headerHeight = useHeaderHeight();
-  const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // ── D-09: Preview-to-join state (mirrors v1.7 Phase 11 D-12 pattern) ───────
   const [isMember, setIsMember] = useState<boolean>(initialIsMember);
@@ -948,19 +946,13 @@ export default function DMThreadScreen() {
         // keyboard covered the input until an app restart. `useHeaderHeight()`
         // is read from navigation config, so there is no layout race.
         // See `<KeyboardProvider>` wrapper in root `app/_layout.tsx`.
-        // ANDROID: useHeaderHeight() = header content + status-bar inset, but
-        // react-native-keyboard-controller reports the keyboard frame relative
-        // to the app window (already excluding the status bar). Passing the full
-        // headerHeight double-counts the status bar (leaves a gap); passing 0
-        // drops the whole header (keyboard overlaps the composer). The correct
-        // value is the header WITHOUT the top inset: headerHeight - insets.top.
-        // iOS is unchanged (full headerHeight) — preserves the cold-start
-        // push-notification offset fix.
-        keyboardVerticalOffset={
-          Platform.OS === 'ios'
-            ? headerHeight
-            : Math.max(0, headerHeight - insets.top)
-        }
+        // ANDROID: 0 — matches the globe/local chat screens, which use the same
+        // keyboard-controller KAV + useKeyboardBehavior and avoid the keyboard
+        // correctly with offset 0 (the keyboard is avoided at the bottom; the
+        // top Stack header is irrelevant to that). iOS keeps headerHeight to
+        // preserve the cold-start push-notification offset fix (the input was
+        // landing behind the keyboard on the notification-launch path otherwise).
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
         {/* Pinned bar — sticky above message stream (D-11), visible to all */}
         {pinnedMessage && (
