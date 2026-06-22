@@ -10,6 +10,9 @@ import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
 import { ImageGrid } from '@/components/ui/chat/ImageGrid';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
+import { YouTubeCard } from '@/components/ui/chat/YouTubeCard';
+import { YouTubePlayerModal } from '@/components/ui/chat/YouTubePlayerModal';
+import { extractYouTubeIds } from '@/utils/youtube';
 import type { Message, GlobeMessage } from '@/types';
 
 // Parse message content into plain text, @mention, and URL fragments.
@@ -106,6 +109,7 @@ export function MessageBubble({
   const { user } = useAuthStore();
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [ytVideoId, setYtVideoId] = useState<string | null>(null);
 
   const mediaUrls = message.mediaUrls;
   const hasMedia = mediaUrls && mediaUrls.length > 0;
@@ -113,6 +117,9 @@ export function MessageBubble({
   const BUBBLE_WIDTH = 260;
 
   const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
+  // Detect distinct YouTube links in the DISPLAYED content (so a translated
+  // message still unfurls). Capped at 3 inside extractYouTubeIds.
+  const youtubeIds = displayContent ? extractYouTubeIds(displayContent) : [];
   const isRTL = displayContent ? /[\u0590-\u05FF\u0600-\u06FF]/.test(displayContent) : false;
   const textDirection = isRTL ? 'rtl' as const : 'ltr' as const;
 
@@ -192,6 +199,24 @@ export function MessageBubble({
     setViewerIndex(index);
     setViewerVisible(true);
   }, []);
+
+  const handleYouTubePress = useCallback((id: string) => {
+    setYtVideoId(id);
+  }, []);
+
+  // Additive YouTube unfurl block: one card per distinct video ID, stacked
+  // below the message text. The raw link stays as tappable underlined text
+  // (via renderContent) — this is purely additional.
+  const renderYouTubeCards = () => {
+    if (youtubeIds.length === 0) return null;
+    return (
+      <View style={styles.youtubeBlock}>
+        {youtubeIds.map((id) => (
+          <YouTubeCard key={id} videoId={id} onPress={handleYouTubePress} />
+        ))}
+      </View>
+    );
+  };
 
   const handleLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -314,6 +339,7 @@ export function MessageBubble({
                 </View>
               )}
               {renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
+              {renderYouTubeCards()}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -372,6 +398,7 @@ export function MessageBubble({
                 </View>
               )}
               {renderContent(colors.text, COLORS.primary, COLORS.primary)}
+              {renderYouTubeCards()}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -409,6 +436,13 @@ export function MessageBubble({
           onClose={() => setViewerVisible(false)}
         />
       )}
+
+      {/* Full-screen in-app YouTube player */}
+      <YouTubePlayerModal
+        visible={ytVideoId != null}
+        videoId={ytVideoId}
+        onClose={() => setYtVideoId(null)}
+      />
     </View>
   );
 }
@@ -521,6 +555,9 @@ const styles = StyleSheet.create({
   },
   mediaWithText: {
     marginBottom: 6,
+  },
+  youtubeBlock: {
+    marginTop: 2,
   },
   removedText: {
     fontSize: 13,
