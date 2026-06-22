@@ -363,6 +363,7 @@ export function MessageBubble({
                       mediaUrls={photoUrls}
                       bubbleWidth={BUBBLE_WIDTH - 28}
                       onImagePress={handleImagePress}
+                      onImageLongPress={handleLongPress}
                       borderRadius={14}
                     />
                   )}
@@ -432,6 +433,7 @@ export function MessageBubble({
                       mediaUrls={photoUrls}
                       bubbleWidth={BUBBLE_WIDTH - 28}
                       onImagePress={handleImagePress}
+                      onImageLongPress={handleLongPress}
                       borderRadius={14}
                     />
                   )}

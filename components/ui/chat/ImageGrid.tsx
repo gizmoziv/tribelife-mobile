@@ -9,6 +9,7 @@ interface ImageGridProps {
   mediaUrls: string[];
   bubbleWidth: number;
   onImagePress: (index: number) => void;
+  onImageLongPress?: () => void;
   borderRadius?: number;
 }
 
@@ -36,14 +37,14 @@ function RetryImage({ uri, style, resizeMode }: { uri: string; style: any; resiz
   );
 }
 
-export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, borderRadius = 14 }: ImageGridProps) {
+export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, onImageLongPress, borderRadius = 14 }: ImageGridProps) {
   const count = mediaUrls.length;
   if (count === 0) return null;
 
   if (count === 1) {
     return (
       <View style={[styles.container, { borderRadius, width: bubbleWidth }]}>
-        <Pressable onPress={() => onImagePress(0)}>
+        <Pressable onPress={() => onImagePress(0)} onLongPress={onImageLongPress} delayLongPress={500}>
           <RetryImage
             uri={mediaUrls[0]}
             style={{ width: bubbleWidth, height: bubbleWidth * 0.75, borderRadius }}
@@ -61,7 +62,7 @@ export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, borderRadius =
       <View style={[styles.container, { borderRadius, width: bubbleWidth }]}>
         <View style={styles.row}>
           {mediaUrls.map((url, i) => (
-            <Pressable key={i} onPress={() => onImagePress(i)}>
+            <Pressable key={i} onPress={() => onImagePress(i)} onLongPress={onImageLongPress} delayLongPress={500}>
               <RetryImage
                 uri={url}
                 style={{
@@ -87,7 +88,7 @@ export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, borderRadius =
       <View style={[styles.container, { borderRadius, width: bubbleWidth }]}>
         <View style={[styles.row, { marginBottom: GAP }]}>
           {mediaUrls.slice(0, 2).map((url, i) => (
-            <Pressable key={i} onPress={() => onImagePress(i)}>
+            <Pressable key={i} onPress={() => onImagePress(i)} onLongPress={onImageLongPress} delayLongPress={500}>
               <RetryImage
                 uri={url}
                 style={{
@@ -101,7 +102,7 @@ export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, borderRadius =
             </Pressable>
           ))}
         </View>
-        <Pressable onPress={() => onImagePress(2)}>
+        <Pressable onPress={() => onImagePress(2)} onLongPress={onImageLongPress} delayLongPress={500}>
           <RetryImage
             uri={mediaUrls[2]}
             style={{
@@ -122,7 +123,7 @@ export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, borderRadius =
     <View style={[styles.container, { borderRadius, width: bubbleWidth }]}>
       <View style={[styles.row, { marginBottom: GAP }]}>
         {mediaUrls.slice(0, 2).map((url, i) => (
-          <Pressable key={i} onPress={() => onImagePress(i)}>
+          <Pressable key={i} onPress={() => onImagePress(i)} onLongPress={onImageLongPress} delayLongPress={500}>
             <RetryImage
               uri={url}
               style={{
@@ -138,7 +139,7 @@ export function ImageGrid({ mediaUrls, bubbleWidth, onImagePress, borderRadius =
       </View>
       <View style={styles.row}>
         {mediaUrls.slice(2, 4).map((url, i) => (
-          <Pressable key={i} onPress={() => onImagePress(i + 2)}>
+          <Pressable key={i} onPress={() => onImagePress(i + 2)} onLongPress={onImageLongPress} delayLongPress={500}>
             <RetryImage
               uri={url}
               style={{
