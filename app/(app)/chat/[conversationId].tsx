@@ -147,8 +147,11 @@ export default function DMThreadScreen() {
   const [input, setInput] = useState('');
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [isTyping, setIsTyping] = useState(false);
-  const typingClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Typing handles collection (mirrors chat/local.tsx typingUsers + globe's
+  // per-handle timeout map): show the typer's handle(s) in BOTH 1:1 DM and
+  // group, with per-handle clear timers so one stale typer doesn't wipe others.
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -277,6 +280,17 @@ export default function DMThreadScreen() {
     () => !isGroup && messages.some((m) => m.senderId !== user?.id),
     [isGroup, messages, user?.id],
   );
+
+  // ── Typing indicator display ────────────────────────────────────────────
+  // Same formatting as the globe room screen: 1 → "<handle> is typing...",
+  // 2–3 → "<a>, <b> are typing...", >3 → "N people typing...". Handles are
+  // used as-is (bare, no leading "@") to match globe/local styling exactly.
+  const typingText = useMemo(() => {
+    if (typingUsers.length === 0) return null;
+    if (typingUsers.length === 1) return `${typingUsers[0]} is typing...`;
+    if (typingUsers.length <= 3) return `${typingUsers.join(', ')} are typing...`;
+    return `${typingUsers.length} people typing...`;
+  }, [typingUsers]);
 
   // Opening a chat directly (not via a notification tap) should still clear
   // any bell notifications tied to this conversation — otherwise the badge
@@ -499,30 +513,35 @@ export default function DMThreadScreen() {
       }
     });
 
-    // Auto-clear the typing indicator 5s after the last typing:start — guards
+    // Auto-clear a typer's indicator 5s after their last typing:start — guards
     // against a missed typing:stop (e.g. when the app was backgrounded and the
-    // socket dropped before the other user stopped typing).
+    // socket dropped before the other user stopped typing). Per-handle timer so
+    // one stale typer doesn't clear others (mirrors chat/local.tsx + globe).
     const TYPING_TIMEOUT_MS = 5000;
-    const clearTypingLater = () => {
-      if (typingClearTimerRef.current) clearTimeout(typingClearTimerRef.current);
-      typingClearTimerRef.current = setTimeout(() => {
-        setIsTyping(false);
-        typingClearTimerRef.current = null;
-      }, TYPING_TIMEOUT_MS);
+    const clearTypingLater = (h: string) => {
+      const existing = typingClearTimersRef.current.get(h);
+      if (existing) clearTimeout(existing);
+      typingClearTimersRef.current.set(
+        h,
+        setTimeout(() => {
+          setTypingUsers((prev) => prev.filter((x) => x !== h));
+          typingClearTimersRef.current.delete(h);
+        }, TYPING_TIMEOUT_MS),
+      );
     };
 
     const offTypingStart = onTypingStart(({ handle: h }) => {
-      if (h !== user?.handle) {
-        setIsTyping(true);
-        clearTypingLater();
-      }
+      if (h === user?.handle) return;
+      setTypingUsers((prev) => (prev.includes(h) ? prev : [...prev, h]));
+      clearTypingLater(h);
     });
 
-    const offTypingStop = onTypingStop(() => {
-      setIsTyping(false);
-      if (typingClearTimerRef.current) {
-        clearTimeout(typingClearTimerRef.current);
-        typingClearTimerRef.current = null;
+    const offTypingStop = onTypingStop(({ handle: h }) => {
+      setTypingUsers((prev) => prev.filter((x) => x !== h));
+      const existing = typingClearTimersRef.current.get(h);
+      if (existing) {
+        clearTimeout(existing);
+        typingClearTimersRef.current.delete(h);
       }
     });
 
@@ -581,10 +600,8 @@ export default function DMThreadScreen() {
       offMediaRemoved();
       offMediaRejected();
       offChatRemoved();
-      if (typingClearTimerRef.current) {
-        clearTimeout(typingClearTimerRef.current);
-        typingClearTimerRef.current = null;
-      }
+      typingClearTimersRef.current.forEach((t) => clearTimeout(t));
+      typingClearTimersRef.current.clear();
     };
   }, [conversationId]);
 
@@ -594,11 +611,9 @@ export default function DMThreadScreen() {
   // the conversation room on the server.
   useEffect(() => {
     const refetchAndRejoin = async () => {
-      setIsTyping(false);
-      if (typingClearTimerRef.current) {
-        clearTimeout(typingClearTimerRef.current);
-        typingClearTimerRef.current = null;
-      }
+      setTypingUsers([]);
+      typingClearTimersRef.current.forEach((t) => clearTimeout(t));
+      typingClearTimersRef.current.clear();
       try {
         const { messages: fresh } = await chat.getConversationMessages(conversationId);
         setMessages((prev) => {
@@ -1088,10 +1103,10 @@ export default function DMThreadScreen() {
           }}
         />
 
-        {isTyping && (
+        {typingText && (
           <View style={styles.typingContainer}>
             <View style={[styles.typingPill, { backgroundColor: colors.surfaceGlass }]}>
-              <Text style={[styles.typingText, { color: colors.textMuted }]}>typing</Text>
+              <Text style={[styles.typingText, { color: colors.textMuted }]}>{typingText}</Text>
               <View style={styles.typingDots}>
                 {[0, 1, 2].map((i) => (
                   <View key={i} style={[styles.typingDot, { backgroundColor: colors.textMuted }]} />
