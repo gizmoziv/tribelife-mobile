@@ -54,6 +54,7 @@ import {
   conversationRoomKey,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { GifButton } from '@/components/ui/chat/GifButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
@@ -861,6 +862,18 @@ export default function DMThreadScreen() {
     }
   }, [input, conversationId, replyTo]);
 
+  // GIF tap-to-send: a Giphy selection sends IMMEDIATELY as its own media-only
+  // message (empty content + the Giphy CDN URL in mediaUrls). Mirrors the photo
+  // send shape (sendDirectMessage with mediaUrls) which relies on the server
+  // broadcast to echo the message — no optimistic insert, like photos here.
+  const handleGifSelected = useCallback((gifUrl: string) => {
+    const replyToId = replyTo?.id ?? undefined;
+    sendDirectMessage(conversationId, '', replyToId, [gifUrl]);
+    setReplyTo(null);
+    stopTyping({ conversationId });
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+  }, [conversationId, replyTo]);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
@@ -1148,6 +1161,7 @@ export default function DMThreadScreen() {
               />
               <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
                 <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
                 {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                 <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
                   <MentionTextInput

@@ -57,6 +57,7 @@ import {
   globeRoomKey,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { GifButton } from '@/components/ui/chat/GifButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
@@ -839,6 +840,20 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     }
   }, [input, roomSlug, isAgeGated, replyTo]);
 
+  // GIF tap-to-send: a Giphy selection sends IMMEDIATELY as its own media-only
+  // message (empty content + the Giphy CDN URL in mediaUrls). Mirrors the photo
+  // send shape (sendGlobeMessage with mediaUrls) — relies on server broadcast,
+  // no optimistic insert, like photos here. Respects the same age-gate guard.
+  const handleGifSelected = useCallback((gifUrl: string) => {
+    if (!roomSlug || isAgeGated) return;
+    const replyToId = replyTo?.id ?? undefined;
+    sendGlobeMessage(roomSlug, '', replyToId, [gifUrl]);
+    setReplyTo(null);
+    setIsAtBottom(true);
+    resetNewMessageCount();
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+  }, [roomSlug, isAgeGated, replyTo]);
+
   // ── Send message ────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const content = input.trim();
@@ -1117,6 +1132,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
               <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
                 {!isAgeGated && (
                   <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                )}
+                {!isAgeGated && (
+                  <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
                 )}
                 {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                 <View

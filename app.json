@@ -129,7 +129,8 @@
         {
           "locationWhenInUsePermission": "TribeLife uses your location to show accurate Shabbat candle-lighting times."
         }
-      ]
+      ],
+      "@giphy/react-native-sdk"
     ],
     "scheme": "tribelife",
     "extra": {

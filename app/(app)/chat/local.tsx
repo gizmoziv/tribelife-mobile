@@ -51,6 +51,7 @@ import {
   globeRoomKey,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { GifButton } from '@/components/ui/chat/GifButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { GlowBadge } from '@/components/ui/GlowBadge';
@@ -685,6 +686,16 @@ export default function LocalChatScreen() {
     }
   }, [input, replyTo]);
 
+  // GIF tap-to-send: a Giphy selection sends IMMEDIATELY as its own media-only
+  // message (empty content + the Giphy CDN URL in mediaUrls). Mirrors the photo
+  // send shape (sendRoomMessage with mediaUrls) — relies on server broadcast,
+  // no optimistic insert, like photos here.
+  const handleGifSelected = useCallback((gifUrl: string) => {
+    const replyToId = replyTo?.id ?? undefined;
+    sendRoomMessage('', replyToId, [gifUrl]);
+    setReplyTo(null);
+  }, [replyTo]);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
@@ -866,6 +877,7 @@ export default function LocalChatScreen() {
           onSend={handleSend}
           isUploading={isUploading}
           onImagesSelected={handleImagesSelected}
+          onGifSelected={handleGifSelected}
           selection={selection}
           onSelectionChange={setSelection}
           mentionScope={user?.timezone ? 'timezone' : undefined}
@@ -964,6 +976,7 @@ function ChatInput({
   onSend,
   isUploading,
   onImagesSelected,
+  onGifSelected,
   selection,
   onSelectionChange,
   mentionScope,
@@ -975,6 +988,7 @@ function ChatInput({
   onSend: () => void;
   isUploading?: boolean;
   onImagesSelected?: (uris: string[]) => void;
+  onGifSelected?: (gifUrl: string) => void;
   selection?: { start: number; end: number };
   onSelectionChange?: (sel: { start: number; end: number }) => void;
   mentionScope?: MentionScope;
@@ -1007,6 +1021,9 @@ function ChatInput({
       <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
         {onImagesSelected && (
           <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+        )}
+        {onGifSelected && (
+          <GifButton onGifSelected={onGifSelected} disabled={isUploading} />
         )}
         {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
         <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>

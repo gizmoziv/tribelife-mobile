@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import Purchases from 'react-native-purchases';
+import { GiphySDK } from '@giphy/react-native-sdk';
 import {
   useFonts,
   PlusJakartaSans_300Light,
@@ -132,6 +133,23 @@ const rcKey = Platform.OS === 'ios'
 
 if (rcKey) {
   Purchases.configure({ apiKey: rcKey });
+}
+
+// ── Giphy SDK ────────────────────────────────────────────────────────────
+// Configure the Giphy SDK ONCE at module load (mirrors the RevenueCat pattern
+// above) so the prebuilt picker is ready before any composer can open it.
+// The platform-correct key comes from EXPO_PUBLIC_ env vars (readable via
+// process.env). If the key is missing we skip configure() and leave
+// isGiphyConfigured=false; GifButton reads this flag to hide/disable itself
+// so a missing key never crashes the app. The key value is never logged.
+const giphyKey = Platform.OS === 'ios'
+  ? process.env.EXPO_PUBLIC_GIPHY_SDK_IOS
+  : process.env.EXPO_PUBLIC_GIPHY_SDK_ANDROID;
+
+export const isGiphyConfigured = !!giphyKey;
+
+if (giphyKey) {
+  GiphySDK.configure({ apiKey: giphyKey });
 }
 
 function RootLayoutInner() {

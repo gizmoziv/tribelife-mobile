@@ -9,6 +9,7 @@ import { FONTS, COLORS, SHADOWS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
 import { ImageGrid } from '@/components/ui/chat/ImageGrid';
+import { GifMessage } from '@/components/ui/chat/GifMessage';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import { YouTubeCard } from '@/components/ui/chat/YouTubeCard';
 import { YouTubePlayerModal } from '@/components/ui/chat/YouTubePlayerModal';
@@ -77,6 +78,20 @@ function parseContent(content: string): ContentPart[] {
   return parts;
 }
 
+// A media URL is a GIF when its host is on giphy.com OR its path ends in .gif
+// (case-insensitive). Used to route Giphy GIFs to the dedicated expo-image
+// GifMessage path while photos continue through the untouched ImageGrid.
+function isGifUrl(u: string): boolean {
+  try {
+    const parsed = new URL(u);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'giphy.com' || host.endsWith('.giphy.com')) return true;
+    return parsed.pathname.toLowerCase().endsWith('.gif');
+  } catch {
+    return u.toLowerCase().endsWith('.gif');
+  }
+}
+
 interface MessageBubbleProps {
   message: Message | GlobeMessage;
   isMe: boolean;
@@ -115,6 +130,11 @@ export function MessageBubble({
   const hasMedia = mediaUrls && mediaUrls.length > 0;
   const isEmpty = !message.content && !hasMedia;
   const BUBBLE_WIDTH = 260;
+
+  // Partition media into GIFs (dedicated expo-image path) and photos (existing
+  // untouched ImageGrid path). A message can mix both; each renders in its lane.
+  const gifUrls = mediaUrls ? mediaUrls.filter(isGifUrl) : [];
+  const photoUrls = mediaUrls ? mediaUrls.filter((u) => !isGifUrl(u)) : [];
 
   const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
   // Detect distinct YouTube links in the DISPLAYED content (so a translated
@@ -330,12 +350,22 @@ export function MessageBubble({
               )}
               {hasMedia && (
                 <View style={message.content ? styles.mediaWithText : undefined}>
-                  <ImageGrid
-                    mediaUrls={mediaUrls}
-                    bubbleWidth={BUBBLE_WIDTH - 28}
-                    onImagePress={handleImagePress}
-                    borderRadius={14}
-                  />
+                  {gifUrls.map((url) => (
+                    <GifMessage
+                      key={url}
+                      url={url}
+                      bubbleWidth={BUBBLE_WIDTH - 28}
+                      borderRadius={14}
+                    />
+                  ))}
+                  {photoUrls.length > 0 && (
+                    <ImageGrid
+                      mediaUrls={photoUrls}
+                      bubbleWidth={BUBBLE_WIDTH - 28}
+                      onImagePress={handleImagePress}
+                      borderRadius={14}
+                    />
+                  )}
                 </View>
               )}
               {renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
@@ -389,12 +419,22 @@ export function MessageBubble({
               )}
               {hasMedia && (
                 <View style={message.content ? styles.mediaWithText : undefined}>
-                  <ImageGrid
-                    mediaUrls={mediaUrls}
-                    bubbleWidth={BUBBLE_WIDTH - 28}
-                    onImagePress={handleImagePress}
-                    borderRadius={14}
-                  />
+                  {gifUrls.map((url) => (
+                    <GifMessage
+                      key={url}
+                      url={url}
+                      bubbleWidth={BUBBLE_WIDTH - 28}
+                      borderRadius={14}
+                    />
+                  ))}
+                  {photoUrls.length > 0 && (
+                    <ImageGrid
+                      mediaUrls={photoUrls}
+                      bubbleWidth={BUBBLE_WIDTH - 28}
+                      onImagePress={handleImagePress}
+                      borderRadius={14}
+                    />
+                  )}
                 </View>
               )}
               {renderContent(colors.text, COLORS.primary, COLORS.primary)}
@@ -427,11 +467,13 @@ export function MessageBubble({
         <ReactionPills reactions={reactions} onToggle={handleReactionToggle} />
       </View>
 
-      {/* Full-screen image viewer */}
-      {hasMedia && (
+      {/* Full-screen image viewer — photos only. GIFs render inline via
+          GifMessage and intentionally have no full-screen viewer, so the
+          viewer's index space matches ImageGrid's (photoUrls) exactly. */}
+      {photoUrls.length > 0 && (
         <ImageViewer
           visible={viewerVisible}
-          images={mediaUrls}
+          images={photoUrls}
           initialIndex={viewerIndex}
           onClose={() => setViewerVisible(false)}
         />
