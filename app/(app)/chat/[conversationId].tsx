@@ -49,6 +49,9 @@ import {
   onChatRemoved,
   onMediaRejected,
   getSocket,
+  setViewing,
+  clearViewing,
+  conversationRoomKey,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
@@ -413,11 +416,15 @@ export default function DMThreadScreen() {
     const rowType: 'dm' | 'group' = isGroup ? 'group' : 'dm';
     useChatsStore.getState().clearRowUnread({ type: rowType, conversationId });
     useChatsStore.getState().setCurrentlyViewing(conversationId);
+    // 260621-un7: tell the backend we're actively viewing this conversation so
+    // it suppresses push/bell/unread for it while on screen + foregrounded.
+    setViewing(conversationRoomKey(conversationId));
     return () => {
       const viewing = useChatsStore.getState().currentlyViewing;
       if (viewing === conversationId) {
         useChatsStore.getState().setCurrentlyViewing(null);
       }
+      clearViewing();
     };
   }, [conversationId, isGroup]);
 

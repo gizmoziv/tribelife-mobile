@@ -111,6 +111,43 @@ export function sendDirectMessage(conversationId: number, content: string, reply
   socket?.emit('dm:message', { conversationId, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
 }
 
+// ── Active-viewing + foreground signals (260621-un7) ────────────────────────
+// Tell the backend which room this device is actively viewing (on screen
+// focus/blur) and whether the app is foregrounded (single AppState listener in
+// app/_layout.tsx). The backend uses this to suppress push/bell/unread for the
+// room on screen. roomKey MUST match the backend canonical scheme exactly:
+//   1:1 DM / group → `conversation:<conversationId>`
+//   Local Chat / Globe room → `globe:<slug>`  (timezone/local MUST normalize to
+//   globe:<slug>, NOT timezone:<slug>, so a zone has one viewing identity).
+export function setViewing(roomKey: string): void {
+  socket?.emit('viewing:set', { roomKey });
+}
+
+export function clearViewing(): void {
+  socket?.emit('viewing:clear');
+}
+
+export function emitForeground(): void {
+  socket?.emit('app:foreground');
+}
+
+export function emitBackground(): void {
+  socket?.emit('app:background');
+}
+
+/**
+ * Canonical viewing roomKey helper — single source of truth on the mobile side
+ * so every chat screen produces a key the backend will recognize. Keep in
+ * lock-step with tribelife-backend/src/socket/activeViewing.ts:canonicalViewingKey.
+ */
+export function conversationRoomKey(conversationId: number): string {
+  return `conversation:${conversationId}`;
+}
+
+export function globeRoomKey(slug: string): string {
+  return `globe:${slug}`;
+}
+
 // ── Typing ─────────────────────────────────────────────────────────────────
 export function startTyping(context: { roomId?: string; conversationId?: number }): void {
   socket?.emit('typing:start', context);

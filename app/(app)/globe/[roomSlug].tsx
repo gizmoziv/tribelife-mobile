@@ -52,6 +52,9 @@ import {
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
+  setViewing,
+  clearViewing,
+  globeRoomKey,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
@@ -481,6 +484,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       joinGlobeRoom(roomSlug);
     });
 
+    // 260621-un7: signal active-viewing to the backend so it suppresses
+    // push/bell/unread for this room while on screen + foregrounded. All globe
+    // surfaces (town-square, regional, timezone) use `globe:<roomSlug>`.
+    setViewing(globeRoomKey(roomSlug));
+
     // Register listeners (outside .then to ensure cleanup works)
     const offMessage = onGlobeMessage((data: GlobeMessage) => {
       addMessage(data);
@@ -575,6 +583,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       offEdited();
       socket?.off('connect', handleReconnect);
       leaveGlobeRoom(roomSlug);
+      // 260621-un7: stop signaling active-viewing on blur so push/bell/unread
+      // resume for this room.
+      clearViewing();
       clearRoom();
       // Clear all typing timers
       typingClearTimers.current.forEach((timer) => clearTimeout(timer));

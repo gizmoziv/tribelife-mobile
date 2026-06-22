@@ -23,7 +23,7 @@ import {
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth, getToken, notificationsApi } from '@/services/api';
-import { connectSocket } from '@/services/socket';
+import { connectSocket, emitForeground, emitBackground } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDirectMessage } from '@/services/socket';
 import { useChatsStore } from '@/store/chatsStore';
@@ -424,6 +424,16 @@ function RootLayoutInner() {
     // Note: AppState.addEventListener('change') does NOT fire a synthetic
     // 'active' on registration — only on real transitions.
     const handleChange = async (next: AppStateStatus) => {
+      // 260621-un7: single AppState listener also drives the backend
+      // active-viewing foreground state. Backgrounding ('background' or
+      // 'inactive') immediately resumes push for the room on screen (backend
+      // nulls activeRoomKey on app:background). 'active' re-asserts foreground.
+      if (next === 'active') {
+        emitForeground();
+      } else if (next === 'background' || next === 'inactive') {
+        emitBackground();
+      }
+
       if (next !== 'active') return;
       // Existing Phase 1 behavior — capabilities refresh on foreground.
       // refreshSession is fire-and-forget (not awaited); version check runs

@@ -46,6 +46,9 @@ import {
   onMediaRemoved,
   onMediaRejected,
   getSocket,
+  setViewing,
+  clearViewing,
+  globeRoomKey,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
@@ -299,6 +302,10 @@ export default function LocalChatScreen() {
       const tz = user?.timezone ?? 'UTC';
       useChatsStore.getState().clearRowUnread({ type: 'local_chat', timezoneIana: tz });
       useChatsStore.getState().setCurrentlyViewing(tz);
+      // 260621-un7: signal active-viewing to the backend. Local Chat MUST
+      // normalize to `globe:<zoneSlug>` (NOT `timezone:<slug>`) so it shares one
+      // viewing identity with the Globe room of the same zone.
+      setViewing(globeRoomKey(zoneSlug));
       return () => {
         const ctx = useForegroundContextStore.getState().context;
         if (ctx.type === 'localChat') {
@@ -308,8 +315,9 @@ export default function LocalChatScreen() {
         if (viewing === tz) {
           useChatsStore.getState().setCurrentlyViewing(null);
         }
+        clearViewing();
       };
-    }, [user?.timezone])
+    }, [user?.timezone, zoneSlug])
   );
 
   useEffect(() => {
