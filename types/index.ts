@@ -86,6 +86,16 @@ export interface Beacon {
   createdAt: string;
 }
 
+// Authoritative beacon-slot occupancy summary from GET /api/beacons/mine.
+// `used` counts beacons still within their 30-day life (active, removed, OR
+// matched) — freed only by expiry (Phase 23). `nextFreesAt` is the soonest
+// effective-expiry among occupied beacons (ISO string), or null when none.
+export interface BeaconSlots {
+  used: number;
+  limit: number;
+  nextFreesAt: string | null;
+}
+
 export interface BeaconMatch {
   matchId: number;
   beaconId: number;

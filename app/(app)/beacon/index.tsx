@@ -17,11 +17,19 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { beacons as beaconsApi, chat } from '@/services/api';
-import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import {
+  FONTS,
+  COLORS,
+  SPACING,
+  RADIUS,
+  SHADOWS,
+  PREMIUM_BEACON_LIMIT,
+} from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useIsPremium } from '@/hooks/useCapability';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -29,7 +37,8 @@ import { PillButton } from '@/components/ui/PillButton';
 import { PillToggle } from '@/components/ui/PillToggle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
-import type { Beacon, BeaconMatch } from '@/types';
+import { WelcomeModal } from '@/components/ui/WelcomeModal';
+import type { Beacon, BeaconMatch, BeaconSlots } from '@/types';
 import Svg, {
   Path,
   G,
@@ -40,6 +49,34 @@ import Svg, {
   RadialGradient,
   Stop,
 } from 'react-native-svg';
+
+// ── Beacon slot/state derivation (Phase 23) ─────────────────────────────────
+// Mirrors the backend: a beacon holds a slot for its full 30-day life and is
+// freed only by expiry. NULL expiresAt → createdAt + 30 days. Display state
+// precedence: expired > matched > removed > active.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type BeaconState = 'active' | 'matched' | 'removed' | 'expired';
+
+function effectiveExpiryMs(b: Beacon): number {
+  if (b.expiresAt) return new Date(b.expiresAt).getTime();
+  return new Date(b.createdAt).getTime() + 30 * DAY_MS;
+}
+
+function getBeaconState(b: Beacon): BeaconState {
+  if (effectiveExpiryMs(b) <= Date.now()) return 'expired';
+  if (b.lastMatchedAt) return 'matched';
+  if (!b.isActive) return 'removed';
+  return 'active';
+}
+
+function beaconDaysLeft(b: Beacon): number {
+  return Math.max(0, Math.ceil((effectiveExpiryMs(b) - Date.now()) / DAY_MS));
+}
+
+function formatDate(ms: number): string {
+  return new Date(ms).toLocaleDateString();
+}
 
 // Animated flame — transforms drive a real-fire feel:
 //   scaleY flicker (fast, small)  = the tongue stretching
@@ -399,6 +436,10 @@ export default function BeaconScreen() {
   const [matches, setMatches] = useState<BeaconMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(true);
 
+  // One-time welcome overlay: shown to every user (new OR existing) the first
+  // time they open this screen, then marked seen so it never reappears.
+  const [showWelcome, setShowWelcome] = useState(false);
+
   useEffect(() => {
     beaconsApi
       .getMatches()
@@ -408,6 +449,19 @@ export default function BeaconScreen() {
       })
       .catch(() => setMatchesLoading(false));
   }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem('beacon_welcome_seen')
+      .then((v) => {
+        if (v !== '1') setShowWelcome(true);
+      })
+      .catch(() => {});
+  }, []);
+
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+    AsyncStorage.setItem('beacon_welcome_seen', '1').catch(() => {});
+  };
 
   return (
     <SafeAreaView
@@ -433,6 +487,8 @@ export default function BeaconScreen() {
           />
         )}
       </KeyboardAvoidingView>
+
+      <WelcomeModal visible={showWelcome} onClose={dismissWelcome} />
     </SafeAreaView>
   );
 }
@@ -445,14 +501,21 @@ function MyBeaconsPanel() {
   const isPremium = useIsPremium();
   const router = useRouter();
   const [myBeacons, setMyBeacons] = useState<Beacon[]>([]);
+  const [slots, setSlots] = useState<BeaconSlots | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [inputText, setInputText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showExamples, setShowExamples] = useState(false);
+  const [showExamples, setShowExamples] = useState(true);
 
-  const activeBeacons = myBeacons.filter((b) => b.isActive);
-  const limit = limits?.maxBeacons ?? 1;
-  const canAddMore = activeBeacons.length < limit;
+  // A slot is occupied while a beacon is within its 30-day life — active,
+  // removed, OR matched — and freed only by expiry (Phase 23). Prefer the
+  // server's authoritative count; fall back to deriving it from the list.
+  const limit = slots?.limit ?? limits?.maxBeacons ?? 1;
+  const slotsUsed =
+    slots?.used ??
+    myBeacons.filter((b) => effectiveExpiryMs(b) > Date.now()).length;
+  const canAddMore = slotsUsed < limit;
+  const nextFreesAt = slots?.nextFreesAt ?? null;
 
   const { BEACON_EXAMPLES } = require('@/constants');
 
@@ -462,8 +525,9 @@ function MyBeaconsPanel() {
 
   const loadBeacons = async () => {
     try {
-      const { beacons } = await beaconsApi.mine();
+      const { beacons, slots } = await beaconsApi.mine();
       setMyBeacons(beacons);
+      setSlots(slots);
     } catch {}
     setIsLoading(false);
   };
@@ -482,6 +546,17 @@ function MyBeaconsPanel() {
     try {
       const { beacon } = await beaconsApi.create(text);
       setMyBeacons((prev) => [beacon, ...prev]);
+      // A new beacon occupies a slot immediately (and won't be freed by
+      // deleting it). Reflect that without a refetch.
+      setSlots((s) => {
+        const used = (s?.used ?? 0) + 1;
+        const beaconExpiry = beacon.expiresAt
+          ? new Date(beacon.expiresAt).toISOString()
+          : new Date(
+              new Date(beacon.createdAt).getTime() + 30 * DAY_MS,
+            ).toISOString();
+        return { used, limit, nextFreesAt: s?.nextFreesAt ?? beaconExpiry };
+      });
       setInputText('');
       Alert.alert(
         'Beacon Lit!',
@@ -492,7 +567,7 @@ function MyBeaconsPanel() {
       if (err.data?.capabilityViolation && !isPremium) {
         Alert.alert(
           'Upgrade to Premium',
-          `Free accounts can run 1 beacon at a time. Premium unlocks 3 beacons for $4.99/month.`,
+          `Free accounts get 1 beacon slot, and a slot only opens when its beacon expires — deleting won't free it early. Premium unlocks 3 slots for $4.99/month.`,
           [
             { text: 'Not Now', style: 'cancel' },
             { text: 'Upgrade', onPress: () => router.push('/(app)/profile') },
@@ -510,25 +585,38 @@ function MyBeaconsPanel() {
     }
   };
 
-  const handleDeactivate = async (beaconId: number) => {
+  const handleDeactivate = (beacon: Beacon) => {
+    const freesOn = formatDate(effectiveExpiryMs(beacon));
     Alert.alert(
       'Remove Beacon',
-      'Are you sure you want to remove this beacon?',
+      `This stops the beacon from matching, but it won't free your slot — the slot stays taken until the beacon expires on ${freesOn}. You can't create a new beacon until then.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await beaconsApi.deactivate(beaconId);
-            setMyBeacons((prev) =>
-              prev.map((b) =>
-                b.id === beaconId ? { ...b, isActive: false } : b,
-              ),
-            );
+            try {
+              await beaconsApi.deactivate(beacon.id);
+              // Mark removed; slot occupancy intentionally unchanged.
+              setMyBeacons((prev) =>
+                prev.map((b) =>
+                  b.id === beacon.id ? { ...b, isActive: false } : b,
+                ),
+              );
+            } catch (err: any) {
+              Alert.alert('Error', err.message ?? 'Could not remove beacon.');
+            }
           },
         },
       ],
+    );
+  };
+
+  // Edit returns the updated beacon (same clock); merge it into the list.
+  const handleEdited = (updated: Beacon) => {
+    setMyBeacons((prev) =>
+      prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)),
     );
   };
 
@@ -563,7 +651,7 @@ function MyBeaconsPanel() {
               timezone.
             </Text>
             <GlowBadge
-              text={`${activeBeacons.length}/${limit} beacons active${!isPremium ? ' (Free plan)' : ''}`}
+              text={`${slotsUsed}/${limit} slots used${!isPremium ? ' (Free plan)' : ''}`}
               color={COLORS.accent}
               glow
             />
@@ -655,9 +743,15 @@ function MyBeaconsPanel() {
             <Text
               style={[styles.limitReachedText, { color: colors.textMuted }]}
             >
-              {isPremium
-                ? `You have ${limit} active beacons (maximum for premium).`
-                : `You have 1 active beacon. Upgrade to Premium to run up to ${limit}.`}
+              {`You're using all ${limit} of your beacon ${limit === 1 ? 'slot' : 'slots'}${
+                nextFreesAt
+                  ? `. Your next slot opens on ${formatDate(new Date(nextFreesAt).getTime())}`
+                  : ''
+              }. Deleting a beacon won't free a slot early${
+                isPremium
+                  ? '.'
+                  : ` — upgrade to Premium to run up to ${PREMIUM_BEACON_LIMIT} at once.`
+              }`}
             </Text>
           </GlassCard>
         </AnimatedEntry>
@@ -673,7 +767,8 @@ function MyBeaconsPanel() {
             <AnimatedEntry key={beacon.id} delay={200 + i * 60}>
               <BeaconCard
                 beacon={beacon}
-                onDeactivate={() => handleDeactivate(beacon.id)}
+                onDeactivate={() => handleDeactivate(beacon)}
+                onEdited={handleEdited}
               />
             </AnimatedEntry>
           ))}
@@ -689,21 +784,40 @@ function MyBeaconsPanel() {
 function BeaconCard({
   beacon,
   onDeactivate,
+  onEdited,
 }: {
   beacon: Beacon;
   onDeactivate: () => void;
+  onEdited: (updated: Beacon) => void;
 }) {
   const { colors } = useTheme();
   const pulseAnim = useRef(new Animated.Value(0.3)).current;
-  const daysLeft = beacon.expiresAt
-    ? Math.ceil(
-        (new Date(beacon.expiresAt).getTime() - Date.now()) /
-          (1000 * 60 * 60 * 24),
-      )
-    : null;
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(beacon.rawText);
+  const [saving, setSaving] = useState(false);
+
+  // Phase 23 display state: expired > matched > removed > active.
+  const state = getBeaconState(beacon);
+  const editable = state === 'active';
+  const removable = state === 'active' || state === 'matched';
+  const dimmed = state === 'removed' || state === 'expired';
+  const dLeft = beaconDaysLeft(beacon);
+
+  const statusLabel =
+    state === 'active'
+      ? 'Active'
+      : state === 'matched'
+        ? 'Matched'
+        : state === 'removed'
+          ? 'Removed'
+          : 'Expired';
+  const statusColor =
+    state === 'active' || state === 'matched'
+      ? COLORS.accent
+      : colors.textMuted;
 
   useEffect(() => {
-    if (beacon.isActive) {
+    if (state === 'active') {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -721,60 +835,166 @@ function BeaconCard({
         ]),
       ).start();
     }
-  }, [beacon.isActive]);
+  }, [state]);
+
+  const handleSave = async () => {
+    const text = editText.trim();
+    if (text.length < 10) {
+      Alert.alert('Too Short', 'Please use at least 10 characters.');
+      return;
+    }
+    if (text === beacon.rawText) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { beacon: updated } = await beaconsApi.update(beacon.id, text);
+      onEdited(updated);
+      setEditing(false);
+    } catch (err: any) {
+      Alert.alert(
+        'Could Not Update',
+        err.data?.reason ??
+          err.message ??
+          'Something went wrong. Please try again.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditText(beacon.rawText);
+    setEditing(false);
+  };
 
   return (
     <GlassCard
-      glowColor={beacon.isActive ? COLORS.borderGlow : undefined}
-      style={{ opacity: beacon.isActive ? 1 : 0.5 }}
+      glowColor={state === 'active' ? COLORS.borderGlow : undefined}
+      style={{ opacity: dimmed ? 0.6 : 1 }}
     >
       <View style={styles.beaconCardHeader}>
-        {beacon.isActive && (
+        {state === 'active' ? (
           <Animated.View
             style={[
               styles.statusDot,
               { backgroundColor: COLORS.accent, opacity: pulseAnim },
             ]}
           />
-        )}
-        {!beacon.isActive && (
+        ) : (
           <View
-            style={[styles.statusDot, { backgroundColor: colors.textMuted }]}
+            style={[
+              styles.statusDot,
+              {
+                backgroundColor:
+                  state === 'matched' ? COLORS.accent : colors.textMuted,
+              },
+            ]}
           />
         )}
-        <Text
-          style={[
-            styles.beaconStatus,
-            { color: beacon.isActive ? COLORS.accent : colors.textMuted },
-          ]}
-        >
-          {beacon.isActive ? 'Active' : 'Inactive'}
+        <Text style={[styles.beaconStatus, { color: statusColor }]}>
+          {statusLabel}
         </Text>
-        {beacon.isActive && daysLeft !== null && (
+
+        {(state === 'active' || state === 'matched') && (
           <GlowBadge
-            text={`${daysLeft}d left`}
+            text={`${dLeft}d left`}
             color={colors.textMuted}
             size="sm"
           />
         )}
-        {beacon.isActive && (
+        {state === 'removed' && (
+          <GlowBadge
+            text={`slot frees ${formatDate(effectiveExpiryMs(beacon))}`}
+            color={colors.textMuted}
+            size="sm"
+          />
+        )}
+
+        {editable && !editing && (
+          <TouchableOpacity
+            onPress={() => {
+              setEditText(beacon.rawText);
+              setEditing(true);
+            }}
+          >
+            <GlowBadge text="Edit" color={COLORS.accent} size="sm" />
+          </TouchableOpacity>
+        )}
+        {removable && !editing && (
           <TouchableOpacity onPress={onDeactivate}>
             <GlowBadge text="Remove" color={COLORS.error} size="sm" />
           </TouchableOpacity>
         )}
       </View>
-      <Text style={[styles.beaconText, { color: colors.text }]}>
-        {beacon.rawText}
-      </Text>
-      {beacon.parsedIntent && beacon.parsedIntent !== beacon.rawText && (
-        <Text style={[styles.parsedIntent, { color: colors.textMuted }]}>
-          AI understood: {beacon.parsedIntent}
-        </Text>
-      )}
-      {beacon.lastMatchedAt && (
-        <Text style={[styles.lastMatched, { color: colors.textMuted }]}>
-          Last matched: {new Date(beacon.lastMatchedAt).toLocaleDateString()}
-        </Text>
+
+      {editing ? (
+        <View style={styles.editWrap}>
+          <View
+            style={[
+              styles.beaconInput,
+              {
+                backgroundColor: colors.surfaceGlass,
+                borderColor:
+                  editText.trim().length >= 10 ? COLORS.accent : colors.border,
+              },
+            ]}
+          >
+            <TextInput
+              style={[
+                styles.beaconInputText,
+                { color: colors.text, fontFamily: FONTS.regular },
+              ]}
+              value={editText}
+              onChangeText={setEditText}
+              multiline
+              maxLength={280}
+              autoFocus
+              placeholder="Describe what you're looking for or offering"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+          <View style={styles.editActions}>
+            <TouchableOpacity
+              onPress={handleSave}
+              disabled={editText.trim().length < 10 || saving}
+            >
+              <GlowBadge
+                text={saving ? 'Saving…' : 'Save'}
+                color={COLORS.accent}
+                size="sm"
+                glow
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={cancelEdit} disabled={saving}>
+              <GlowBadge text="Cancel" color={colors.textMuted} size="sm" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }} />
+            <GlowBadge
+              text={`${editText.length}/280`}
+              color={colors.textMuted}
+              size="sm"
+            />
+          </View>
+        </View>
+      ) : (
+        <>
+          <Text style={[styles.beaconText, { color: colors.text }]}>
+            {beacon.rawText}
+          </Text>
+          {beacon.parsedIntent && beacon.parsedIntent !== beacon.rawText && (
+            <Text style={[styles.parsedIntent, { color: colors.textMuted }]}>
+              AI understood: {beacon.parsedIntent}
+            </Text>
+          )}
+          {beacon.lastMatchedAt && (
+            <Text style={[styles.lastMatched, { color: colors.textMuted }]}>
+              Last matched:{' '}
+              {new Date(beacon.lastMatchedAt).toLocaleDateString()}
+            </Text>
+          )}
+        </>
       )}
     </GlassCard>
   );
@@ -1032,6 +1252,8 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   beaconStatus: { fontSize: 12, fontFamily: FONTS.semiBold, flex: 1 },
+  editWrap: { gap: SPACING.sm, marginTop: 4 },
+  editActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   beaconText: { fontSize: 15, fontFamily: FONTS.medium, lineHeight: 22 },
   parsedIntent: {
     fontSize: 13,

@@ -7,6 +7,7 @@ import type {
   Message,
   Beacon,
   BeaconMatch,
+  BeaconSlots,
   Notification,
   PublicProfile,
   GlobeRoom,
@@ -242,7 +243,14 @@ export const beacons = {
       body: JSON.stringify({ rawText }),
     }),
 
-  mine: () => request<{ beacons: Beacon[] }>('/api/beacons/mine'),
+  update: (id: number, rawText: string) =>
+    request<{ beacon: Beacon }>(`/api/beacons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ rawText }),
+    }),
+
+  mine: () =>
+    request<{ beacons: Beacon[]; slots: BeaconSlots }>('/api/beacons/mine'),
 
   deactivate: (id: number) =>
     request(`/api/beacons/${id}`, { method: 'DELETE' }),

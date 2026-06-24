@@ -1025,7 +1025,7 @@ function ChatsListRow({
             </Text>
             {isLocalRow && <LocalPill />}
             {isGlobalRow && <GlobalPill />}
-            {isGroupRow && <GroupPill />}
+            {isGroupRow && groupIsPublic && <GroupPill />}
             {isGroupRow && !groupIsPublic && <PrivatePill />}
             {row.type === 'group' && row.isArchived && (
               <View style={[styles.archivedPill, { backgroundColor: colors.textMuted + '22' }]}>

@@ -9,6 +9,16 @@
 //
 // The Tier 1 guard `!zoneName.includes('/')` catches the Android edge case
 // where Hermes returns the raw IANA string instead of a friendly name.
+//
+// Cross-platform normalization: iOS Intl can return a bare "Eastern" (no
+// "Time" word) while Android returns "Eastern Time". Users found "Eastern"
+// alone confusing, so we always ensure the label ends in "Time" — but only
+// append when it's missing, so zones already ending in "Time" (e.g. "Pacific
+// Time", "India Standard Time") don't become "... Time Time".
+function withTimeSuffix(name: string): string {
+  if (/\bTime$/i.test(name)) return name;
+  return `${name} Time`;
+}
 
 export function timezoneToZoneName(tz: string): string {
   // Tier 1: longGeneric
@@ -18,7 +28,7 @@ export function timezoneToZoneName(tz: string): string {
       timeZoneName: 'longGeneric',
     }).formatToParts(new Date());
     const zoneName = parts.find(p => p.type === 'timeZoneName')?.value;
-    if (zoneName && !zoneName.includes('/')) return zoneName;
+    if (zoneName && !zoneName.includes('/')) return withTimeSuffix(zoneName);
   } catch {
     /* fall through */
   }
@@ -30,11 +40,12 @@ export function timezoneToZoneName(tz: string): string {
       timeZoneName: 'long',
     }).formatToParts(new Date());
     const zoneName = parts.find(p => p.type === 'timeZoneName')?.value;
-    if (zoneName) return zoneName;
+    if (zoneName) return withTimeSuffix(zoneName);
   } catch {
     /* fall through */
   }
 
   // Tier 3: last segment of IANA string
-  return tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
+  const fallback = tz.split('/').pop()?.replace(/_/g, ' ') ?? tz;
+  return withTimeSuffix(fallback);
 }

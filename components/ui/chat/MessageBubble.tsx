@@ -136,6 +136,20 @@ export function MessageBubble({
   const gifUrls = mediaUrls ? mediaUrls.filter(isGifUrl) : [];
   const photoUrls = mediaUrls ? mediaUrls.filter((u) => !isGifUrl(u)) : [];
 
+  // A pure-image message (no text, no reply quote) renders Viber-style: the
+  // photo/GIF edge-to-edge with rounded corners and NO surrounding bubble
+  // chrome. The padded gradient/surface bubble otherwise frames the image with
+  // a chunky colored border, which reads as unpolished. Text or a reply quote
+  // still needs the bubble to stay readable, so those keep it.
+  const mediaOnly = !!hasMedia && !message.content && !message.replyTo;
+
+  // Image WITH a caption: the photo bleeds to the top + sides of the bubble
+  // (negative margins cancel the bubble padding) and the bubble background
+  // shows only as the padded caption strip at the bottom — the Telegram/Viber
+  // pattern. A reply quote sits above the image and needs the padding, so that
+  // case keeps the fully-framed layout.
+  const mediaFlush = !!hasMedia && !!message.content && !message.replyTo;
+
   const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
   // Detect distinct YouTube links in the DISPLAYED content (so a translated
   // message still unfurls). Capped at 3 inside extractYouTubeIds.
@@ -219,6 +233,28 @@ export function MessageBubble({
     setViewerIndex(index);
     setViewerVisible(true);
   }, []);
+
+  // Render the GIF/photo lanes at a given width + corner radius. Used both
+  // inside the bubble (text+image) and edge-to-edge (image-only / mediaOnly).
+  // `flush` rounds only the top corners (image+caption) so the media sits flush
+  // against the caption strip below.
+  const renderMedia = (width: number, radius: number, flush = false) => (
+    <>
+      {gifUrls.map((url) => (
+        <GifMessage key={url} url={url} bubbleWidth={width} borderRadius={radius} flush={flush} />
+      ))}
+      {photoUrls.length > 0 && (
+        <ImageGrid
+          mediaUrls={photoUrls}
+          bubbleWidth={width}
+          onImagePress={handleImagePress}
+          onImageLongPress={handleLongPress}
+          borderRadius={radius}
+          flush={flush}
+        />
+      )}
+    </>
+  );
 
   const handleYouTubePress = useCallback((id: string) => {
     setYtVideoId(id);
@@ -323,7 +359,13 @@ export function MessageBubble({
 
         {/* Bubble with long press */}
         <Pressable onLongPress={handleLongPress} delayLongPress={500}>
-          {isMe ? (
+          {mediaOnly ? (
+            // Viber-style: image edge-to-edge, no bubble frame. Timestamp and
+            // reactions still render below via the shared wrapper.
+            <View style={styles.mediaOnly}>
+              {renderMedia(BUBBLE_WIDTH, 18)}
+            </View>
+          ) : isMe ? (
             <LinearGradient
               colors={[...COLORS.gradientPrimary]}
               start={{ x: 0, y: 0 }}
@@ -349,23 +391,19 @@ export function MessageBubble({
                 </Pressable>
               )}
               {hasMedia && (
-                <View style={message.content ? styles.mediaWithText : undefined}>
-                  {gifUrls.map((url) => (
-                    <GifMessage
-                      key={url}
-                      url={url}
-                      bubbleWidth={BUBBLE_WIDTH - 28}
-                      borderRadius={14}
-                    />
-                  ))}
-                  {photoUrls.length > 0 && (
-                    <ImageGrid
-                      mediaUrls={photoUrls}
-                      bubbleWidth={BUBBLE_WIDTH - 28}
-                      onImagePress={handleImagePress}
-                      onImageLongPress={handleLongPress}
-                      borderRadius={14}
-                    />
+                <View
+                  style={
+                    mediaFlush
+                      ? styles.mediaFlush
+                      : message.content
+                        ? styles.mediaWithText
+                        : undefined
+                  }
+                >
+                  {renderMedia(
+                    mediaFlush ? BUBBLE_WIDTH : BUBBLE_WIDTH - 28,
+                    mediaFlush ? 18 : 14,
+                    mediaFlush,
                   )}
                 </View>
               )}
@@ -419,23 +457,19 @@ export function MessageBubble({
                 </Pressable>
               )}
               {hasMedia && (
-                <View style={message.content ? styles.mediaWithText : undefined}>
-                  {gifUrls.map((url) => (
-                    <GifMessage
-                      key={url}
-                      url={url}
-                      bubbleWidth={BUBBLE_WIDTH - 28}
-                      borderRadius={14}
-                    />
-                  ))}
-                  {photoUrls.length > 0 && (
-                    <ImageGrid
-                      mediaUrls={photoUrls}
-                      bubbleWidth={BUBBLE_WIDTH - 28}
-                      onImagePress={handleImagePress}
-                      onImageLongPress={handleLongPress}
-                      borderRadius={14}
-                    />
+                <View
+                  style={
+                    mediaFlush
+                      ? styles.mediaFlush
+                      : message.content
+                        ? styles.mediaWithText
+                        : undefined
+                  }
+                >
+                  {renderMedia(
+                    mediaFlush ? BUBBLE_WIDTH : BUBBLE_WIDTH - 28,
+                    mediaFlush ? 18 : 14,
+                    mediaFlush,
                   )}
                 </View>
               )}
@@ -599,6 +633,20 @@ const styles = StyleSheet.create({
   },
   mediaWithText: {
     marginBottom: 6,
+  },
+  // Image-only message: no bubble background/padding so the photo reads
+  // edge-to-edge (Viber-style). Rounded + clipped for clean corners.
+  mediaOnly: {
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  // Image + caption: negative margins cancel the bubble's padding (14 horiz,
+  // 10 top) so the photo bleeds to the top + sides, leaving only a bottom gap
+  // before the caption. Values must track styles.bubble's padding.
+  mediaFlush: {
+    marginHorizontal: -14,
+    marginTop: -10,
+    marginBottom: 8,
   },
   youtubeBlock: {
     marginTop: 2,
