@@ -191,6 +191,21 @@ export interface NewsArticle {
   reactions: ReactionGroup[];       // reuse v1.1 type
 }
 
+// ── Phase 24: Job Postings ────────────────────────────────────────────────────
+export interface JobPosting {
+  id: number;
+  title: string;
+  company: string;
+  location: string | null;   // null → render "Remote"
+  postedDate: string;        // MM/DD/YYYY — render as-is, no reformatting
+  description: string | null;
+  logoUrl: string | null;
+  jobUrl: string;
+  viewCount: number;
+  source: string;            // 'jewishjobs' in v1
+  externalRef: string;
+}
+
 // ── Phase 8: caps:invalidated socket event reason union ────────────────────
 // Loose mirror of `tribelife-backend/src/types/capabilities.ts CapsInvalidatedReason`.
 // No shared types package — keep manually in sync (per CONTEXT.md D-01 canonical_refs).

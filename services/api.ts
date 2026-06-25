@@ -14,6 +14,7 @@ import type {
   GlobeMessage,
   GroupMember,
   NewsArticle,
+  JobPosting,
   ReactionGroup,
   ChatsListResponse,
   SearchResponse,
@@ -607,6 +608,14 @@ export const newsApi = {
     request<{ action: 'added' | 'removed' }>(
       '/api/news/reactions/toggle',
       { method: 'POST', body: JSON.stringify({ articleId, emoji }) }
+    ),
+};
+
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+export const jobsApi = {
+  feed: (cursor?: string) =>
+    request<{ jobs: JobPosting[]; hasMore: boolean; nextCursor: string | null }>(
+      `/api/jobs/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`
     ),
 };
 
