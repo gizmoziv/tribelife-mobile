@@ -37,6 +37,7 @@ import {
   joinConversation,
   leaveConversation,
   sendDirectMessage,
+  sendDmVoice,
   onDirectMessage,
   startTyping,
   stopTyping,
@@ -55,6 +56,8 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
+import { MicButton } from '@/components/ui/chat/MicButton';
+import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
@@ -158,6 +161,7 @@ export default function DMThreadScreen() {
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
@@ -917,6 +921,17 @@ export default function DMThreadScreen() {
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   }, [input, conversationId, replyTo, user]);
 
+  // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
+  // arrives on the dm:message echo. The same emitter serves 1:1 DMs and groups
+  // (the dm:voice backend handler covers both). RecordingBar owns its spinner.
+  const handleSendVoice = useCallback((cdnUrl: string, durationMs: number, waveform: number[]) => {
+    sendDmVoice(conversationId, cdnUrl, durationMs, waveform, replyTo?.id ?? undefined);
+    setReplyTo(null);
+    setIsRecording(false);
+    stopTyping({ conversationId });
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+  }, [conversationId, replyTo]);
+
   const handleInputChange = (text: string) => {
     setInput(text);
     startTyping({ conversationId });
@@ -1175,34 +1190,53 @@ export default function DMThreadScreen() {
                 }}
               />
               <View style={[styles.inputBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
-                <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
-                <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
-                {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-                <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-                  <MentionTextInput
-                    style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-                    placeholder="Message..."
-                    placeholderTextColor={colors.textMuted}
-                    value={input}
-                    onChangeText={handleInputChange}
-                    selection={selection}
-                    onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                    multiline
-                    maxLength={2000}
+                {isRecording ? (
+                  // Recording surface (D-06): replace the input row in place,
+                  // preserving the inputBar padding/keyboard-aware bottom. This
+                  // composer is already gated behind the archived guard above, so
+                  // voice is not offered where text is not.
+                  <RecordingBar
+                    onDiscard={() => setIsRecording(false)}
+                    onSent={handleSendVoice}
                   />
-                </View>
-                <Pressable
-                  onPress={handleSend}
-                  disabled={!input.trim() || isUploading}
-                  style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
-                >
-                  <LinearGradient
-                    colors={[...COLORS.gradientPrimary]}
-                    style={styles.sendButton}
-                  >
-                    <SendIcon />
-                  </LinearGradient>
-                </Pressable>
+                ) : (
+                  <>
+                    <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                    <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
+                    {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+                    <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+                      <MentionTextInput
+                        style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                        placeholder="Message..."
+                        placeholderTextColor={colors.textMuted}
+                        value={input}
+                        onChangeText={handleInputChange}
+                        selection={selection}
+                        onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                        multiline
+                        maxLength={2000}
+                      />
+                    </View>
+                    {/* Send-slot swap (VOICE-01): mic on empty input, send
+                        otherwise — never both. */}
+                    {!input.trim() && !isUploading ? (
+                      <MicButton onPress={() => setIsRecording(true)} />
+                    ) : (
+                      <Pressable
+                        onPress={handleSend}
+                        disabled={!input.trim() || isUploading}
+                        style={({ pressed }) => [{ opacity: input.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
+                      >
+                        <LinearGradient
+                          colors={[...COLORS.gradientPrimary]}
+                          style={styles.sendButton}
+                        >
+                          <SendIcon />
+                        </LinearGradient>
+                      </Pressable>
+                    )}
+                  </>
+                )}
               </View>
             </View>
           </>
