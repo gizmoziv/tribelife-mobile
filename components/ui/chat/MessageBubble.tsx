@@ -13,8 +13,10 @@ import { GifMessage } from '@/components/ui/chat/GifMessage';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import { YouTubeCard } from '@/components/ui/chat/YouTubeCard';
 import { YouTubePlayerModal } from '@/components/ui/chat/YouTubePlayerModal';
+import { VoicePlayerBubble } from '@/components/ui/chat/VoicePlayerBubble';
 import { extractYouTubeIds } from '@/utils/youtube';
-import type { Message, GlobeMessage } from '@/types';
+import { VOICE_FALLBACK_STRING, formatDuration } from '@/constants/voice';
+import type { Message, GlobeMessage, ReplyTo } from '@/types';
 
 // Parse message content into plain text, @mention, and URL fragments.
 // URLs are matched first (so a URL containing an @ won't be split into a
@@ -92,6 +94,19 @@ function isGifUrl(u: string): boolean {
   }
 }
 
+// A reply quote points at a voice message when the additive voiceDurationMs
+// field is present (the 26-01 backend patch sources it from messages.voiceDurationMs).
+// VOICE_FALLBACK_STRING content is a defensive secondary check for older payloads.
+// Label: "🎤 Voice message · 0:34" (duration when known, bare label otherwise).
+function voiceReplyLabel(replyTo: ReplyTo): string | null {
+  const isVoice =
+    replyTo.voiceDurationMs != null || replyTo.content === VOICE_FALLBACK_STRING;
+  if (!isVoice) return null;
+  return replyTo.voiceDurationMs != null
+    ? `🎤 Voice message · ${formatDuration(replyTo.voiceDurationMs)}`
+    : '🎤 Voice message';
+}
+
 interface MessageBubbleProps {
   message: Message | GlobeMessage;
   isMe: boolean;
@@ -128,7 +143,7 @@ export function MessageBubble({
 
   const mediaUrls = message.mediaUrls;
   const hasMedia = mediaUrls && mediaUrls.length > 0;
-  const isEmpty = !message.content && !hasMedia;
+  const isEmpty = !message.content && !hasMedia && !message.voiceUrl;
   const BUBBLE_WIDTH = 260;
 
   // Partition media into GIFs (dedicated expo-image path) and photos (existing
@@ -149,6 +164,14 @@ export function MessageBubble({
   // pattern. A reply quote sits above the image and needs the padding, so that
   // case keeps the fully-framed layout.
   const mediaFlush = !!hasMedia && !!message.content && !message.replyTo;
+
+  // Voice message: render VoicePlayerBubble in place of the text content. The
+  // surrounding chrome (reply preview, timestamp, reactions) is reused unchanged.
+  const isVoice = !!message.voiceUrl;
+  // Premium transcript translation reuses the existing translation props: when a
+  // translation is active, pass it to the player bubble so the revealed transcript
+  // shows the translated text instead of the original voiceTranscript.
+  const transcriptOverride = (showTranslation && translatedContent) ? translatedContent : null;
 
   const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
   // Detect distinct YouTube links in the DISPLAYED content (so a translated
@@ -385,30 +408,43 @@ export function MessageBubble({
                       style={[styles.replyText, { color: 'rgba(255,255,255,0.7)' }]}
                       numberOfLines={1}
                     >
-                      {replyTo.content}
+                      {voiceReplyLabel(replyTo) ?? replyTo.content}
                     </Text>
                   </View>
                 </Pressable>
               )}
-              {hasMedia && (
-                <View
-                  style={
-                    mediaFlush
-                      ? styles.mediaFlush
-                      : message.content
-                        ? styles.mediaWithText
-                        : undefined
-                  }
-                >
-                  {renderMedia(
-                    mediaFlush ? BUBBLE_WIDTH : BUBBLE_WIDTH - 28,
-                    mediaFlush ? 18 : 14,
-                    mediaFlush,
+              {isVoice ? (
+                <VoicePlayerBubble
+                  voiceUrl={message.voiceUrl as string}
+                  voiceDurationMs={message.voiceDurationMs}
+                  voiceWaveform={message.voiceWaveform}
+                  voiceTranscript={message.voiceTranscript}
+                  isMe
+                  transcriptOverride={transcriptOverride}
+                />
+              ) : (
+                <>
+                  {hasMedia && (
+                    <View
+                      style={
+                        mediaFlush
+                          ? styles.mediaFlush
+                          : message.content
+                            ? styles.mediaWithText
+                            : undefined
+                      }
+                    >
+                      {renderMedia(
+                        mediaFlush ? BUBBLE_WIDTH : BUBBLE_WIDTH - 28,
+                        mediaFlush ? 18 : 14,
+                        mediaFlush,
+                      )}
+                    </View>
                   )}
-                </View>
+                  {renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
+                  {renderYouTubeCards()}
+                </>
               )}
-              {renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
-              {renderYouTubeCards()}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
@@ -451,30 +487,43 @@ export function MessageBubble({
                       style={[styles.replyText, { color: colors.textMuted }]}
                       numberOfLines={1}
                     >
-                      {replyTo.content}
+                      {voiceReplyLabel(replyTo) ?? replyTo.content}
                     </Text>
                   </View>
                 </Pressable>
               )}
-              {hasMedia && (
-                <View
-                  style={
-                    mediaFlush
-                      ? styles.mediaFlush
-                      : message.content
-                        ? styles.mediaWithText
-                        : undefined
-                  }
-                >
-                  {renderMedia(
-                    mediaFlush ? BUBBLE_WIDTH : BUBBLE_WIDTH - 28,
-                    mediaFlush ? 18 : 14,
-                    mediaFlush,
+              {isVoice ? (
+                <VoicePlayerBubble
+                  voiceUrl={message.voiceUrl as string}
+                  voiceDurationMs={message.voiceDurationMs}
+                  voiceWaveform={message.voiceWaveform}
+                  voiceTranscript={message.voiceTranscript}
+                  isMe={false}
+                  transcriptOverride={transcriptOverride}
+                />
+              ) : (
+                <>
+                  {hasMedia && (
+                    <View
+                      style={
+                        mediaFlush
+                          ? styles.mediaFlush
+                          : message.content
+                            ? styles.mediaWithText
+                            : undefined
+                      }
+                    >
+                      {renderMedia(
+                        mediaFlush ? BUBBLE_WIDTH : BUBBLE_WIDTH - 28,
+                        mediaFlush ? 18 : 14,
+                        mediaFlush,
+                      )}
+                    </View>
                   )}
-                </View>
+                  {renderContent(colors.text, COLORS.primary, COLORS.primary)}
+                  {renderYouTubeCards()}
+                </>
               )}
-              {renderContent(colors.text, COLORS.primary, COLORS.primary)}
-              {renderYouTubeCards()}
               {translatedContent && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
