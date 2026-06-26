@@ -42,6 +42,7 @@ import {
   joinGlobeRoom,
   leaveGlobeRoom,
   sendGlobeMessage,
+  sendGlobeVoice,
   sendGlobeTyping,
   onGlobeMessage,
   onGlobeParticipants,
@@ -58,6 +59,8 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
+import { MicButton } from '@/components/ui/chat/MicButton';
+import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
@@ -171,6 +174,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [input, setInput] = useState('');
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isUploading, setIsUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isAgeGated, setIsAgeGated] = useState(false);
   const [ageGateHours, setAgeGateHours] = useState(0);
@@ -875,6 +879,19 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     }
   }, [input, roomSlug, isAgeGated, isRateLimited, replyTo]);
 
+  // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
+  // arrives on the globe:message echo. Passes the route/curated slug (NOT the
+  // timezone roomId — Pitfall 8). RecordingBar owns its own upload spinner.
+  const handleSendVoice = useCallback((cdnUrl: string, durationMs: number, waveform: number[]) => {
+    if (!roomSlug) return;
+    sendGlobeVoice(roomSlug, cdnUrl, durationMs, waveform, replyTo?.id ?? undefined);
+    setReplyTo(null);
+    setIsRecording(false);
+    setIsAtBottom(true);
+    resetNewMessageCount();
+    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+  }, [roomSlug, replyTo]);
+
   // ── Typing indicator ────────────────────────────────────────────────────
   const handleInputChange = useCallback(
     (text: string) => {
@@ -1130,55 +1147,73 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                 }}
               />
               <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
-                {!isAgeGated && (
-                  <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
-                )}
-                {!isAgeGated && (
-                  <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
-                )}
-                {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-                <View
-                  style={[
-                    styles.inputWrap,
-                    {
-                      backgroundColor: colors.surfaceGlass,
-                      borderColor: colors.border,
-                      opacity: isAgeGated ? 0.5 : 1,
-                    },
-                  ]}
-                >
-                  <MentionTextInput
-                    style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-                    placeholder={
-                      isAgeGated
-                        ? `You can post in ${ageGateHours} hour${ageGateHours !== 1 ? 's' : ''}`
-                        : 'Message...'
-                    }
-                    placeholderTextColor={colors.textMuted}
-                    value={input}
-                    onChangeText={handleInputChange}
-                    selection={selection}
-                    onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                    editable={!isAgeGated}
-                    multiline
-                    maxLength={2000}
-                    onSubmitEditing={handleSend}
+                {isRecording ? (
+                  // Recording surface (D-06): replace the input row in place,
+                  // preserving the inputBar padding/keyboard-aware bottom.
+                  <RecordingBar
+                    onDiscard={() => setIsRecording(false)}
+                    onSent={handleSendVoice}
                   />
-                </View>
-                <Pressable
-                  onPress={handleSend}
-                  disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
-                  style={({ pressed }) => [
-                    { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={[...COLORS.gradientPrimary]}
-                    style={styles.sendButton}
-                  >
-                    <SendIcon />
-                  </LinearGradient>
-                </Pressable>
+                ) : (
+                  <>
+                    {!isAgeGated && (
+                      <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                    )}
+                    {!isAgeGated && (
+                      <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
+                    )}
+                    {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+                    <View
+                      style={[
+                        styles.inputWrap,
+                        {
+                          backgroundColor: colors.surfaceGlass,
+                          borderColor: colors.border,
+                          opacity: isAgeGated ? 0.5 : 1,
+                        },
+                      ]}
+                    >
+                      <MentionTextInput
+                        style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                        placeholder={
+                          isAgeGated
+                            ? `You can post in ${ageGateHours} hour${ageGateHours !== 1 ? 's' : ''}`
+                            : 'Message...'
+                        }
+                        placeholderTextColor={colors.textMuted}
+                        value={input}
+                        onChangeText={handleInputChange}
+                        selection={selection}
+                        onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                        editable={!isAgeGated}
+                        multiline
+                        maxLength={2000}
+                        onSubmitEditing={handleSend}
+                      />
+                    </View>
+                    {/* Send-slot swap (VOICE-01): mic on empty input, send
+                        otherwise — never both. Mic is gated behind the same
+                        age/rate guards as text. */}
+                    {!input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (
+                      <MicButton onPress={() => setIsRecording(true)} />
+                    ) : (
+                      <Pressable
+                        onPress={handleSend}
+                        disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
+                        style={({ pressed }) => [
+                          { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={[...COLORS.gradientPrimary]}
+                          style={styles.sendButton}
+                        >
+                          <SendIcon />
+                        </LinearGradient>
+                      </Pressable>
+                    )}
+                  </>
+                )}
               </View>
             </View>
           </>
