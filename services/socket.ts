@@ -98,6 +98,23 @@ export function sendRoomMessage(content: string, replyToId?: number, mediaUrls?:
   socket?.emit('room:message', { content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
 }
 
+// Voice in the user's timezone room. The room is derived server-side from the
+// socket session (no slug). Voice broadcasts back on the existing room:message
+// event with additive voice fields — no new listener needed.
+export function sendRoomVoice(
+  cdnUrl: string,
+  durationMs: number,
+  waveform: number[],
+  replyToId?: number,
+): void {
+  socket?.emit('room:voice', {
+    cdnUrl,
+    durationMs,
+    waveform,
+    ...(replyToId != null ? { replyToId } : {}),
+  });
+}
+
 // ── Direct messages ────────────────────────────────────────────────────────
 export function joinConversation(conversationId: number): void {
   socket?.emit('dm:join', { conversationId });
@@ -109,6 +126,24 @@ export function leaveConversation(conversationId: number): void {
 
 export function sendDirectMessage(conversationId: number, content: string, replyToId?: number, mediaUrls?: string[]): void {
   socket?.emit('dm:message', { conversationId, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
+}
+
+// Voice in a 1:1 or group DM. Broadcasts back on the existing dm:message event
+// with additive voice fields — no new listener needed.
+export function sendDmVoice(
+  conversationId: number,
+  cdnUrl: string,
+  durationMs: number,
+  waveform: number[],
+  replyToId?: number,
+): void {
+  socket?.emit('dm:voice', {
+    conversationId,
+    cdnUrl,
+    durationMs,
+    waveform,
+    ...(replyToId != null ? { replyToId } : {}),
+  });
 }
 
 // ── Active-viewing + foreground signals (260621-un7) ────────────────────────
@@ -271,6 +306,25 @@ export function leaveGlobeRoom(slug: string): void {
 
 export function sendGlobeMessage(slug: string, content: string, replyToId?: number, mediaUrls?: string[]): void {
   socket?.emit('globe:message', { slug, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
+}
+
+// Voice in a globe room. `slug` is the route-param slug (e.g. 'town-square',
+// 'eastern-time') — NOT the timezone:<slug> roomId (Pitfall 8). Broadcasts back
+// on the existing globe:message event with additive voice fields.
+export function sendGlobeVoice(
+  slug: string,
+  cdnUrl: string,
+  durationMs: number,
+  waveform: number[],
+  replyToId?: number,
+): void {
+  socket?.emit('globe:voice', {
+    slug,
+    cdnUrl,
+    durationMs,
+    waveform,
+    ...(replyToId != null ? { replyToId } : {}),
+  });
 }
 
 export function sendGlobeTyping(slug: string, isTyping: boolean): void {
