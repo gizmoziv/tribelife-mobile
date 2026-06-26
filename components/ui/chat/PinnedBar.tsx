@@ -9,6 +9,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
 import { COLORS, FONTS, RADIUS, SHADOWS, SPACING } from '@/constants';
+import { VOICE_FALLBACK_STRING, formatDuration } from '@/constants/voice';
 import type { PinnedMessageRow } from '@/services/api';
 
 // ── Date formatter ──────────────────────────────────────────────────────────
@@ -105,6 +106,18 @@ export function PinnedBar({ pin, canUnpin, onTap, onUnpin }: PinnedBarProps) {
   // long messages were silently cut with no truncation indicator.
   const preview = pin.previewText ?? '';
 
+  // A pinned voice message is detected PRIMARILY by the additive voiceDurationMs
+  // field (26-01 backend patch), with previewText === VOICE_FALLBACK_STRING as a
+  // defensive secondary check. pinnedMediaUrl is null for voice, so the existing
+  // text-only branch already renders — only the title text needs the override.
+  const isVoice =
+    pin.voiceDurationMs != null || pin.previewText === VOICE_FALLBACK_STRING;
+  const titleText = isVoice
+    ? pin.voiceDurationMs != null
+      ? `🎤 Voice message · ${formatDuration(pin.voiceDurationMs)}`
+      : '🎤 Voice message'
+    : preview;
+
   return (
     <TouchableOpacity
       style={[
@@ -154,7 +167,7 @@ export function PinnedBar({ pin, canUnpin, onTap, onUnpin }: PinnedBarProps) {
           // children to zero height on iOS (Yoga), hiding the snippet + date.
           <>
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-              {preview}
+              {titleText}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]} numberOfLines={1}>
               Pinned on {formatPinDate(pin.pinnedAt)}
