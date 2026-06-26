@@ -565,6 +565,10 @@ export interface PinnedMessageRow {
   previewText: string | null;
   pinnedMediaUrl: string | null;
   pinnedSenderHandle: string | null;
+  // D-05: voice pin previews render "🎤 Voice message · M:SS" from this.
+  // Additive/nullable — non-voice pins (and missing message rows) carry null.
+  // Sourced from the 26-01 backend patch (POST pin event + GET hydration).
+  voiceDurationMs?: number | null;
 }
 
 /**

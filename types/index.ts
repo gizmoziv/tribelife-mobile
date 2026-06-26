@@ -27,6 +27,10 @@ export interface ReplyTo {
   id: number;
   content: string;
   senderHandle: string;
+  // D-05: voice reply previews render "🎤 Voice message · M:SS" from this.
+  // Nullable — non-voice replies carry null. Sourced from the 26-01 backend
+  // patch that adds voiceDurationMs to the reply-quote payload.
+  voiceDurationMs?: number | null;
 }
 
 export interface Message {
@@ -45,6 +49,12 @@ export interface Message {
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
   mediaUrls?: string[] | null;
+  // Voice message fields (additive, nullable — Phase 25/26). voiceTranscript
+  // arrives via REST history (not the socket echo), so it stays optional/nullable.
+  voiceUrl?: string | null;
+  voiceDurationMs?: number | null;
+  voiceWaveform?: number[] | null;
+  voiceTranscript?: string | null;
   kind?: 'user' | 'system';
 }
 
@@ -172,6 +182,12 @@ export interface GlobeMessage {
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
   mediaUrls?: string[] | null;
+  // Voice message fields (additive, nullable — Phase 25/26). voiceTranscript
+  // arrives via REST history (not the socket echo), so it stays optional/nullable.
+  voiceUrl?: string | null;
+  voiceDurationMs?: number | null;
+  voiceWaveform?: number[] | null;
+  voiceTranscript?: string | null;
   kind?: 'user' | 'system';
 }
 
