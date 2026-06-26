@@ -35,6 +35,7 @@ import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   connectSocket,
   sendRoomMessage,
+  sendRoomVoice,
   onRoomMessage,
   startTyping,
   stopTyping,
@@ -52,6 +53,8 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
+import { MicButton } from '@/components/ui/chat/MicButton';
+import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { GlowBadge } from '@/components/ui/GlowBadge';
@@ -161,6 +164,7 @@ export default function LocalChatScreen() {
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
@@ -706,6 +710,16 @@ export default function LocalChatScreen() {
     setReplyTo(null);
   }, [input, replyTo]);
 
+  // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
+  // appears when the server echoes on room:message (handled by onRoomMessage).
+  // RecordingBar owns its own upload spinner, so the screen does not manage
+  // upload state for voice.
+  const handleSendVoice = useCallback((cdnUrl: string, durationMs: number, waveform: number[]) => {
+    sendRoomVoice(cdnUrl, durationMs, waveform, replyTo?.id ?? undefined);
+    setReplyTo(null);
+    setIsRecording(false);
+  }, [replyTo]);
+
   const handleInputChange = (text: string) => {
     setInput(text);
     startTyping({ roomId });
@@ -876,6 +890,10 @@ export default function LocalChatScreen() {
           onChangeText={handleInputChange}
           onSend={handleSend}
           isUploading={isUploading}
+          isRecording={isRecording}
+          onStartRecording={() => setIsRecording(true)}
+          onDiscardVoice={() => setIsRecording(false)}
+          onSendVoice={handleSendVoice}
           onImagesSelected={handleImagesSelected}
           onGifSelected={handleGifSelected}
           selection={selection}
@@ -975,6 +993,10 @@ function ChatInput({
   onChangeText,
   onSend,
   isUploading,
+  isRecording,
+  onStartRecording,
+  onDiscardVoice,
+  onSendVoice,
   onImagesSelected,
   onGifSelected,
   selection,
@@ -987,6 +1009,10 @@ function ChatInput({
   onChangeText: (text: string) => void;
   onSend: () => void;
   isUploading?: boolean;
+  isRecording?: boolean;
+  onStartRecording?: () => void;
+  onDiscardVoice?: () => void;
+  onSendVoice?: (cdnUrl: string, durationMs: number, waveform: number[]) => void;
   onImagesSelected?: (uris: string[]) => void;
   onGifSelected?: (gifUrl: string) => void;
   selection?: { start: number; end: number };
@@ -1019,39 +1045,53 @@ function ChatInput({
         />
       )}
       <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
-        {onImagesSelected && (
-          <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+        {isRecording && onSendVoice && onDiscardVoice ? (
+          // Recording surface (D-06): replace the whole input row in place,
+          // preserving the inputBar padding/keyboard-aware bottomPadding.
+          <RecordingBar onDiscard={onDiscardVoice} onSent={onSendVoice} />
+        ) : (
+          <>
+            {onImagesSelected && (
+              <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+            )}
+            {onGifSelected && (
+              <GifButton onGifSelected={onGifSelected} disabled={isUploading} />
+            )}
+            {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+            <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
+              <MentionTextInput
+                style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
+                placeholder="Message..."
+                placeholderTextColor={colors.textMuted}
+                value={value}
+                onChangeText={onChangeText}
+                selection={selection}
+                onSelectionChange={onSelectionChange ? (e) => onSelectionChange(e.nativeEvent.selection) : undefined}
+                multiline
+                maxLength={2000}
+                onSubmitEditing={onSend}
+              />
+            </View>
+            {/* Send-slot swap (VOICE-01): mic on empty input, send otherwise —
+                never both. */}
+            {!value.trim() && !isUploading && onStartRecording ? (
+              <MicButton onPress={onStartRecording} />
+            ) : (
+              <Pressable
+                onPress={onSend}
+                disabled={!value.trim() || isUploading}
+                style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
+              >
+                <LinearGradient
+                  colors={[...COLORS.gradientPrimary]}
+                  style={styles.sendButton}
+                >
+                  <SendIcon />
+                </LinearGradient>
+              </Pressable>
+            )}
+          </>
         )}
-        {onGifSelected && (
-          <GifButton onGifSelected={onGifSelected} disabled={isUploading} />
-        )}
-        {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
-        <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
-          <MentionTextInput
-            style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
-            placeholder="Message..."
-            placeholderTextColor={colors.textMuted}
-            value={value}
-            onChangeText={onChangeText}
-            selection={selection}
-            onSelectionChange={onSelectionChange ? (e) => onSelectionChange(e.nativeEvent.selection) : undefined}
-            multiline
-            maxLength={2000}
-            onSubmitEditing={onSend}
-          />
-        </View>
-        <Pressable
-          onPress={onSend}
-          disabled={!value.trim() || isUploading}
-          style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
-        >
-          <LinearGradient
-            colors={[...COLORS.gradientPrimary]}
-            style={styles.sendButton}
-          >
-            <SendIcon />
-          </LinearGradient>
-        </Pressable>
       </View>
     </View>
   );
