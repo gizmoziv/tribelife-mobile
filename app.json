@@ -2,7 +2,7 @@
   "expo": {
     "name": "TribeLife App",
     "slug": "tribelife",
-    "version": "1.6.3",
+    "version": "1.6.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -31,7 +31,8 @@
           }
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "TribeLife uses your location to show accurate Shabbat candle-lighting times."
+        "NSLocationWhenInUseUsageDescription": "TribeLife uses your location to show accurate Shabbat candle-lighting times.",
+        "NSMicrophoneUsageDescription": "TribeLife needs access to your microphone to send voice messages."
       }
     },
     "android": {
@@ -130,7 +131,13 @@
           "locationWhenInUsePermission": "TribeLife uses your location to show accurate Shabbat candle-lighting times."
         }
       ],
-      "@giphy/react-native-sdk"
+      "@giphy/react-native-sdk",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "TribeLife needs access to your microphone to send voice messages."
+        }
+      ]
     ],
     "scheme": "tribelife",
     "extra": {
