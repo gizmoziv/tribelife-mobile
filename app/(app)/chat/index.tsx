@@ -83,6 +83,21 @@ function SendIcon() {
   );
 }
 
+// Phase 27: Bell-off indicator for muted DM/group rows and their chat headers.
+function BellOffIcon({ size = 16, color = '#7A8BA8' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M13.73 21a2 2 0 01-3.46 0M18.63 13A17.89 17.89 0 0118 8M6.26 6.26A5.86 5.86 0 006 8c0 7-3 9-3 9h14M18 8a6 6 0 00-9.33-5M1 1l22 22"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 export default function ChatsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -846,11 +861,27 @@ function ChatsList({
       }
     };
 
+    // Phase 27: mute/unmute swipe action for dm/group rows.
+    const handleMuteAction = () => {
+      if (!conversationId) return;
+      const isMuted = isArchivable && (item.type === 'dm' || item.type === 'group') && item.isMuted;
+      if (isMuted) {
+        useChatsStore.getState().unmuteRow(conversationId);
+      } else {
+        useChatsStore.getState().muteRow(conversationId);
+      }
+    };
+    const muteLabel = isArchivable && (item.type === 'dm' || item.type === 'group') && item.isMuted
+      ? 'Unmute'
+      : 'Mute';
+
     return (
       <SwipeableChatRow
         enabled={isArchivable}
         actionLabel={isArchiveView ? 'Unarchive' : 'Archive'}
         onAction={handleAction}
+        muteLabel={muteLabel}
+        onMuteAction={handleMuteAction}
         backgroundColor={colors.background}
       >
         <ChatsListRow row={item} colors={colors} router={router} />
@@ -1044,13 +1075,21 @@ function ChatsListRow({
                 {formatTime(row.lastMessage.at)}
               </Text>
             )}
-            {row.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>
-                  {row.unreadCount > 99 ? '99+' : row.unreadCount}
-                </Text>
-              </View>
-            )}
+            {/* Phase 27: bottom metadata line — [bell-off icon?] [unread badge?] */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {(row.type === 'dm' || row.type === 'group') && row.isMuted && (
+                <View accessibilityLabel="Muted conversation">
+                  <BellOffIcon size={14} color={colors.textMuted} />
+                </View>
+              )}
+              {row.unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>
+                    {row.unreadCount > 99 ? '99+' : row.unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
         <Text style={[styles.chatsRowPreview, { color: colors.textMuted }]} numberOfLines={1}>
