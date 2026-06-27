@@ -58,6 +58,9 @@ interface ChatsState {
   loadArchivedRows: () => Promise<void>;
   archiveRow: (conversationId: number) => Promise<void>;
   unarchiveRow: (conversationId: number) => Promise<void>;
+  // Phase 27: mute actions (in-place toggle — muted rows stay in the main list)
+  muteRow: (conversationId: number) => Promise<void>;
+  unmuteRow: (conversationId: number) => Promise<void>;
 }
 
 // Per-row matcher: returns true if `row` is the row identified by `entityId`.
@@ -278,6 +281,56 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     } catch {
       // Roll back: re-sync both lists from server
       get().loadArchivedRows();
+      get().hydrate();
+    }
+  },
+
+  // Phase 27: optimistically toggle isMuted in place (row stays in main list — unlike
+  // archiveRow which moves the row out). Rolls back via hydrate() on API failure.
+  muteRow: async (conversationId: number) => {
+    const target = get().rows.find(
+      (r) => (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId,
+    );
+    if (!target) return; // no-op gracefully if not found or not dm/group
+
+    // Optimistic: toggle isMuted true in place; row stays in rows
+    set((s) => ({
+      rows: s.rows.map((r) =>
+        (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId
+          ? { ...r, isMuted: true }
+          : r,
+      ),
+    }));
+
+    try {
+      await chat.mute(conversationId);
+    } catch {
+      // Roll back: re-sync from server truth
+      get().hydrate();
+    }
+  },
+
+  // Phase 27: optimistically toggle isMuted false in place (row stays in main list).
+  // Rolls back via hydrate() on API failure.
+  unmuteRow: async (conversationId: number) => {
+    const target = get().rows.find(
+      (r) => (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId,
+    );
+    if (!target) return; // no-op gracefully if not found or not dm/group
+
+    // Optimistic: toggle isMuted false in place; row stays in rows
+    set((s) => ({
+      rows: s.rows.map((r) =>
+        (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId
+          ? { ...r, isMuted: false }
+          : r,
+      ),
+    }));
+
+    try {
+      await chat.unmute(conversationId);
+    } catch {
+      // Roll back: re-sync from server truth
       get().hydrate();
     }
   },
