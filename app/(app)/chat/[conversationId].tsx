@@ -67,13 +67,28 @@ import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
-import type { Message } from '@/types';
+import type { Message, ChatsRow } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function SendIcon() {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
       <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="#FFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+// Phase 27: Bell-off indicator for muted DM/group chat header (D-07, 27-UI-SPEC §2+§4).
+function BellOffIcon({ size = 16, color = '#7A8BA8' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M13.73 21a2 2 0 01-3.46 0M18.63 13A17.89 17.89 0 0118 8M6.26 6.26A5.86 5.86 0 006 8c0 7-3 9-3 9h14M18 8a6 6 0 00-9.33-5M1 1l22 22"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -105,6 +120,15 @@ export default function DMThreadScreen() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   const insets = useSafeAreaInsets();
+  // Phase 27: derive mute state reactively from chatsStore so the bell-off
+  // icon clears immediately on unmute (optimistic update in unmuteRow).
+  const isMuted = useChatsStore((s) => {
+    const row = (s.rows as ChatsRow[]).find(
+      (r) => (r.type === 'dm' || r.type === 'group') && r.conversationId === conversationId
+    );
+    if (!row || (row.type !== 'dm' && row.type !== 'group')) return false;
+    return row.isMuted ?? false;
+  });
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   // Inline-header DM title resolution: when the DM is opened without a `handle`
   // param (e.g. from a notification tap), the other participant's handle is
@@ -1038,6 +1062,7 @@ export default function DMThreadScreen() {
         onGroupMenu={handleGroupMenu}
         onDmMenu={handleDmMenu}
         showDmMenu={dmMenuReady}
+        isMuted={isMuted}
       />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -1297,9 +1322,11 @@ interface ChatHeaderProps {
   onGroupMenu: () => void;
   onDmMenu: () => void;
   showDmMenu: boolean;
+  /** Phase 27: show bell-off icon left of title when conversation is muted (D-07). */
+  isMuted: boolean;
 }
 
-function ChatHeader({ title, onBack, colors, insetsTop, isGroup, onGroupMenu, onDmMenu, showDmMenu }: ChatHeaderProps) {
+function ChatHeader({ title, onBack, colors, insetsTop, isGroup, onGroupMenu, onDmMenu, showDmMenu, isMuted }: ChatHeaderProps) {
   return (
     <View
       style={[
@@ -1324,7 +1351,14 @@ function ChatHeader({ title, onBack, colors, insetsTop, isGroup, onGroupMenu, on
         </Svg>
       </Pressable>
       <View style={styles.headerTitleWrap} pointerEvents="none">
-        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {isMuted && (
+            <View accessibilityLabel="Muted">
+              <BellOffIcon size={16} color={colors.textMuted} />
+            </View>
+          )}
+          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
+        </View>
       </View>
       {/* Right slot: group → 3-dot (vertical) opens group screen; DM → 3-dot
           (horizontal) opens Report/Block sheet. The DM menu is hidden until the
