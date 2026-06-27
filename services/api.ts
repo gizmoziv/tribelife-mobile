@@ -13,6 +13,7 @@ import type {
   GlobeRoom,
   GlobeMessage,
   GroupMember,
+  ConversationParticipant,
   NewsArticle,
   JobPosting,
   ReactionGroup,
@@ -156,6 +157,15 @@ export const chat = {
       method: 'POST',
       body: JSON.stringify({ otherUserId }),
     }),
+
+  // Phase 29 (D-01a, Touch 2): cold-open receipt seeding for DMs. Returns the
+  // conversation's participants (incl. self) with their delivered/read
+  // watermarks, consumed by receiptsStore.seed on chat open. Backed by the
+  // 29-01 additive GET /conversations/:id/participants route.
+  getConversationParticipants: (id: number) =>
+    request<{ participants: ConversationParticipant[] }>(
+      `/api/chat/conversations/${id}/participants`
+    ),
 
   getConversationMessages: (conversationId: number, opts?: { before?: string; aroundMessageId?: number }) => {
     const params = new URLSearchParams();
@@ -305,6 +315,10 @@ export const notificationsApi = {
       dmPush: boolean;
       dmsPush: boolean;
       groupsPush: boolean;
+      // Phase 29 (PRIV-01, Pitfall 7): already returned by the backend at
+      // runtime; the client type previously omitted it. Drives the Privacy
+      // "Read Receipts" toggle (29-04).
+      readReceipts?: boolean;
     }>('/api/notifications/preferences'),
 
   updatePreferences: (prefs: {
@@ -314,6 +328,7 @@ export const notificationsApi = {
     dmPush?: boolean;
     dmsPush?: boolean;
     groupsPush?: boolean;
+    readReceipts?: boolean;
   }) =>
     request('/api/notifications/preferences', {
       method: 'PUT',

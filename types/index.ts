@@ -82,7 +82,35 @@ export interface GroupMember {
   avatarUrl: string | null;
   role: string;
   joinedAt: string;
+  // Phase 29 (D-01a): additive cold-open receipt hydration. Optional so existing
+  // call sites stay valid; the extended /members select supplies them.
+  lastDeliveredAt?: string | null;
+  lastReadAt?: string | null;
 }
+
+// ── Phase 29: Read receipts (mobile foundation) ─────────────────────────────
+// receiptsStore is the single source of truth for live + seeded watermarks
+// (D-01). MemberReceipt is defined HERE only; store/receiptsStore.ts imports it.
+//
+// A bubble derives its own tick by comparing message.createdAt against the
+// OTHER participant's watermark(s):
+//   deliveredUpTo >= createdAt → delivered; readUpTo >= createdAt → read.
+// ISO strings compare lexicographically (both are UTC toISOString output).
+
+export interface MemberReceipt {
+  deliveredUpTo: string | null; // ISO; null = nothing delivered yet
+  readUpTo: string | null;      // ISO; null = nothing read yet
+}
+
+// Cold-open hydration shape for the DM participants seed (api Touch 2).
+export interface ConversationParticipant {
+  userId: number;
+  lastDeliveredAt: string | null;
+  lastReadAt: string | null;
+}
+
+// The derived tick ladder a bubble renders (consumed by 29-03/29-04).
+export type ReceiptTick = 'none' | 'sent' | 'delivered' | 'read';
 
 export interface Beacon {
   id: number;
