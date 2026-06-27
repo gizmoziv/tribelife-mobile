@@ -8,6 +8,9 @@ import { useAuthStore } from '@/store/authStore';
 import { FONTS, COLORS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
+import { MessageTicks } from '@/components/ui/chat/MessageTicks';
+import { useReceiptsStore } from '@/store/receiptsStore';
+import type { MemberReceipt, ReceiptTick } from '@/types';
 import { ImageGrid } from '@/components/ui/chat/ImageGrid';
 import { GifMessage } from '@/components/ui/chat/GifMessage';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
@@ -119,6 +122,46 @@ interface MessageBubbleProps {
   translatedContent?: string | null;
   showTranslation?: boolean;
   onToggleTranslation?: (messageId: number) => void;
+  // ── Phase 29 (D-02, RCPT-08/09): read-receipt tick gate ──────────────────
+  // receiptConversationId is the eligibility gate (Pitfall 1): the DM/group
+  // screen passes its conversationId; ROOM screens (chat/local.tsx,
+  // globe/[roomSlug].tsx) NEVER pass it, so rooms render no ticks. Ticks show
+  // only when `isMe && receiptConversationId != null`.
+  receiptConversationId?: number;
+  // Participants minus me (1 for DM, N for group) — the watermarks the tick
+  // derivation must clear. Passed by the chat screen alongside the gate.
+  receiptOtherUserIds?: number[];
+}
+
+// ── Phase 29: tick derivation (D-02, Pitfall 3/5) ───────────────────────────
+// Derive the rung from the OTHER participant(s)' watermarks vs this message's
+// createdAt — a watermark model, so one patch lights every older own bubble:
+//   'sent'      until message.id > 0 (optimistic — not yet server-stored,
+//               Pitfall 5) OR no watermark data yet (graceful: empty store
+//               before the Phase 28 backend deploys → falls back to Sent).
+//   'read'      when EVERY otherUserId has readUpTo != null && >= createdAt.
+//   'delivered' else when EVERY otherUserId has deliveredUpTo != null && >= createdAt.
+//   'sent'      otherwise.
+// ISO strings compare lexicographically (both are UTC toISOString output).
+function deriveTick(
+  messageId: number,
+  createdAt: string,
+  receipts: Record<number, MemberReceipt> | undefined,
+  otherUserIds: number[],
+): ReceiptTick {
+  if (messageId <= 0) return 'sent'; // optimistic — not yet stored
+  if (!receipts || otherUserIds.length === 0) return 'sent';
+  const allRead = otherUserIds.every((id) => {
+    const r = receipts[id]?.readUpTo;
+    return r != null && r >= createdAt;
+  });
+  if (allRead) return 'read';
+  const allDelivered = otherUserIds.every((id) => {
+    const d = receipts[id]?.deliveredUpTo;
+    return d != null && d >= createdAt;
+  });
+  if (allDelivered) return 'delivered';
+  return 'sent';
 }
 
 export function MessageBubble({
@@ -133,6 +176,8 @@ export function MessageBubble({
   translatedContent,
   showTranslation,
   onToggleTranslation,
+  receiptConversationId,
+  receiptOtherUserIds,
 }: MessageBubbleProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -193,6 +238,21 @@ export function MessageBubble({
   // Detect if the current user is mentioned — gives the bubble a subtle tint
   const myHandle = user?.handle?.toLowerCase();
   const mentionsMe = !!(myHandle && displayContent && new RegExp(`@${myHandle}(?![a-zA-Z0-9_])`, 'i').test(displayContent));
+
+  // ── Phase 29: read-receipt tick (D-02, RCPT-08/09) ─────────────────────────
+  // Eligibility gate: own outgoing AND a conversation context (DM/group). Rooms
+  // never pass receiptConversationId, so receiptsEligible is false there → no
+  // ticks leak into Town Square / Local Chat (Pitfall 1, RCPT-09).
+  const receiptsEligible = isMe && receiptConversationId != null;
+  // Subscribe to ONLY this conversation's watermark slice so a patch re-renders
+  // just the open thread's bubbles. The selector returns undefined when the
+  // conversation has no entry yet (graceful: derivation falls back to 'sent').
+  const conversationReceipts = useReceiptsStore((s) =>
+    receiptConversationId != null ? s.byConversation[receiptConversationId] : undefined,
+  );
+  const receiptTick: ReceiptTick = receiptsEligible
+    ? deriveTick(message.id, message.createdAt, conversationReceipts, receiptOtherUserIds ?? [])
+    : 'none';
 
   const handleMentionPress = useCallback((handle: string) => {
     router.push(`/user/${handle}`);
@@ -556,10 +616,17 @@ export function MessageBubble({
           )}
         </Pressable>
 
-        {/* Timestamp */}
-        <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
-          {formatTime(message.createdAt)}{(message as { editedAt?: string | null }).editedAt ? ' (edited)' : ''}
-        </Text>
+        {/* Timestamp + read-receipt tick. This meta row is common to text,
+            voice, media-only, media+caption, and reply bubbles (it sits OUTSIDE
+            the Pressable), so the tick rides every content type (D-02, Pitfall
+            2). MessageTicks renders nothing unless receiptsEligible (own +
+            conversation) — received messages and rooms show no ticks. */}
+        <View style={styles.metaRow}>
+          <Text style={[styles.bubbleTime, { color: colors.textMuted }]}>
+            {formatTime(message.createdAt)}{(message as { editedAt?: string | null }).editedAt ? ' (edited)' : ''}
+          </Text>
+          <MessageTicks status={receiptTick} colors={colors} />
+        </View>
 
         {/* Reaction pills */}
         <ReactionPills reactions={reactions} onToggle={handleReactionToggle} />
@@ -660,6 +727,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.regular,
     lineHeight: 22,
+  },
+  // Phase 29: timestamp + tick share one baseline row. alignItems centers the
+  // ✓✓ glyph against the small time text; the row shrinks to content so own
+  // bubbles keep right-aligning (bubbleWrapMe alignItems:'flex-end').
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   bubbleTime: {
     fontSize: 10,
