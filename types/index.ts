@@ -270,6 +270,8 @@ export type ChatsRow =
       // Phase 20: per-user archive flag. Mirrors backend types/chats.ts.
       // Distinct from conversations.isArchived (group-admin archive — different concept).
       isUserArchived?: boolean;
+      // Phase 27: per-user mute flag. Mirrors backend types/chats.ts.
+      isMuted?: boolean;
     }
   | {
       type: 'group';
@@ -284,6 +286,8 @@ export type ChatsRow =
       // Phase 20: per-user archive flag. Mirrors backend types/chats.ts.
       // Distinct from isArchived above (group-admin archive — different concept).
       isUserArchived?: boolean;
+      // Phase 27: per-user mute flag. Mirrors backend types/chats.ts.
+      isMuted?: boolean;
     }
   // Phase 11 D-04: joined regional Globe room (Town Square stays its own
   // `town_square` variant — pinned position, gold tint). One row per

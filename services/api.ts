@@ -195,6 +195,13 @@ export const chat = {
   unarchive: (conversationId: number) =>
     request<{ ok: true }>(`/api/chat/conversations/${conversationId}/unarchive`, { method: 'PUT' }),
 
+  // Phase 27: per-user mute for dm/group conversations.
+  mute: (conversationId: number) =>
+    request<{ ok: true }>(`/api/chat/conversations/${conversationId}/mute`, { method: 'PUT' }),
+
+  unmute: (conversationId: number) =>
+    request<{ ok: true }>(`/api/chat/conversations/${conversationId}/unmute`, { method: 'PUT' }),
+
   translateMessage: (messageId: number, targetLanguage: string) =>
     request<{ translation: string; cached: boolean }>(`/api/chat/translate/${messageId}`, {
       method: 'POST',
