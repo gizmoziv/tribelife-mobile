@@ -31,6 +31,7 @@ import { PinnedBar } from '@/components/ui/chat/PinnedBar';
 import { usePinnedMessage } from '@/hooks/usePinnedMessage';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useChatsStore } from '@/store/chatsStore';
+import { useReceiptsStore } from '@/store/receiptsStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
@@ -45,6 +46,8 @@ import {
   onTypingStop,
   onMessageRejected,
   onMessageEdited,
+  onMessageDelivered,
+  onMessageRead,
   onReactionUpdate,
   onMediaRemoved,
   onChatRemoved,
@@ -194,6 +197,11 @@ export default function DMThreadScreen() {
   // via myGroupRole only (D-05 — staff flag must NOT be the authority
   // in DM/group screens; only globe + local chat rooms use it).
   const [myGroupRole, setMyGroupRole] = useState<string | null>(null);
+  // Phase 29 (D-02, RCPT-08): the other participant(s) (1 for DM, N for group),
+  // populated from the cold-open seed fetch. Passed to MessageBubble so the tick
+  // derivation knows whose watermarks must clear. Empty until seeded → bubbles
+  // fall back to "Sent" (graceful before the Phase 28 backend deploys).
+  const [otherUserIds, setOtherUserIds] = useState<number[]>([]);
   const flatListRef = useRef<FlatList>(null);
   // Reversed copy for the inverted FlatList — index 0 = newest message =
   // visual bottom. Inverting fixes the composer floating mid-screen after the
@@ -519,6 +527,42 @@ export default function DMThreadScreen() {
 
     joinConversation(conversationId);
 
+    // ── Phase 29 (D-01a, RCPT-09): cold-open receipt seeding ─────────────────
+    // Seed receiptsStore so old messages show correct Delivered/Read ticks
+    // immediately (not all "Sent") and capture the other participant(s) for the
+    // bubble's tick derivation. GROUP path reuses groupsApi.members (carries
+    // watermarks via the extended /members select); DM path uses the dedicated
+    // participants route. Both .catch silently — an empty store degrades to
+    // "Sent" (graceful before the Phase 28 backend deploys, A1). This wiring
+    // lives ONLY on the DM/group screen; room screens never run it (Pitfall 4).
+    if (isGroup) {
+      groupsApi.members(conversationId).then(({ members }) => {
+        const others = members.filter((m) => m.userId !== user?.id);
+        setOtherUserIds(others.map((m) => m.userId));
+        useReceiptsStore.getState().seed(
+          conversationId,
+          others.map((m) => ({
+            userId: m.userId,
+            deliveredUpTo: m.lastDeliveredAt ?? null,
+            readUpTo: m.lastReadAt ?? null,
+          })),
+        );
+      }).catch(() => {});
+    } else {
+      chat.getConversationParticipants(conversationId).then(({ participants }) => {
+        const others = participants.filter((p) => p.userId !== user?.id);
+        setOtherUserIds(others.map((p) => p.userId));
+        useReceiptsStore.getState().seed(
+          conversationId,
+          others.map((p) => ({
+            userId: p.userId,
+            deliveredUpTo: p.lastDeliveredAt ?? null,
+            readUpTo: p.lastReadAt ?? null,
+          })),
+        );
+      }).catch(() => {});
+    }
+
     const offDm = onDirectMessage((msg) => {
       if (msg.conversationId !== conversationId) return;
       setMessages((prev) => {
@@ -584,6 +628,21 @@ export default function DMThreadScreen() {
       setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
     });
 
+    // ── Phase 29 (RCPT-03): live receipt watermarks ──────────────────────────
+    // Backend emits these ONLY to the author's user:<senderId> room, with
+    // userId = the recipient/reader whose watermark advanced. A single patch
+    // lights up every older own bubble (watermark model, Pitfall 3). Filter on
+    // conversationId exactly like onDirectMessage. Registered ONLY here → rooms
+    // never wire them (RCPT-09).
+    const offDelivered = onMessageDelivered((d) => {
+      if (d.conversationId !== conversationId) return;
+      useReceiptsStore.getState().patchDelivered(d.conversationId, d.userId, d.deliveredUpTo);
+    });
+    const offRead = onMessageRead((d) => {
+      if (d.conversationId !== conversationId) return;
+      useReceiptsStore.getState().patchRead(d.conversationId, d.userId, d.readUpTo);
+    });
+
     const offMediaRemoved = onMediaRemoved((data) => {
       setMessages((prev) => prev.map((msg) => {
         if (msg.id === data.messageId) {
@@ -625,9 +684,14 @@ export default function DMThreadScreen() {
       offTypingStop();
       offRejected();
       offEdited();
+      offDelivered();
+      offRead();
       offMediaRemoved();
       offMediaRejected();
       offChatRemoved();
+      // Phase 29: drop this conversation's watermarks so the store doesn't
+      // accumulate stale slices across thread switches (re-seeded on next open).
+      useReceiptsStore.getState().clearConversation(conversationId);
       typingClearTimersRef.current.forEach((t) => clearTimeout(t));
       typingClearTimersRef.current.clear();
     };
@@ -1011,6 +1075,8 @@ export default function DMThreadScreen() {
         onToggleTranslation={handleToggleTranslation}
         onReplyPress={scrollToMessage}
         highlighted={item.id === highlightedId}
+        receiptConversationId={conversationId}
+        receiptOtherUserIds={otherUserIds}
       />
     );
     // Phase 14 D-04: wrap matched bubble in Animated.View for highlight flash
@@ -1034,7 +1100,7 @@ export default function DMThreadScreen() {
         {wrappedBubble}
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors, conversationId, otherUserIds]);
 
   if (isLoading) {
     return (
