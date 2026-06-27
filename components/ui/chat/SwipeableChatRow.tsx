@@ -8,24 +8,45 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import Svg, { Path } from 'react-native-svg';
 import { FONTS } from '@/constants';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const BUTTON_WIDTH = 80;
-// Swipe LEFT past this px → snap open (reveal button)
+const TOTAL_WIDTH = 160;
+// Swipe LEFT past this px → snap open (reveal buttons)
 const OPEN_THRESHOLD = 60;
 // Swipe RIGHT past this px while open → snap closed
 const CLOSE_THRESHOLD = 20;
+
+// ── Inline icon ───────────────────────────────────────────────────────────
+function BellOffIcon({ size = 20, color = '#FFFFFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M13.73 21a2 2 0 01-3.46 0M18.63 13A17.89 17.89 0 0118 8M6.26 6.26A5.86 5.86 0 006 8c0 7-3 9-3 9h14M18 8a6 6 0 00-9.33-5M1 1l22 22"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 // ── Props ─────────────────────────────────────────────────────────────────
 interface SwipeableChatRowProps {
   children: React.ReactNode;
   /** When false the row renders with no gesture and no button (room-type rows). */
   enabled: boolean;
-  /** Label on the action button: "Archive" or "Unarchive". */
+  /** Label on the archive action button: "Archive" or "Unarchive". */
   actionLabel: string;
-  /** Called when the user taps the action button. */
+  /** Called when the user taps the archive action button. */
   onAction: () => void;
+  /** Label on the mute action button: "Mute" or "Unmute". */
+  muteLabel: string;
+  /** Called when the user taps the mute action button. */
+  onMuteAction: () => void;
   /** Opaque background for the sliding row so the button stays hidden at rest. */
   backgroundColor: string;
 }
@@ -36,6 +57,8 @@ export function SwipeableChatRow({
   enabled,
   actionLabel,
   onAction,
+  muteLabel,
+  onMuteAction,
   backgroundColor,
 }: SwipeableChatRowProps) {
   // Pass-through for non-archivable rows (local_chat, town_square, etc.)
@@ -47,6 +70,8 @@ export function SwipeableChatRow({
     <SwipeableChatRowInner
       actionLabel={actionLabel}
       onAction={onAction}
+      muteLabel={muteLabel}
+      onMuteAction={onMuteAction}
       backgroundColor={backgroundColor}
     >
       {children}
@@ -60,11 +85,15 @@ function SwipeableChatRowInner({
   children,
   actionLabel,
   onAction,
+  muteLabel,
+  onMuteAction,
   backgroundColor,
 }: {
   children: React.ReactNode;
   actionLabel: string;
   onAction: () => void;
+  muteLabel: string;
+  onMuteAction: () => void;
   backgroundColor: string;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
@@ -75,7 +104,7 @@ function SwipeableChatRowInner({
   const snapOpen = () => {
     isOpen.current = true;
     Animated.spring(translateX, {
-      toValue: -BUTTON_WIDTH,
+      toValue: -TOTAL_WIDTH,
       damping: 20,
       stiffness: 200,
       useNativeDriver: true,
@@ -115,14 +144,14 @@ function SwipeableChatRowInner({
       onPanResponderMove: (_evt, gestureState) => {
         if (!isHorizontalSwipe.current) return;
         // Offset relative to the open/closed base position
-        const base = isOpen.current ? -BUTTON_WIDTH : 0;
-        // Clamp to [-BUTTON_WIDTH, 0]
-        const newVal = Math.min(0, Math.max(base + gestureState.dx, -BUTTON_WIDTH));
+        const base = isOpen.current ? -TOTAL_WIDTH : 0;
+        // Clamp to [-TOTAL_WIDTH, 0]
+        const newVal = Math.min(0, Math.max(base + gestureState.dx, -TOTAL_WIDTH));
         translateX.setValue(newVal);
       },
       onPanResponderRelease: (_evt, gestureState) => {
         if (!isHorizontalSwipe.current) return;
-        const base = isOpen.current ? -BUTTON_WIDTH : 0;
+        const base = isOpen.current ? -TOTAL_WIDTH : 0;
         const finalPos = base + gestureState.dx;
 
         if (!isOpen.current) {
@@ -134,7 +163,7 @@ function SwipeableChatRowInner({
           }
         } else {
           // Currently open: close if swiped far enough right
-          if (finalPos >= -BUTTON_WIDTH + CLOSE_THRESHOLD) {
+          if (finalPos >= -TOTAL_WIDTH + CLOSE_THRESHOLD) {
             snapClosed();
           } else {
             snapOpen();
@@ -145,7 +174,7 @@ function SwipeableChatRowInner({
       onPanResponderTerminate: () => {
         // Revert to current snapped position
         Animated.spring(translateX, {
-          toValue: isOpen.current ? -BUTTON_WIDTH : 0,
+          toValue: isOpen.current ? -TOTAL_WIDTH : 0,
           useNativeDriver: true,
         }).start();
         isHorizontalSwipe.current = false;
@@ -158,10 +187,26 @@ function SwipeableChatRowInner({
     onAction();
   };
 
+  const handleMuteAction = () => {
+    snapClosed();
+    onMuteAction();
+  };
+
   return (
     <View style={styles.container}>
-      {/* Action button sits absolutely on the right, revealed by left swipe */}
+      {/* Two-button reveal sits absolutely on the right, revealed by left swipe.
+          Inner (left) = Mute (slate); outer (right) = Archive (indigo). */}
       <View style={styles.actionButton}>
+        {/* Mute button — inner (left), slate fill */}
+        <TouchableOpacity
+          style={styles.muteButtonInner}
+          onPress={handleMuteAction}
+          activeOpacity={0.8}
+        >
+          <BellOffIcon size={20} color="#FFFFFF" />
+          <Text style={styles.actionButtonText}>{muteLabel}</Text>
+        </TouchableOpacity>
+        {/* Archive button — outer (right), indigo fill */}
         <TouchableOpacity
           style={styles.actionButtonInner}
           onPress={handleAction}
@@ -171,9 +216,9 @@ function SwipeableChatRowInner({
         </TouchableOpacity>
       </View>
 
-      {/* Row content slides left to reveal the button. Opaque background so the
-          button stays fully hidden behind the row at rest (chat rows themselves
-          use a translucent glass fill that would let the button show through). */}
+      {/* Row content slides left to reveal the buttons. Opaque background so the
+          buttons stay fully hidden behind the row at rest (chat rows themselves
+          use a translucent glass fill that would let the buttons show through). */}
       <Animated.View
         {...panResponder.panHandlers}
         style={{ backgroundColor, transform: [{ translateX }] }}
@@ -197,9 +242,22 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
+    width: TOTAL_WIDTH,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  muteButtonInner: {
+    // Fill the full height of the parent so the tap target is generous
+    position: 'absolute',
+    right: BUTTON_WIDTH,
+    top: 0,
+    bottom: 0,
     width: BUTTON_WIDTH,
-    justifyContent: 'center',
+    backgroundColor: 'rgba(100, 116, 139, 0.85)',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
+    gap: 4,
   },
   actionButtonInner: {
     // Fill the full height of the parent so the tap target is generous
