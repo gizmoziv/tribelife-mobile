@@ -31,6 +31,11 @@ export async function connectSocket(): Promise<Socket | null> {
 
     s.on('connect', () => {
       console.log('[socket] Connected:', s.id);
+      // SYNC-01 reconnect half: re-hydrate Chats-tab unread from server on every
+      // (re)connect. The _hydrating guard in hydrate() dedupes a foreground+reconnect
+      // overlap into a single fetch — cannot double-count (RESEARCH Pitfall 5).
+      // Foreground half (AppState active) is already wired in app/_layout.tsx.
+      useChatsStore.getState().hydrate();
     });
 
     s.on('disconnect', (reason) => {
