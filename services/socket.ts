@@ -286,6 +286,32 @@ export function onMessageEdited(cb: (data: {
   return () => socket?.off('message:edited', cb);
 }
 
+// ── Read receipts (Phase 29) ──────────────────────────────────────────────────
+// Cleanup-returning listeners mirroring onMessageEdited above. Field names are
+// confirmed verbatim from the Phase 28 backend (socket/receipts.ts
+// MessageDeliveredPayload / MessageReadPayload): the backend emits ONLY to the
+// message author's user:<senderId> room, where `userId` is the recipient/reader
+// whose watermark advanced (never the sender). The chat screen (29-03)
+// registers these and patches useReceiptsStore; registration/cleanup is NOT
+// done here.
+export function onMessageDelivered(cb: (data: {
+  conversationId: number;
+  userId: number;
+  deliveredUpTo: string;
+}) => void): () => void {
+  socket?.on('message:delivered', cb);
+  return () => socket?.off('message:delivered', cb);
+}
+
+export function onMessageRead(cb: (data: {
+  conversationId: number;
+  userId: number;
+  readUpTo: string;
+}) => void): () => void {
+  socket?.on('message:read', cb);
+  return () => socket?.off('message:read', cb);
+}
+
 // ── Reactions ────────────────────────────────────────────────────────────────
 export function onReactionUpdate(cb: (data: {
   messageId: number;
