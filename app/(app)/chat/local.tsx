@@ -914,6 +914,11 @@ export default function LocalChatScreen() {
           onReply={handleReply}
           onReport={handleReport}
           onTranslate={handleTranslate}
+          translateDisabledHint={
+            selectedMessage?.voiceUrl && !selectedMessage?.voiceTranscript?.trim()
+              ? '(no transcript)'
+              : undefined
+          }
           isOwn={!!user && selectedMessage?.senderId === user.id}
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }

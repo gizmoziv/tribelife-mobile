@@ -32,6 +32,9 @@ interface ContextMenuProps {
   isOwn?: boolean;           // default false — controls Edit row visibility
   onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
   onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
+  // When set, the Translate row renders DISABLED with this hint appended
+  // (e.g. '(no transcript)' for a voice message that has no transcript to translate).
+  translateDisabledHint?: string | null;
   // Phase 22: pin/unpin — pass undefined (NEVER a no-op arrow) for non-empowered users
   // so the row is completely absent from the menu for users who can't pin.
   onPin?: () => void;        // optional — shown only when caller passes a defined handler
@@ -49,6 +52,7 @@ export function ContextMenu({
   isOwn = false,
   onReport,
   onTranslate,
+  translateDisabledHint,
   onPin,
   onUnpin,
   messageContent,
@@ -214,16 +218,25 @@ export function ContextMenu({
             )}
 
             {onTranslate && (
-              <TouchableOpacity
-                style={styles.actionRow}
-                onPress={handleTranslate}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.actionIcon}>&#x1F310;</Text>
-                <Text style={[styles.actionLabel, { color: colors.text }]}>
-                  Translate
-                </Text>
-              </TouchableOpacity>
+              translateDisabledHint ? (
+                <View style={[styles.actionRow, { opacity: 0.45 }]}>
+                  <Text style={styles.actionIcon}>&#x1F310;</Text>
+                  <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
+                    {`Translate ${translateDisabledHint}`}
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.actionRow}
+                  onPress={handleTranslate}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.actionIcon}>&#x1F310;</Text>
+                  <Text style={[styles.actionLabel, { color: colors.text }]}>
+                    Translate
+                  </Text>
+                </TouchableOpacity>
+              )
             )}
 
             {onReport && (

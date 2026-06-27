@@ -28,7 +28,13 @@ import Svg, { Path, Circle } from 'react-native-svg';
 function ChatIcon() {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke="#818CF8" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"
+        stroke="#818CF8"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -36,7 +42,13 @@ function ChatIcon() {
 function SparkleIcon() {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" stroke="#F59E0B" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"
+        stroke="#F59E0B"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -44,8 +56,18 @@ function SparkleIcon() {
 function ConnectIcon() {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 3 L19.8 16.5 L4.2 16.5 Z" stroke="#34D399" strokeWidth={1.5} strokeLinejoin="round" />
-      <Path d="M12 21 L4.2 7.5 L19.8 7.5 Z" stroke="#34D399" strokeWidth={1.5} strokeLinejoin="round" />
+      <Path
+        d="M12 3 L19.8 16.5 L4.2 16.5 Z"
+        stroke="#34D399"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M12 21 L4.2 7.5 L19.8 7.5 Z"
+        stroke="#34D399"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
@@ -103,7 +125,8 @@ export default function WelcomeScreen() {
         throw new Error('No ID token received from Google');
       }
 
-      const { token, user, needsOnboarding, capabilities } = await auth.googleSignIn(idToken);
+      const { token, user, needsOnboarding, capabilities } =
+        await auth.googleSignIn(idToken);
       await setAuth(token, user, capabilities, needsOnboarding);
 
       if (needsOnboarding) {
@@ -133,8 +156,10 @@ export default function WelcomeScreen() {
       }
       Alert.alert(
         'Sign-in Failed',
-        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
-        [{ text: 'OK' }]
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong. Please try again.',
+        [{ text: 'OK' }],
       );
     } finally {
       setIsLoading(false);
@@ -155,11 +180,12 @@ export default function WelcomeScreen() {
         throw new Error('No identity token received from Apple');
       }
 
-      const { token, user, needsOnboarding, capabilities } = await auth.appleSignIn(
-        credential.identityToken,
-        credential.fullName,
-        credential.email,
-      );
+      const { token, user, needsOnboarding, capabilities } =
+        await auth.appleSignIn(
+          credential.identityToken,
+          credential.fullName,
+          credential.email,
+        );
       await setAuth(token, user, capabilities, needsOnboarding);
 
       if (needsOnboarding) {
@@ -189,8 +215,10 @@ export default function WelcomeScreen() {
       }
       Alert.alert(
         'Sign-in Failed',
-        err instanceof Error ? err.message : 'Something went wrong. Please try again.',
-        [{ text: 'OK' }]
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong. Please try again.',
+        [{ text: 'OK' }],
       );
     } finally {
       setIsAppleLoading(false);
@@ -200,7 +228,7 @@ export default function WelcomeScreen() {
   const features = [
     { icon: <ChatIcon />, text: 'Chat with people in your area' },
     { icon: <SparkleIcon />, text: 'Beacon — smart community matching' },
-    { icon: <ConnectIcon />, text: 'Features you won\'t find anywhere else' },
+    { icon: <ConnectIcon />, text: "Features you won't find anywhere else" },
   ];
 
   return (
@@ -211,12 +239,15 @@ export default function WelcomeScreen() {
       {/* Hero Section */}
       <AnimatedEntry style={styles.hero} duration={500}>
         <View style={styles.logoGlow}>
-          <Image source={require('@/assets/tribelife-logo.png')} style={styles.logoImage} />
+          <Image
+            source={require('@/assets/tribelife-logo.png')}
+            style={styles.logoImage}
+          />
         </View>
 
         <Text style={[styles.title, { color: '#FFFFFF' }]}>TribeLife</Text>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>
-          Our people are here.{'\n'}Just say what you need.
+          A Platform That is Built for Our Tribe.{'\n'}Actually.
         </Text>
       </AnimatedEntry>
 
@@ -225,10 +256,17 @@ export default function WelcomeScreen() {
         {features.map((f, i) => (
           <AnimatedEntry key={f.text} delay={200 + i * 80}>
             <View style={styles.featureRow}>
-              <View style={[styles.featureIconContainer, { backgroundColor: colors.surfaceGlass }]}>
+              <View
+                style={[
+                  styles.featureIconContainer,
+                  { backgroundColor: colors.surfaceGlass },
+                ]}
+              >
                 {f.icon}
               </View>
-              <Text style={[styles.featureText, { color: colors.textMuted }]}>{f.text}</Text>
+              <Text style={[styles.featureText, { color: colors.textMuted }]}>
+                {f.text}
+              </Text>
             </View>
           </AnimatedEntry>
         ))}
@@ -238,7 +276,10 @@ export default function WelcomeScreen() {
       <AnimatedEntry style={styles.cta} delay={500}>
         {appleAvailable && (
           <TouchableOpacity
-            style={[styles.appleButton, isAppleLoading && styles.buttonDisabled]}
+            style={[
+              styles.appleButton,
+              isAppleLoading && styles.buttonDisabled,
+            ]}
             onPress={handleAppleSignIn}
             disabled={isAppleLoading}
             activeOpacity={0.85}
@@ -271,11 +312,17 @@ export default function WelcomeScreen() {
 
         <Text style={[styles.terms, { color: colors.textMuted }]}>
           By continuing, you agree to our{' '}
-          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/terms')}>
+          <Text
+            style={styles.termsLink}
+            onPress={() => Linking.openURL('https://tribelife.app/terms')}
+          >
             Terms of Service
-          </Text>
-          {' '}and{' '}
-          <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
+          </Text>{' '}
+          and{' '}
+          <Text
+            style={styles.termsLink}
+            onPress={() => Linking.openURL('https://tribelife.app/privacy')}
+          >
             Privacy Policy
           </Text>
         </Text>

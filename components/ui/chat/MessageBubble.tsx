@@ -1,11 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { FONTS, COLORS, SHADOWS } from '@/constants';
+import { FONTS, COLORS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { ReactionPills } from '@/components/ui/chat/ReactionPills';
 import { ImageGrid } from '@/components/ui/chat/ImageGrid';
@@ -140,6 +140,9 @@ export function MessageBubble({
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [ytVideoId, setYtVideoId] = useState<string | null>(null);
+  // Owned here (not in VoicePlayerBubble) so the translation toggle can be gated
+  // on the transcript being open, and so translating can auto-reveal it.
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const mediaUrls = message.mediaUrls;
   const hasMedia = mediaUrls && mediaUrls.length > 0;
@@ -172,6 +175,13 @@ export function MessageBubble({
   // translation is active, pass it to the player bubble so the revealed transcript
   // shows the translated text instead of the original voiceTranscript.
   const transcriptOverride = (showTranslation && translatedContent) ? translatedContent : null;
+
+  // When a voice message's translation activates (e.g. via long-press → Translate),
+  // auto-reveal the transcript so the translated text is visible immediately — and
+  // the translation toggle, which is gated on the transcript being open, appears.
+  useEffect(() => {
+    if (isVoice && showTranslation) setShowTranscript(true);
+  }, [isVoice, showTranslation]);
 
   const displayContent = (showTranslation && translatedContent) ? translatedContent : message.content;
   // Detect distinct YouTube links in the DISPLAYED content (so a translated
@@ -393,7 +403,7 @@ export function MessageBubble({
               colors={[...COLORS.gradientPrimary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={[styles.bubble, !isDark && SHADOWS.sm]}
+              style={styles.bubble}
             >
               {/* Reply preview inside bubble */}
               {/* Reply quotes intentionally freeze to original content — edit feature does not rewrite replyTo.content (PLAN 260517-hiy). */}
@@ -421,6 +431,8 @@ export function MessageBubble({
                   voiceTranscript={message.voiceTranscript}
                   isMe
                   transcriptOverride={transcriptOverride}
+                  showTranscript={showTranscript}
+                  onToggleTranscript={() => setShowTranscript((v) => !v)}
                 />
               ) : (
                 <>
@@ -445,7 +457,7 @@ export function MessageBubble({
                   {renderYouTubeCards()}
                 </>
               )}
-              {translatedContent && (
+              {translatedContent && (!isVoice || showTranscript) && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
                   style={styles.translationToggle}
@@ -464,7 +476,6 @@ export function MessageBubble({
           ) : (
             <View style={[
               styles.bubble,
-              !isDark && SHADOWS.sm,
               { backgroundColor: colors.surfaceGlass },
               mentionsMe && styles.bubbleMentionsMe,
             ]}>
@@ -500,6 +511,8 @@ export function MessageBubble({
                   voiceTranscript={message.voiceTranscript}
                   isMe={false}
                   transcriptOverride={transcriptOverride}
+                  showTranscript={showTranscript}
+                  onToggleTranscript={() => setShowTranscript((v) => !v)}
                 />
               ) : (
                 <>
@@ -524,7 +537,7 @@ export function MessageBubble({
                   {renderYouTubeCards()}
                 </>
               )}
-              {translatedContent && (
+              {translatedContent && (!isVoice || showTranscript) && (
                 <TouchableOpacity
                   onPress={() => onToggleTranslation?.(message.id)}
                   style={styles.translationToggle}
@@ -624,8 +637,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    // Shadow applied inline only in light mode — in dark mode SHADOWS.sm
-    // renders as a grey halo box around the bubble (#pin-uat).
+    // No drop shadow on bubbles: SHADOWS.sm rendered as a halo box — grey in
+    // dark mode (#pin-uat) and a white-ish Android elevation halo in light mode
+    // (#voice-uat). Removed in both modes for a flat bubble.
   },
   // Bubble-level offset so the left accent bar has room without overlapping
   // the text. No background tint — Android light mode doesn't composite rgba

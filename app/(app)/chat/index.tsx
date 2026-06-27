@@ -55,6 +55,7 @@ import {
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { voicePreviewLabel } from '@/constants/voice';
 import type { ChatsRow, PillFilter } from '@/types';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
@@ -1041,6 +1042,9 @@ function ChatsListRow({
     groupIsPublic = row.isPublic;
   }
 
+  // Voice previews arrive as the old-client fallback string; show a clean label.
+  subtitle = voicePreviewLabel(subtitle);
+
   return (
     <TouchableOpacity
       style={[styles.chatsRow, { backgroundColor: colors.surfaceGlass }]}
@@ -1658,6 +1662,11 @@ function LocalChatPanel() {
         onReply={handleReply}
         onReport={handleReport}
         onTranslate={handleTranslate}
+        translateDisabledHint={
+          selectedMessage?.voiceUrl && !selectedMessage?.voiceTranscript?.trim()
+            ? '(no transcript)'
+            : undefined
+        }
         messageContent={selectedMessage?.content ?? ''}
       />
       <LanguagePicker
@@ -1885,9 +1894,9 @@ function DMListPanel() {
         const avatarName = isGroup ? (item.groupName ?? 'G') : (item.participantName ?? '?');
         const avatarUrl = isGroup ? (item.groupIconUrl ?? undefined) : (item.participantAvatar ?? undefined);
         const memberCount = item.memberCount ?? 0;
-        const subtitle = isGroup
+        const subtitle = voicePreviewLabel(isGroup
           ? (item.lastMessage?.content ?? `${memberCount} ${memberCount === 1 ? 'member' : 'members'}`)
-          : (item.lastMessage?.content ?? 'Start a conversation');
+          : (item.lastMessage?.content ?? 'Start a conversation'));
 
         return (
           <AnimatedEntry delay={index * 40}>

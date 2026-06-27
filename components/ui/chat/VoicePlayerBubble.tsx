@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -38,8 +38,12 @@ const BAR_WIDTH = 2;
 const BAR_GAP = 2;
 const BAR_MIN_HEIGHT = 4;
 const BAR_AMPLITUDE_RANGE = 20; // height = 4 + amplitude*20 → 4..24pt
-const COUNTDOWN_WIDTH = 32;
 const PLAY_BUTTON_SIZE = 36;
+// Fixed width of the 40-bar track. The waveform uses a FIXED width (not flex:1)
+// so the voice bubble sizes to contain it exactly — flex:1 in a content-sized
+// bubble either collapsed the track to a sliver (no transcript) or pushed it
+// past the bubble's edge.
+const WAVEFORM_WIDTH = WAVEFORM_BARS * BAR_WIDTH + (WAVEFORM_BARS - 1) * BAR_GAP;
 
 // Hebrew/Arabic RTL detection — mirrors MessageBubble.renderContent.
 function isRTLText(text: string): boolean {
@@ -103,6 +107,11 @@ export interface VoicePlayerBubbleProps {
    * translation flow — no new translation logic in this component.
    */
   transcriptOverride?: string | null;
+  /** Transcript expanded state — controlled by MessageBubble so the translation
+   * toggle can be gated on it and translating can auto-reveal it. */
+  showTranscript: boolean;
+  /** Toggle the transcript open/closed. */
+  onToggleTranscript: () => void;
 }
 
 export function VoicePlayerBubble({
@@ -112,25 +121,24 @@ export function VoicePlayerBubble({
   voiceTranscript,
   isMe,
   transcriptOverride,
+  showTranscript,
+  onToggleTranscript,
 }: VoicePlayerBubbleProps) {
   const { colors } = useTheme();
 
   const player = useAudioPlayer(voiceUrl);
   const status = useAudioPlayerStatus(player);
 
-  const [showTranscript, setShowTranscript] = useState(false);
-
   // Release the native player + clear the single-player ref on unmount so native
   // AudioPlayer instances don't accumulate across a long message list (Pitfall 7,
   // T-26-13).
   useEffect(() => {
     return () => {
+      // Only clear the single-player ref. Do NOT call player.remove(): useAudioPlayer
+      // (useReleasingSharedObject) already releases the native player on unmount, so a
+      // manual remove() double-frees it → NativeSharedObjectNotFoundException log spam
+      // on every chat exit / Fast Refresh.
       clearActiveVoicePlayer(player);
-      try {
-        player.remove();
-      } catch {
-        // Already released — ignore.
-      }
     };
     // Mount/unmount only — `player` is stable for this bubble's lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,11 +186,19 @@ export function VoicePlayerBubble({
   };
 
   // ── Colors (me gradient bubble vs others' surface bubble) ──────────────────
+  // The "me" bubble is a dark gradient in BOTH light and dark themes, so its
+  // player chrome must be white-based for contrast. The "others" bubble sits on
+  // the theme surface, so it uses primary/theme tokens that already adapt to
+  // light vs dark.
   const playBg = isMe ? 'rgba(255,255,255,0.2)' : COLORS.primaryGlow;
   const playIconColor = isMe ? '#FFFFFF' : COLORS.primary;
-  const playedColor = COLORS.primary;
-  const unplayedColor = colors.textMuted;
-  const countdownColor = playing ? COLORS.primary : colors.textMuted;
+  const playedColor = isMe ? '#FFFFFF' : COLORS.primary;
+  const unplayedColor = isMe ? 'rgba(255,255,255,0.4)' : colors.textMuted;
+  const countdownColor = isMe
+    ? 'rgba(255,255,255,0.9)'
+    : playing
+      ? COLORS.primary
+      : colors.textMuted;
   const toggleColor = isMe ? 'rgba(255,255,255,0.7)' : COLORS.primary;
   const transcriptColor = isMe ? '#FFFFFF' : colors.text;
 
@@ -233,13 +249,16 @@ export function VoicePlayerBubble({
           ))}
         </View>
 
-        <Text
-          style={[styles.countdown, { color: countdownColor }]}
-          numberOfLines={1}
-        >
-          {formatDuration(remainingMs)}
-        </Text>
       </View>
+
+      {/* Countdown sits below the play/pause button so the waveform gets the
+          full row width (VOICE-10). */}
+      <Text
+        style={[styles.countdown, { color: countdownColor }]}
+        numberOfLines={1}
+      >
+        {formatDuration(remainingMs)}
+      </Text>
 
       {/* ── Transcript section (D-03) — only when a transcript exists ────── */}
       {hasTranscript && (
@@ -258,7 +277,7 @@ export function VoicePlayerBubble({
             </Text>
           )}
           <TouchableOpacity
-            onPress={() => setShowTranscript((v) => !v)}
+            onPress={onToggleTranscript}
             style={styles.transcriptToggle}
             accessibilityRole="button"
           >
@@ -288,15 +307,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   waveform: {
-    flex: 1,
+    width: WAVEFORM_WIDTH,
     flexDirection: 'row',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   countdown: {
-    width: COUNTDOWN_WIDTH,
-    fontSize: 12,
-    fontFamily: FONTS.regular,
-    textAlign: 'right',
+    marginTop: 4,
+    fontSize: 11,
+    fontFamily: FONTS.medium,
+    fontVariant: ['tabular-nums'],
   },
   transcript: {
     fontSize: 15,

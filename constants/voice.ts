@@ -10,6 +10,20 @@
  */
 export const VOICE_FALLBACK_STRING = '🎤 Voice message — update to listen';
 
+/** Clean list/preview label the new client shows for a voice message. */
+export const VOICE_PREVIEW_LABEL = '🎤 Voice message';
+
+/**
+ * Override the old-client fallback string with a clean label for chat-list
+ * previews. The backend stores VOICE_FALLBACK_STRING as messages.content so
+ * legacy clients show something; the new client renders this clean label
+ * instead (mirrors MessageBubble overriding content with the player bubble).
+ * Any non-voice preview passes through untouched.
+ */
+export function voicePreviewLabel<T extends string | null | undefined>(text: T): T | string {
+  return text === VOICE_FALLBACK_STRING ? VOICE_PREVIEW_LABEL : text;
+}
+
 /**
  * Client-side recording cap (2 minutes). Mirrors the server-side defense-in-depth
  * gate (durationMs > 120000 → rejected). The client value is untrusted by the

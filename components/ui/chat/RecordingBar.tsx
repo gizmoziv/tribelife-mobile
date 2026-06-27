@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -108,6 +109,8 @@ export function RecordingBar({ onDiscard, onSent }: RecordingBarProps) {
   const startedRef = useRef(false);
   // Avoid clobbering onDiscard/onSent across the async record start.
   const cancelledRef = useRef(false);
+  // Blinking recording dot — pulses opacity while phase === 'recording'.
+  const dotOpacity = useRef(new Animated.Value(1)).current;
 
   // ── Permission + start ──────────────────────────────────────────────────
   useEffect(() => {
@@ -156,6 +159,22 @@ export function RecordingBar({ onDiscard, onSent }: RecordingBarProps) {
     }
   }, [recorderState.metering, phase]);
 
+  // ── Blink the recording dot while recording ─────────────────────────────
+  useEffect(() => {
+    if (phase !== 'recording') {
+      dotOpacity.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(dotOpacity, { toValue: 0.2, duration: 500, useNativeDriver: true }),
+        Animated.timing(dotOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [phase, dotOpacity]);
+
   // ── Restore audio mode + release recorder on unmount ────────────────────
   useEffect(() => {
     return () => {
@@ -176,7 +195,10 @@ export function RecordingBar({ onDiscard, onSent }: RecordingBarProps) {
 
   // ── Stop the recorder + compute the kept clip (uri + 40-bar waveform) ────
   const stopAndCapture = useCallback(async (): Promise<{ uri: string; durationMs: number } | null> => {
-    const durationMs = recorderState.durationMillis;
+    // Clamp to the cap: at the 2-min auto-stop the 250ms poll lands a hair over
+    // 120000ms, and the server silently drops durationMs > 120_000 (D-14). Manual
+    // ✓ is always well under, so this only matters for the auto-stop boundary.
+    const durationMs = Math.min(recorderState.durationMillis, VOICE_MAX_DURATION_MS);
     try {
       await recorder.stop();
     } catch {
@@ -290,8 +312,12 @@ export function RecordingBar({ onDiscard, onSent }: RecordingBarProps) {
         </Pressable>
       ) : (
         <View style={styles.center}>
-          {phase === 'recording' && <View style={styles.dot} />}
-          <Text style={styles.timer}>{formatDuration(timerMs)}</Text>
+          {phase === 'recording' && (
+            <Animated.View style={[styles.dot, { opacity: dotOpacity }]} />
+          )}
+          <Text style={[styles.timer, { color: colors.text }]}>
+            {formatDuration(timerMs)}
+          </Text>
         </View>
       )}
 
@@ -329,6 +355,7 @@ export function RecordingBar({ onDiscard, onSent }: RecordingBarProps) {
 
 const styles = StyleSheet.create({
   bar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
@@ -344,18 +371,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: SPACING.sm,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: COLORS.error,
   },
   timer: {
-    fontSize: 12,
-    fontFamily: FONTS.regular,
-    color: COLORS.primary,
+    fontSize: 15,
+    fontFamily: FONTS.medium,
+    fontVariant: ['tabular-nums'],
   },
   errorText: {
     fontSize: 13,
