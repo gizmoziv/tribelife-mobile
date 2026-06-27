@@ -375,6 +375,11 @@ export default function ProfileScreen() {
     dmPush: true,
     dmsPush: true,
     groupsPush: true,
+    // Phase 29 (PRIV-01, D-04, Pitfall 7): default ON so the toggle reads ON
+    // before the GET resolves; the GET's readReceipts then carries through
+    // setNotifPrefs and reflects server state on load (D-04a — GET already
+    // returns it). This is the only new key the typed updateNotifPref needs.
+    readReceipts: true,
   });
   const [newsPushEnabled, setNewsPushEnabled] = useState(true); // default true matches DB column default
 
@@ -383,10 +388,13 @@ export default function ProfileScreen() {
     Notifications.getPermissionsAsync().then(({ status }) => {
       setPushEnabled(status === 'granted');
     });
-    // Load server-side preferences
+    // Load server-side preferences. Merge into prev (not replace) so an absent
+    // readReceipts in the GET keeps its default-ON value (Pitfall 7) — the GET
+    // type marks readReceipts optional, so a wholesale set would widen it to
+    // undefined and break the typed toggle.
     notificationsApi
       .getPreferences()
-      .then(setNotifPrefs)
+      .then((prefs) => setNotifPrefs((prev) => ({ ...prev, ...prefs })))
       .catch(() => {});
     newsPushApi
       .getPreference()
@@ -906,6 +914,30 @@ export default function ProfileScreen() {
                 }
               />
             </View>
+          </SettingsSection>
+        </AnimatedEntry>
+
+        {/* Phase 29 (PRIV-01, D-04): Privacy — its OWN section, not under
+            Notifications. Read Receipts default ON, optimistic via the existing
+            updateNotifPref pattern; reciprocity copy as a muted caption since
+            SettingsRow has no subtitle prop (A3). */}
+        <AnimatedEntry delay={105}>
+          <SettingsSection title="Privacy">
+            <SettingsRow
+              label="Read Receipts"
+              right={
+                <Switch
+                  value={notifPrefs.readReceipts}
+                  onValueChange={(v) => updateNotifPref('readReceipts', v)}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                />
+              }
+            />
+            <Text style={[styles.privacyCaption, { color: colors.textMuted }]}>
+              When off, you won&apos;t send read receipts — and you won&apos;t see
+              others&apos; either. Delivered status still shows.
+            </Text>
           </SettingsSection>
         </AnimatedEntry>
 
@@ -1892,6 +1924,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: { fontSize: 15, fontFamily: FONTS.medium },
+  privacyCaption: {
+    fontSize: 12,
+    fontFamily: FONTS.regular,
+    lineHeight: 17,
+    paddingTop: 8,
+  },
   settingValue: {
     fontSize: 14,
     fontFamily: FONTS.regular,
