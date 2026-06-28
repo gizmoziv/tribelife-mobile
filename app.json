@@ -137,7 +137,8 @@
         {
           "microphonePermission": "TribeLife needs access to your microphone to send voice messages."
         }
-      ]
+      ],
+      "./plugins/withoutMediaPlaybackPermission"
     ],
     "scheme": "tribelife",
     "extra": {
