@@ -15,6 +15,7 @@ import { ImageGrid } from '@/components/ui/chat/ImageGrid';
 import { GifMessage } from '@/components/ui/chat/GifMessage';
 import { ImageViewer } from '@/components/ui/chat/ImageViewer';
 import { YouTubeCard } from '@/components/ui/chat/YouTubeCard';
+import { LinkPreviewCard } from '@/components/ui/chat/LinkPreviewCard';
 import { YouTubePlayerModal } from '@/components/ui/chat/YouTubePlayerModal';
 import { VoicePlayerBubble } from '@/components/ui/chat/VoicePlayerBubble';
 import { extractYouTubeIds } from '@/utils/youtube';
@@ -35,6 +36,38 @@ type ContentPart =
 // covering the common cases users actually paste.
 const URL_REGEX = /\b(?:https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:[a-zA-Z0-9][a-zA-Z0-9-]*\.)+(?:com|net|org|edu|gov|mil|io|app|co|ai|dev|me|tv|info|biz|us|uk|de|fr|jp|au|nz|il|eu|ca|in|br|cn|ru|tech|online|store|site|xyz|ly|so|fm|to|cc|gg|club|news|blog)(?:\/[^\s<>]*)?)/gi;
 const MENTION_REGEX = /@([a-zA-Z0-9_]+)/g;
+
+// Hosts whose links unfurl as a YouTube card (handled by renderYouTubeCards),
+// so they are excluded from the generic link-preview card.
+function isYouTubeHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^www\./, '');
+  return h === 'youtube.com' || h === 'm.youtube.com' || h === 'youtu.be';
+}
+
+// The first http(s) URL in `content` that is NOT a YouTube link. Mirrors
+// parseContent's linkify (same URL_REGEX, same trailing-punctuation trim, same
+// email-host skip, same scheme-less → https:// normalization). Returns the
+// normalized https target, or null when there is no non-YouTube link.
+function firstNonYouTubeUrl(content: string): string | null {
+  if (!content) return null;
+  URL_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = URL_REGEX.exec(content)) !== null) {
+    // Skip bare domains that are actually an email's host part.
+    if (match.index > 0 && content[match.index - 1] === '@') continue;
+    let raw = match[0];
+    const trailingMatch = raw.match(/[.,;:!?)\]}'"]+$/);
+    if (trailingMatch) raw = raw.slice(0, -trailingMatch[0].length);
+    const target = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+      if (isYouTubeHost(new URL(target).hostname)) continue;
+    } catch {
+      continue;
+    }
+    return target;
+  }
+  return null;
+}
 
 function parseMentions(text: string): ContentPart[] {
   const parts: ContentPart[] = [];
@@ -232,6 +265,13 @@ export function MessageBubble({
   // Detect distinct YouTube links in the DISPLAYED content (so a translated
   // message still unfurls). Capped at 3 inside extractYouTubeIds.
   const youtubeIds = displayContent ? extractYouTubeIds(displayContent) : [];
+  // First non-YouTube http(s) link in the message \u2192 generic unfurl card. Only
+  // when there are NO YouTube cards (those take precedence), so a message never
+  // shows both a YouTube card and a link-preview card.
+  const linkPreviewUrl =
+    youtubeIds.length === 0 && displayContent
+      ? firstNonYouTubeUrl(displayContent)
+      : null;
   const isRTL = displayContent ? /[\u0590-\u05FF\u0600-\u06FF]/.test(displayContent) : false;
   const textDirection = isRTL ? 'rtl' as const : 'ltr' as const;
 
@@ -363,6 +403,19 @@ export function MessageBubble({
         {youtubeIds.map((id) => (
           <YouTubeCard key={id} videoId={id} onPress={handleYouTubePress} />
         ))}
+      </View>
+    );
+  };
+
+  // Additive generic link unfurl: ONE card for the first non-YouTube link,
+  // below the message text. The raw link stays tappable underlined text (via
+  // renderContent) — this is purely additional. Reuses the flush youtubeBlock
+  // wrapper so the card sits edge-to-edge like the video card (#video-gap UAT).
+  const renderLinkPreviewCard = () => {
+    if (!linkPreviewUrl) return null;
+    return (
+      <View style={styles.youtubeBlock}>
+        <LinkPreviewCard url={linkPreviewUrl} onPress={handleUrlPress} />
       </View>
     );
   };
@@ -515,6 +568,7 @@ export function MessageBubble({
                   )}
                   {renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
                   {renderYouTubeCards()}
+                  {renderLinkPreviewCard()}
                 </>
               )}
               {translatedContent && (!isVoice || showTranscript) && (
@@ -595,6 +649,7 @@ export function MessageBubble({
                   )}
                   {renderContent(colors.text, COLORS.primary, COLORS.primary)}
                   {renderYouTubeCards()}
+                  {renderLinkPreviewCard()}
                 </>
               )}
               {translatedContent && (!isVoice || showTranscript) && (
@@ -786,7 +841,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   youtubeBlock: {
-    marginTop: 2,
+    // Flush to the bubble's side edges (cancel the bubble paddingHorizontal:14)
+    // so a video unfurl sits as tight as a media-only image rather than inset
+    // like a text block (#video-gap UAT).
+    marginHorizontal: -14,
+    marginTop: 6,
+    marginBottom: 4,
   },
   removedText: {
     fontSize: 13,

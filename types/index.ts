@@ -23,6 +23,17 @@ export interface ReactionGroup {
   hasReacted: boolean;
 }
 
+// Rich link unfurl card payload for the first non-YouTube link in a message.
+// Mirrors GET /api/link-preview's `preview` object. A null preview (or one with
+// no title AND no image) means "no card" — the LinkPreviewCard renders nothing.
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
+}
+
 export interface ReplyTo {
   id: number;
   content: string;

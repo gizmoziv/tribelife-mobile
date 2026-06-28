@@ -21,6 +21,7 @@ import type {
   SearchResponse,
   ChevraSection,
   ChevraSectionResponse,
+  LinkPreview,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -402,6 +403,17 @@ export const reactionsApi = {
       method: 'POST',
       body: JSON.stringify({ messageId, emoji }),
     }),
+};
+
+// ── Link previews ─────────────────────────────────────────────────────────
+// Rich unfurl for the first non-YouTube link in a chat message. Returns
+// { preview: null } when the URL has no usable Open Graph data — the caller
+// renders no card in that case.
+export const linkPreviewApi = {
+  getLinkPreview: (url: string) =>
+    request<{ preview: LinkPreview | null }>(
+      `/api/link-preview?url=${encodeURIComponent(url)}`,
+    ),
 };
 
 // ── Referrals ─────────────────────────────────────────────────────────────
