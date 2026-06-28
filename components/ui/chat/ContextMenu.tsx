@@ -32,6 +32,7 @@ interface ContextMenuProps {
   isOwn?: boolean;           // default false — controls Edit row visibility
   onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
   onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
+  onInfo?: () => void;       // optional — own group messages: opens the read-receipt breakdown
   // When set, the Translate row renders DISABLED with this hint appended
   // (e.g. '(no transcript)' for a voice message that has no transcript to translate).
   translateDisabledHint?: string | null;
@@ -52,6 +53,7 @@ export function ContextMenu({
   isOwn = false,
   onReport,
   onTranslate,
+  onInfo,
   translateDisabledHint,
   onPin,
   onUnpin,
@@ -121,6 +123,11 @@ export function ContextMenu({
 
   const handleReport = () => {
     onReport?.();
+    onClose();
+  };
+
+  const handleInfo = () => {
+    onInfo?.();
     onClose();
   };
 
@@ -214,6 +221,17 @@ export function ContextMenu({
               >
                 <Text style={styles.actionIcon}>&#x270F;&#xFE0F;</Text>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Edit</Text>
+              </TouchableOpacity>
+            )}
+
+            {onInfo && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleInfo}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x2139;&#xFE0F;</Text>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Info</Text>
               </TouchableOpacity>
             )}
 

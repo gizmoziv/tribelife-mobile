@@ -114,7 +114,10 @@ export default function GlobeScreen() {
   useEffect(() => {
     return onChatNotification((raw) => {
       const body = (raw as { body?: string } | null)?.body;
-      if (typeof body === 'string' && /(joined|left) the community$/.test(body)) {
+      if (
+        typeof body === 'string' &&
+        /(joined|left) the community$/.test(body)
+      ) {
         chavurotReset();
       }
     });
@@ -225,7 +228,11 @@ export default function GlobeScreen() {
               accessibilityLabel="Clear search"
               accessibilityRole="button"
             >
-              <Text style={[styles.searchClearText, { color: colors.textMuted }]}>×</Text>
+              <Text
+                style={[styles.searchClearText, { color: colors.textMuted }]}
+              >
+                ×
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -245,11 +252,14 @@ export default function GlobeScreen() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: tabBarSpace },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <ChevraSection
-            title="Communities"
+            title="Community Groups"
             state={chavurot}
             onPressItem={handlePressItem}
             keyForItem={keyForItem}

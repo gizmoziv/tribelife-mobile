@@ -245,7 +245,7 @@ export default function WelcomeScreen() {
           />
         </View>
 
-        <Text style={[styles.title, { color: '#FFFFFF' }]}>TribeLife</Text>
+        <Text style={[styles.title, { color: '#FFFFFF' }]}>tribelife</Text>
         <Text style={[styles.tagline, { color: colors.textMuted }]}>
           A Platform That is Built for Our Tribe.{'\n'}Actually.
         </Text>

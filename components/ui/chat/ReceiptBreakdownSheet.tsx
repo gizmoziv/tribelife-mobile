@@ -4,12 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { COLORS, FONTS, SPACING, RADIUS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
-import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { GroupMember, MemberReceipt } from '@/types';
 
-// ── Phase 29: ReceiptBreakdownSheet (D-03, RCPT-05) ─────────────────────────
-// Per-member read-receipt breakdown for one group message. Opened by tapping
-// the GroupReceiptSummary line (the indicator, not the bubble — D-03).
+// ── Phase 29: ReceiptBreakdownSheet (RCPT-05) ───────────────────────────────
+// Per-member read-receipt breakdown for one group message. Opened from the
+// long-press "Info" context-menu action on an own group message.
 //
 // ActionSheetModal only renders { label, onPress } rows (ActionSheetModal.tsx
 // :16-27), so this is a SIBLING sheet: it copies that file's Modal + backdrop +
@@ -17,7 +16,7 @@ import type { GroupMember, MemberReceipt } from '@/types';
 // member rows — AvatarCircle + @handle + a per-member state label.
 //
 // Per-member state (vs. the message's createdAt watermark threshold):
-//   readUpTo      >= createdAt → "Seen" (+ relative time)
+//   readUpTo      >= createdAt → "Seen"
 //   deliveredUpTo >= createdAt → "Delivered"
 //   otherwise                  → "Not delivered yet"
 // ISO strings compare lexicographically (UTC toISOString), matching the
@@ -25,7 +24,7 @@ import type { GroupMember, MemberReceipt } from '@/types';
 // reads "Not delivered yet" (constraint 5 — designed, not a crash).
 
 type MemberState =
-  | { label: 'Seen'; at: string }
+  | { label: 'Seen' }
   | { label: 'Delivered' }
   | { label: 'Not delivered yet' };
 
@@ -34,7 +33,7 @@ function memberState(
   createdAt: string,
 ): MemberState {
   if (receipt?.readUpTo != null && receipt.readUpTo >= createdAt) {
-    return { label: 'Seen', at: receipt.readUpTo };
+    return { label: 'Seen' };
   }
   if (receipt?.deliveredUpTo != null && receipt.deliveredUpTo >= createdAt) {
     return { label: 'Delivered' };
@@ -95,10 +94,10 @@ export function ReceiptBreakdownSheet({
               ? memberState(receipts?.[m.userId], createdAt)
               : ({ label: 'Not delivered yet' } as MemberState);
             const isSeen = state.label === 'Seen';
-            const stateText =
-              state.label === 'Seen'
-                ? `Seen · ${formatRelativeTime(state.at)}`
-                : state.label; // "Delivered" | "Not delivered yet"
+            // Until we track read receipts per-user-per-message, lastReadAt is a
+            // single moving watermark (advances on every chat open), so a precise
+            // "seen at" time would be misleading. Show the plain state only.
+            const stateText = state.label; // "Seen" | "Delivered" | "Not delivered yet"
             return (
               <React.Fragment key={m.userId}>
                 {index > 0 && (

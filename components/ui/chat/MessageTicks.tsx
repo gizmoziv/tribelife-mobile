@@ -31,16 +31,30 @@ export function MessageTicks({ status, colors }: MessageTicksProps) {
   if (status === 'none') return null;
 
   const glyph = status === 'sent' ? '✓' : '✓✓';
-  // Delivered = theme grey; Read = brand accent. Sent reuses the grey muted tone
-  // (it sits next to the muted timestamp).
-  const color = status === 'read' ? COLORS.primary : colors.textMuted;
+  const isRead = status === 'read';
+  // Read must be unmistakably distinct from Delivered. The brand indigo
+  // (#818CF8) sits too close to the muted blue-grey timestamp tone (#7A8BA8) to
+  // read as "changed" at this size — so Read gets a brighter, more saturated
+  // accent AND heavier weight, while Sent/Delivered stay dim + light.
+  const color = isRead ? READ_COLOR : colors.textMuted;
 
   return (
-    <Text style={[styles.ticks, { color }]} accessibilityLabel={`Message ${status}`}>
+    <Text
+      style={[
+        styles.ticks,
+        { color, fontWeight: isRead ? '800' : '400', opacity: isRead ? 1 : 0.65 },
+      ]}
+      accessibilityLabel={`Message ${status}`}
+    >
       {glyph}
     </Text>
   );
 }
+
+// Bright, saturated "read/seen" accent — deliberately distinct from the muted
+// blue-grey Delivered tone. Brand-aligned (emerald confirmation), not WhatsApp
+// blue. Tweak here if a different read cue is preferred.
+const READ_COLOR = COLORS.secondary; // #34D399 emerald
 
 export default MessageTicks;
 

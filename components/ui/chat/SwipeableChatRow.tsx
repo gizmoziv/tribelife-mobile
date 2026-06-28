@@ -34,6 +34,20 @@ function BellOffIcon({ size = 20, color = '#FFFFFF' }: { size?: number; color?: 
   );
 }
 
+function ArchiveIcon({ size = 20, color = '#FFFFFF' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────
 interface SwipeableChatRowProps {
   children: React.ReactNode;
@@ -212,6 +226,7 @@ function SwipeableChatRowInner({
           onPress={handleAction}
           activeOpacity={0.8}
         >
+          <ArchiveIcon size={20} color="#FFFFFF" />
           <Text style={styles.actionButtonText}>{actionLabel}</Text>
         </TouchableOpacity>
       </View>
@@ -269,6 +284,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(129, 140, 248, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'column',
+    gap: 4,
   },
   actionButtonText: {
     color: '#FFFFFF',

@@ -64,7 +64,6 @@ import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
-import { GroupReceiptSummary } from '@/components/ui/chat/GroupReceiptSummary';
 import { ReceiptBreakdownSheet } from '@/components/ui/chat/ReceiptBreakdownSheet';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
@@ -204,13 +203,12 @@ export default function DMThreadScreen() {
   // derivation knows whose watermarks must clear. Empty until seeded → bubbles
   // fall back to "Sent" (graceful before the Phase 28 backend deploys).
   const [otherUserIds, setOtherUserIds] = useState<number[]>([]);
-  // Phase 29 (D-03, RCPT-04/05): the full group member roster (excluding me),
-  // captured from the same cold-open seed fetch. Feeds the group aggregate
-  // "Delivered to N · Seen by N" line + the per-member breakdown sheet (avatar +
-  // handle). Empty for DMs and until seeded (graceful → "Delivered to 0").
+  // Phase 29 (RCPT-05): the full group member roster (excluding me), captured
+  // from the cold-open seed fetch. Feeds the per-member breakdown sheet (avatar +
+  // handle) opened via long-press "Info". Empty for DMs and until seeded.
   const [groupRoster, setGroupRoster] = useState<GroupMember[]>([]);
-  // Phase 29 (D-03): the breakdown sheet's open state — the target message's
-  // createdAt threshold (null = closed). Opened by tapping the aggregate line.
+  // Phase 29: the breakdown sheet's open state — the target message's createdAt
+  // threshold (null = closed). Opened via the long-press "Info" action (groups).
   const [breakdownCreatedAt, setBreakdownCreatedAt] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   // Reversed copy for the inverted FlatList — index 0 = newest message =
@@ -220,21 +218,8 @@ export default function DMThreadScreen() {
   // re-snap loop (which fought FlatList's windowed layout) are removed. Same
   // fix already shipped for Globe (ISSUE-8) and the timezone room (chat/local).
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
-  // Phase 29 (D-03, RCPT-04/05, Pitfall 6): the id of the LATEST own message —
-  // the only message under which the group aggregate "Delivered to N · Seen by N"
-  // line renders. Older own messages keep just the per-bubble tick ladder (29-03).
-  // null when the user has no message in the thread yet.
-  const latestOwnGroupMessageId = useMemo<number | null>(() => {
-    if (!isGroup || !user?.id) return null;
-    let latest: Message | null = null;
-    for (const m of messages) {
-      if (m.senderId !== user.id) continue;
-      if (latest == null || m.createdAt > latest.createdAt) latest = m;
-    }
-    return latest?.id ?? null;
-  }, [isGroup, messages, user?.id]);
   // Phase 29: live subscription to THIS conversation's receipt slice so the
-  // aggregate counts re-render as watermarks advance (mirrors MessageBubble).
+  // breakdown sheet's per-member counts re-render as watermarks advance.
   const conversationReceipts = useReceiptsStore(
     (s) => s.byConversation[conversationId],
   );
@@ -1088,10 +1073,10 @@ export default function DMThreadScreen() {
 
   const renderMessage = useCallback(({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.id;
-    // Phase 29 (D-03, Pitfall 6): the group aggregate line shows ONLY under the
-    // latest own group message — not under received messages, not under older
-    // own messages. Per-bubble ticks (29-03) still render on ALL own bubbles.
-    const showGroupSummary = isGroup && item.id === latestOwnGroupMessageId;
+    // Phase 29: the per-bubble tick ladder (single=sent, grey ✓✓=delivered to
+    // all, accent ✓✓=read by all) renders on ALL own bubbles via MessageBubble.
+    // The per-member breakdown is opened from the long-press "Info" action
+    // (groups) — there is no inline aggregate line.
     const bubble = (
       <MessageBubble
         message={item}
@@ -1113,18 +1098,6 @@ export default function DMThreadScreen() {
         receiptOtherUserIds={otherUserIds}
       />
     );
-    const bubbleWithSummary = showGroupSummary ? (
-      <>
-        {bubble}
-        <GroupReceiptSummary
-          roster={groupRoster}
-          receipts={conversationReceipts}
-          createdAt={item.createdAt}
-          colors={colors}
-          onPress={() => setBreakdownCreatedAt(item.createdAt)}
-        />
-      </>
-    ) : bubble;
     // Phase 14 D-04: wrap matched bubble in Animated.View for highlight flash
     const wrappedBubble = item.id === flashHighlightedId ? (
       <Animated.View
@@ -1135,9 +1108,9 @@ export default function DMThreadScreen() {
           }),
         }}
       >
-        {bubbleWithSummary}
+        {bubble}
       </Animated.View>
-    ) : bubbleWithSummary;
+    ) : bubble;
     if (isReadOnlyPreview) return wrappedBubble;
     return (
       <SwipeableMessage onSwipeComplete={() => {
@@ -1146,7 +1119,7 @@ export default function DMThreadScreen() {
         {wrappedBubble}
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors, conversationId, otherUserIds, latestOwnGroupMessageId, groupRoster, conversationReceipts]);
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors, conversationId, otherUserIds]);
 
   if (isLoading) {
     return (
@@ -1411,10 +1384,19 @@ export default function DMThreadScreen() {
             const alreadyPinned = pinnedMessage?.messageId === selectedMessage?.id;
             return canPin && alreadyPinned ? handleDmUnpin : undefined;
           })()}
+          onInfo={isGroup && !!user && selectedMessage?.senderId === user.id
+            ? () => {
+                // Open the per-member receipt breakdown for THIS message. Deferred
+                // so the context-menu modal finishes dismissing before the sheet
+                // presents (a Modal presented mid-dismiss can no-op on iOS).
+                const createdAt = selectedMessage?.createdAt;
+                if (createdAt) setTimeout(() => setBreakdownCreatedAt(createdAt), 300);
+              }
+            : undefined}
           messageContent={selectedMessage?.content ?? ''}
         />
-        {/* Phase 29 (D-03, RCPT-05): per-member breakdown for the tapped group
-            aggregate line. Single instance controlled by breakdownCreatedAt. */}
+        {/* Phase 29 (RCPT-05): per-member breakdown for a group message, opened
+            from the long-press "Info" action. Controlled by breakdownCreatedAt. */}
         <ReceiptBreakdownSheet
           visible={breakdownCreatedAt != null}
           onClose={() => setBreakdownCreatedAt(null)}

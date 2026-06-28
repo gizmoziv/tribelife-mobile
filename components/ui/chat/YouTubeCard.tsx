@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/contexts/ThemeContext';
-import { FONTS, RADIUS } from '@/constants';
+import { FONTS } from '@/constants';
 import { fetchYouTubeOEmbed, getThumbnailUrl } from '@/utils/youtube';
 
 interface YouTubeCardProps {
@@ -97,10 +97,9 @@ export default YouTubeCard;
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: RADIUS.sm,
+    borderRadius: 18, // match the bubble / flush-image corner radius (#video-gap UAT)
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    marginTop: 6,
   },
   thumbWrap: {
     width: '100%',
