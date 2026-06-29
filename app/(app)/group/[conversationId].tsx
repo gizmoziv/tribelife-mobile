@@ -11,6 +11,10 @@ import {
   ActivityIndicator,
   Share,
   Image,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -51,6 +55,10 @@ export default function GroupInfoScreen() {
   const [isJoining, setIsJoining] = useState(false);
   const [groupIconUrl, setGroupIconUrl] = useState<string | null>(null);
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  // Rename modal — replaces Alert.prompt (iOS-only) with a cross-platform modal.
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameInput, setRenameInput] = useState('');
+  const [isSavingRename, setIsSavingRename] = useState(false);
   // Public group info (memberCount, isMember) — available even for non-members
   // via the inviteSlug-keyed getInfo endpoint. Source of truth for the header
   // count + Join/Leave button render; `members[]` is the authoritative list
@@ -160,29 +168,27 @@ export default function GroupInfoScreen() {
   }, [isAdmin, conversationId]);
 
   const handleRename = useCallback(() => {
-    Alert.prompt(
-      'Rename Group',
-      'Enter a new name for this group.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: async (newName?: string) => {
-            const trimmed = newName?.trim();
-            if (!trimmed || trimmed === groupName) return;
-            try {
-              await groupsApi.update(conversationId, { name: trimmed });
-              setGroupName(trimmed);
-            } catch {
-              Alert.alert('Error', 'Could not rename the group.');
-            }
-          },
-        },
-      ],
-      'plain-text',
-      groupName,
-    );
-  }, [conversationId, groupName]);
+    setRenameInput(groupName);
+    setRenameVisible(true);
+  }, [groupName]);
+
+  const handleSaveRename = useCallback(async () => {
+    const trimmed = renameInput.trim();
+    if (!trimmed || trimmed === groupName) {
+      setRenameVisible(false);
+      return;
+    }
+    setIsSavingRename(true);
+    try {
+      await groupsApi.update(conversationId, { name: trimmed });
+      setGroupName(trimmed);
+      setRenameVisible(false);
+    } catch {
+      Alert.alert('Error', 'Could not rename the group.');
+    } finally {
+      setIsSavingRename(false);
+    }
+  }, [conversationId, groupName, renameInput]);
 
   const handleShare = useCallback(async () => {
     if (!resolvedSlug) {
@@ -611,6 +617,70 @@ export default function GroupInfoScreen() {
           </View>
         </AnimatedEntry>
       </ScrollView>
+
+      {/* Rename modal — cross-platform replacement for Alert.prompt */}
+      <Modal
+        visible={renameVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={renameStyles.backdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setRenameVisible(false)}
+          />
+          <View
+            style={[
+              renameStyles.card,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[renameStyles.title, { color: colors.text }]}>Rename Group</Text>
+            <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+              Enter a new name for this group.
+            </Text>
+            <TextInput
+              value={renameInput}
+              onChangeText={setRenameInput}
+              placeholder="Group name"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              maxLength={100}
+              style={[
+                renameStyles.input,
+                { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceGlass },
+              ]}
+              onSubmitEditing={handleSaveRename}
+              returnKeyType="done"
+            />
+            <View style={renameStyles.actions}>
+              <TouchableOpacity
+                onPress={() => setRenameVisible(false)}
+                style={[renameStyles.button, { borderColor: colors.border }]}
+                disabled={isSavingRename}
+              >
+                <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveRename}
+                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                disabled={isSavingRename || !renameInput.trim()}
+              >
+                {isSavingRename ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -731,4 +801,41 @@ const styles = StyleSheet.create({
   leaveSection: {
     marginTop: SPACING.md,
   },
+});
+
+const renameStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.page,
+  },
+  card: {
+    width: '100%',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    padding: SPACING.md,
+    gap: 12,
+  },
+  title: { fontSize: 18, fontFamily: FONTS.semiBold },
+  subtitle: { fontSize: 13, fontFamily: FONTS.regular },
+  input: {
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+  },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  button: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    minWidth: 84,
+    alignItems: 'center',
+  },
+  buttonText: { fontSize: 14, fontFamily: FONTS.semiBold },
 });
