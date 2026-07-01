@@ -1272,13 +1272,17 @@ function LocalChatPanel() {
         );
       };
 
-      const offTypingStart = onTypingStart(({ handle }) => {
+      const offTypingStart = onTypingStart(({ handle, roomId: rid }) => {
+        // Only this room's typing — ignore events from other rooms/DMs this
+        // socket also belongs to (mirrors the reaction roomId filter below).
+        if (rid !== roomId) return;
         if (handle === user?.handle) return;
         setTypingUsers((prev) => prev.includes(handle) ? prev : [...prev, handle]);
         clearTypingLater(handle);
       });
 
-      const offTypingStop = onTypingStop(({ handle }) => {
+      const offTypingStop = onTypingStop(({ handle, roomId: rid }) => {
+        if (rid != null && rid !== roomId) return;
         setTypingUsers((prev) => prev.filter((h) => h !== handle));
         const existing = typingClearTimersRef.current.get(handle);
         if (existing) {

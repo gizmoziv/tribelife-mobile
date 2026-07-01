@@ -9,13 +9,13 @@ import {
   Alert,
   Platform,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth } from '@/services/api';
 import { getPostLoginLandingRoute } from '@/services/notificationRouting';
@@ -44,7 +44,7 @@ function SparkleIcon() {
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z"
-        stroke="#F59E0B"
+        stroke="#818CF8"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -58,13 +58,13 @@ function ConnectIcon() {
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 3 L19.8 16.5 L4.2 16.5 Z"
-        stroke="#34D399"
+        stroke="#818CF8"
         strokeWidth={1.5}
         strokeLinejoin="round"
       />
       <Path
         d="M12 21 L4.2 7.5 L19.8 7.5 Z"
-        stroke="#34D399"
+        stroke="#818CF8"
         strokeWidth={1.5}
         strokeLinejoin="round"
       />
@@ -93,7 +93,6 @@ function sanitizeRedirect(raw: string | string[] | undefined): string | null {
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
   const params = useLocalSearchParams<{ redirect?: string }>();
   const redirectTarget = sanitizeRedirect(params.redirect);
   const { setAuth } = useAuthStore();
@@ -226,7 +225,7 @@ export default function WelcomeScreen() {
   };
 
   const features = [
-    { icon: <ChatIcon />, text: 'Chat with people in your area' },
+    { icon: <ChatIcon />, text: 'Chat with people locally and globally' },
     { icon: <SparkleIcon />, text: 'Beacon — smart community matching' },
     { icon: <ConnectIcon />, text: "Features you won't find anywhere else" },
   ];
@@ -236,97 +235,106 @@ export default function WelcomeScreen() {
       colors={[...COLORS.gradientBackground]}
       style={styles.container}
     >
-      {/* Hero Section */}
-      <AnimatedEntry style={styles.hero} duration={500}>
-        <View style={styles.logoGlow}>
-          <Image
-            source={require('@/assets/tribelife-logo.png')}
-            style={styles.logoImage}
-          />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* Hero Section */}
+        <AnimatedEntry style={styles.hero} duration={500}>
+          <View style={styles.logoGlow}>
+            <Image
+              source={require('@/assets/tribelife-logo.png')}
+              style={styles.logoImage}
+            />
+          </View>
+
+          <Text style={[styles.title, { color: '#FFFFFF' }]}>tribelife</Text>
+          <Text style={[styles.tagline, { color: COLORS.textMuted }]}>
+            Built for Our Tribe. Actually.
+          </Text>
+        </AnimatedEntry>
+
+        {/* Feature highlights */}
+        <View style={styles.features}>
+          {features.map((f, i) => (
+            <AnimatedEntry key={f.text} delay={200 + i * 80}>
+              <View style={styles.featureRow}>
+                <View
+                  style={[
+                    styles.featureIconContainer,
+                    { backgroundColor: COLORS.surfaceGlass },
+                  ]}
+                >
+                  {f.icon}
+                </View>
+                <Text style={[styles.featureText, { color: COLORS.textMuted }]}>
+                  {f.text}
+                </Text>
+              </View>
+            </AnimatedEntry>
+          ))}
         </View>
 
-        <Text style={[styles.title, { color: '#FFFFFF' }]}>tribelife</Text>
-        <Text style={[styles.tagline, { color: colors.textMuted }]}>
-          A Platform That is Built for Our Tribe.{'\n'}Actually.
-        </Text>
-      </AnimatedEntry>
+        {/* CTA */}
+        <AnimatedEntry style={styles.cta} delay={500}>
+          {appleAvailable && (
+            <TouchableOpacity
+              style={[
+                styles.appleButton,
+                isAppleLoading && styles.buttonDisabled,
+              ]}
+              onPress={handleAppleSignIn}
+              disabled={isAppleLoading}
+              activeOpacity={0.85}
+            >
+              {isAppleLoading ? (
+                <ActivityIndicator color="#000" />
+              ) : (
+                <>
+                  <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
+                  <Text style={styles.appleButtonText}>
+                    Continue with Apple
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
-      {/* Feature highlights */}
-      <View style={styles.features}>
-        {features.map((f, i) => (
-          <AnimatedEntry key={f.text} delay={200 + i * 80}>
-            <View style={styles.featureRow}>
-              <View
-                style={[
-                  styles.featureIconContainer,
-                  { backgroundColor: colors.surfaceGlass },
-                ]}
-              >
-                {f.icon}
+          <PillButton
+            title="Continue with Google"
+            onPress={handleGoogleSignIn}
+            variant="primary"
+            size="lg"
+            loading={isLoading}
+            disabled={isLoading}
+            icon={
+              <View style={styles.googleIconCircle}>
+                <Text style={styles.googleIconText}>G</Text>
               </View>
-              <Text style={[styles.featureText, { color: colors.textMuted }]}>
-                {f.text}
-              </Text>
-            </View>
-          </AnimatedEntry>
-        ))}
-      </View>
+            }
+            style={{ width: '100%' }}
+          />
 
-      {/* CTA */}
-      <AnimatedEntry style={styles.cta} delay={500}>
-        {appleAvailable && (
-          <TouchableOpacity
-            style={[
-              styles.appleButton,
-              isAppleLoading && styles.buttonDisabled,
-            ]}
-            onPress={handleAppleSignIn}
-            disabled={isAppleLoading}
-            activeOpacity={0.85}
-          >
-            {isAppleLoading ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <>
-                <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
-                <Text style={styles.appleButtonText}>Continue with Apple</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        <PillButton
-          title="Continue with Google"
-          onPress={handleGoogleSignIn}
-          variant="primary"
-          size="lg"
-          loading={isLoading}
-          disabled={isLoading}
-          icon={
-            <View style={styles.googleIconCircle}>
-              <Text style={styles.googleIconText}>G</Text>
-            </View>
-          }
-          style={{ width: '100%' }}
-        />
-
-        <Text style={[styles.terms, { color: colors.textMuted }]}>
-          By continuing, you agree to our{' '}
-          <Text
-            style={styles.termsLink}
-            onPress={() => Linking.openURL('https://tribelife.app/terms')}
-          >
-            Terms of Service
-          </Text>{' '}
-          and{' '}
-          <Text
-            style={styles.termsLink}
-            onPress={() => Linking.openURL('https://tribelife.app/privacy')}
-          >
-            Privacy Policy
+          <Text style={[styles.terms, { color: COLORS.textMuted }]}>
+            By continuing, you agree to our{' '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL('https://tribelife.app/terms')}
+            >
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text
+              style={styles.termsLink}
+              onPress={() => Linking.openURL('https://tribelife.app/privacy')}
+            >
+              Privacy Policy
+            </Text>
           </Text>
-        </Text>
-      </AnimatedEntry>
+        </AnimatedEntry>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -336,6 +344,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: SPACING.page,
     paddingTop: 60,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   hero: {
     flex: 1,
@@ -379,8 +393,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   featureText: {
+    flex: 1,
     fontSize: 16,
     fontFamily: FONTS.medium,
   },

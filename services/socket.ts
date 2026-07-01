@@ -208,12 +208,19 @@ export function onDirectMessage(cb: (msg: Message) => void): () => void {
   return () => socket?.off('dm:message', cb);
 }
 
-export function onTypingStart(cb: (data: { handle: string }) => void): () => void {
+// Payload carries the scope (roomId for timezone rooms, conversationId for DMs)
+// so screens can filter out typing from other rooms this socket also belongs to
+// (e.g. the auto-joined timezone room bleeding into a DM).
+export function onTypingStart(
+  cb: (data: { handle: string; roomId?: string; conversationId?: number }) => void,
+): () => void {
   socket?.on('typing:start', cb);
   return () => socket?.off('typing:start', cb);
 }
 
-export function onTypingStop(cb: (data: { handle: string }) => void): () => void {
+export function onTypingStop(
+  cb: (data: { handle: string; roomId?: string; conversationId?: number }) => void,
+): () => void {
   socket?.on('typing:stop', cb);
   return () => socket?.off('typing:stop', cb);
 }

@@ -617,13 +617,17 @@ export default function DMThreadScreen() {
       );
     };
 
-    const offTypingStart = onTypingStart(({ handle: h }) => {
+    const offTypingStart = onTypingStart(({ handle: h, conversationId: cId }) => {
+      // Only this conversation's typing — ignore events from other rooms this
+      // socket also belongs to (e.g. the auto-joined timezone room).
+      if (cId !== conversationId) return;
       if (h === user?.handle) return;
       setTypingUsers((prev) => (prev.includes(h) ? prev : [...prev, h]));
       clearTypingLater(h);
     });
 
-    const offTypingStop = onTypingStop(({ handle: h }) => {
+    const offTypingStop = onTypingStop(({ handle: h, conversationId: cId }) => {
+      if (cId != null && cId !== conversationId) return;
       setTypingUsers((prev) => prev.filter((x) => x !== h));
       const existing = typingClearTimersRef.current.get(h);
       if (existing) {

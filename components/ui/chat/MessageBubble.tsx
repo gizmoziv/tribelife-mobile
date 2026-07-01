@@ -516,7 +516,7 @@ export function MessageBubble({
               colors={[...COLORS.gradientPrimary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={styles.bubble}
+              style={[styles.bubble, hasMedia && styles.bubbleMedia]}
             >
               {/* Reply preview inside bubble */}
               {/* Reply quotes intentionally freeze to original content — edit feature does not rewrite replyTo.content (PLAN 260517-hiy). */}
@@ -590,6 +590,7 @@ export function MessageBubble({
           ) : (
             <View style={[
               styles.bubble,
+              hasMedia && styles.bubbleMedia,
               { backgroundColor: colors.surfaceGlass },
               mentionsMe && styles.bubbleMentionsMe,
             ]}>
@@ -762,6 +763,12 @@ const styles = StyleSheet.create({
     // No drop shadow on bubbles: SHADOWS.sm rendered as a halo box — grey in
     // dark mode (#pin-uat) and a white-ish Android elevation halo in light mode
     // (#voice-uat). Removed in both modes for a flat bubble.
+  },
+  // When the bubble frames media, cap its width to the media width (BUBBLE_WIDTH,
+  // 260) so a long caption wraps to the image width instead of widening the
+  // bubble past the image and leaving a gap to the image's right.
+  bubbleMedia: {
+    maxWidth: 260,
   },
   // Bubble-level offset so the left accent bar has room without overlapping
   // the text. No background tint — Android light mode doesn't composite rgba
