@@ -138,7 +138,9 @@
           "microphonePermission": "TribeLife needs access to your microphone to send voice messages."
         }
       ],
-      "./plugins/withoutMediaPlaybackPermission"
+      "@bacons/apple-targets",
+      "./plugins/withoutMediaPlaybackPermission",
+      "./plugins/withCommunicationNotifications"
     ],
     "scheme": "tribelife",
     "extra": {
