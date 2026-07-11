@@ -183,8 +183,10 @@ export default function GroupInfoScreen() {
       await groupsApi.update(conversationId, { name: trimmed });
       setGroupName(trimmed);
       setRenameVisible(false);
-    } catch {
-      Alert.alert('Error', 'Could not rename the group.');
+    } catch (err: any) {
+      // Surface the server's reason (e.g. a 409 "name already exists") rather
+      // than a generic message; ApiError.message carries the backend's error.
+      Alert.alert('Error', err?.message ?? 'Could not rename the group.');
     } finally {
       setIsSavingRename(false);
     }
