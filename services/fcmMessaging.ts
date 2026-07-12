@@ -182,6 +182,12 @@ export async function consumeInitialFcmTap(): Promise<void> {
  * { token, platform:'android', tokenType:'fcm' }, and re-registers on rotation.
  * No-op on non-Android.
  */
+// Dedupe guards. The `_layout` effect that calls this re-fires whenever the
+// `user` object changes reference (repeated auth.me refetches), so without these
+// it re-POSTs the token and stacks a new onTokenRefresh listener on every render.
+let lastRegisteredFcmToken: string | null = null;
+let tokenRefreshSubscribed = false;
+
 export async function registerAndroidFcmToken(): Promise<void> {
   if (!IS_ANDROID) return;
   try {
@@ -189,17 +195,26 @@ export async function registerAndroidFcmToken(): Promise<void> {
     await registerDeviceForRemoteMessages(messaging); // no-op on Android, harmless
     await notifee.requestPermission(); // Android 13+ POST_NOTIFICATIONS prompt
     const token = await getToken(messaging);
-    if (token) {
-      await auth.registerPushToken(token, 'android', 'fcm').catch((err) => {
+    // Only POST when the token actually changed (idempotent-but-quiet).
+    if (token && token !== lastRegisteredFcmToken) {
+      try {
+        await auth.registerPushToken(token, 'android', 'fcm');
+        lastRegisteredFcmToken = token; // mark only on success → retries on failure
+      } catch (err) {
         console.error('[fcm] token register failed', err);
+      }
+    }
+    // FCM tokens rotate — re-home the new token on refresh. Subscribe ONCE;
+    // every call to this function would otherwise add another listener.
+    if (!tokenRefreshSubscribed) {
+      tokenRefreshSubscribed = true;
+      onTokenRefresh(messaging, (next) => {
+        lastRegisteredFcmToken = next;
+        auth.registerPushToken(next, 'android', 'fcm').catch((err) => {
+          console.error('[fcm] token refresh register failed', err);
+        });
       });
     }
-    // FCM tokens rotate — re-home the new token to the current user on refresh.
-    onTokenRefresh(messaging, (next) => {
-      auth.registerPushToken(next, 'android', 'fcm').catch((err) => {
-        console.error('[fcm] token refresh register failed', err);
-      });
-    });
   } catch (err) {
     console.error('[fcm] registerAndroidFcmToken error', err);
   }
