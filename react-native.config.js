@@ -11,12 +11,25 @@
 //
 // The config-plugin iOS mods (RNFB injects `[FIRApp configure]` into
 // AppDelegate) are gated separately in app.config.js (Android-only plugin set).
+// ⚠ Apply the iOS-exclusion overrides ONLY when NOT building Android. On an
+// Android build we provide NO overrides so RNFirebase/notify-kit autolink
+// normally with their OWN declared android metadata — mirroring the proven
+// throwaway harness (which had no react-native.config.js and built Android fine).
+// Specifying a `platforms` override for these deps on Android clobbers
+// RNFirebase's declared packageImportPath (io.invertase.firebase.app.* becomes a
+// wrong io.invertase.firebase.*), producing the Gradle compile error
+// "cannot find symbol ReactNativeFirebaseAppPackage". EAS sets EAS_BUILD_PLATFORM
+// per build; RNFB_ANDROID=1 is the local-android-prebuild opt-in (mirrors app.config.js).
+const isAndroidBuild =
+  process.env.EAS_BUILD_PLATFORM === 'android' || process.env.RNFB_ANDROID === '1';
+
 module.exports = {
-  dependencies: {
-    '@react-native-firebase/app': { platforms: { ios: null } },
-    '@react-native-firebase/messaging': { platforms: { ios: null } },
-    // notify-kit is cross-platform but only used on Android here; exclude iOS
-    // so it adds no iOS pod either.
-    'react-native-notify-kit': { platforms: { ios: null } },
-  },
+  dependencies: isAndroidBuild
+    ? {}
+    : {
+        '@react-native-firebase/app': { platforms: { ios: null } },
+        '@react-native-firebase/messaging': { platforms: { ios: null } },
+        // notify-kit is cross-platform but only used on Android here; exclude iOS.
+        'react-native-notify-kit': { platforms: { ios: null } },
+      },
 };
