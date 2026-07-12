@@ -1,26 +1,27 @@
-// app.config.js — extends app.json with a config plugin that injects
-// the Android <queries> block required for market:// scheme visibility
-// on Android 11+ (API 30+). Without this declaration, canOpenURL('market://...')
-// always returns false and the Play Store deep-link never fires (WR-01).
+// app.config.js — dynamic Expo config.
+// =========================================================================
+// Two jobs:
+//   1. Inject the Android <queries> block for market:// scheme visibility
+//      (Android 11+/API 30+) so Linking.canOpenURL('market://...') works (WR-01).
+//   2. Phase C LOCKED DECISION 1 — gate the RNFirebase / notify-kit / native
+//      conversation-shortcut config plugins to ANDROID BUILDS ONLY. These
+//      plugins inject iOS mods too (RNFB adds `[FIRApp configure]` to
+//      AppDelegate); appending them only for Android keeps the iOS project
+//      byte-for-byte what TestFlight ships (no Firebase pods, no static
+//      frameworks). Pod autolinking exclusion is handled in react-native.config.js.
 //
 // When both app.json and app.config.js are present, Expo CLI uses app.config.js
-// and ignores app.json. All static config from app.json is spread here so nothing
-// is lost. Dynamic modifications (plugins) are appended below.
+// and ignores app.json. All static config from app.json is spread here.
+//
+// ⚠ CAVEAT: `expo prebuild` evaluates this config ONCE — a combined prebuild
+// (both platforms in one run) CANNOT emit different plugin sets per platform.
+// EAS builds are per-platform, so `EAS_BUILD_PLATFORM` is authoritative there.
+// For a LOCAL Android prebuild you MUST run per-platform and set the flag:
+//   RNFB_ANDROID=1 npx expo prebuild -p android
+// (iOS local prebuild: `npx expo prebuild -p ios` — no flag → no Firebase plugins.)
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const appJson = require('./app.json');
-
-/** @type {import('expo/config').ExpoConfig} */
-const config = {
-  ...appJson.expo,
-  plugins: [
-    ...(appJson.expo.plugins || []),
-    // Inject <queries> into AndroidManifest.xml for market:// scheme visibility.
-    // Required on Android 11+ (API 30+) for Linking.canOpenURL('market://...') to
-    // return true on devices with the Play Store installed (D-07 acceptance criterion).
-    withMarketSchemeQuery,
-  ],
-};
 
 /**
  * Config plugin: adds a <queries> → <intent> block for the market:// scheme.
@@ -57,4 +58,25 @@ function withMarketSchemeQuery(cfg) {
   });
 }
 
-module.exports = config;
+module.exports = () => {
+  // EAS sets EAS_BUILD_PLATFORM per build; RNFB_ANDROID=1 is the local-prebuild opt-in.
+  const isAndroid =
+    process.env.EAS_BUILD_PLATFORM === 'android' || process.env.RNFB_ANDROID === '1';
+
+  const plugins = [...(appJson.expo.plugins || []), withMarketSchemeQuery];
+
+  if (isAndroid) {
+    plugins.push(
+      '@react-native-firebase/app',
+      '@react-native-firebase/messaging',
+      'react-native-notify-kit',
+      './plugins/withRnFirebaseMessagingServiceWins',
+      './plugins/withConversationShortcut',
+    );
+  }
+
+  return {
+    ...appJson.expo,
+    plugins,
+  };
+};

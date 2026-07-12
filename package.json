@@ -1,14 +1,15 @@
 {
   "name": "tribelife-mobile",
   "version": "1.2.0",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "scripts": {
     "start": "REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
-    "lint": "eslint . --ext .ts,.tsx"
+    "lint": "eslint . --ext .ts,.tsx",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@bacons/apple-targets": "^4.0.7",
@@ -18,6 +19,8 @@
     "@giphy/react-native-sdk": "^5.0.2",
     "@likashefqet/react-native-image-zoom": "^4.3.0",
     "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-firebase/app": "^25.1.0",
+    "@react-native-firebase/messaging": "^25.1.0",
     "@react-native-google-signin/google-signin": "^16.1.1",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "expo": "~54.0.0",
@@ -54,6 +57,7 @@
     "react-native": "0.81.4",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-keyboard-controller": "^1.21.8",
+    "react-native-notify-kit": "10.4.8",
     "react-native-purchases": "^8.3.3",
     "react-native-reanimated": "~3.19.0",
     "react-native-safe-area-context": "^5.7.0",
@@ -71,6 +75,7 @@
     "@types/react": "~19.1.0",
     "babel-preset-expo": "^54.0.10",
     "d3-geo": "^3.1.1",
+    "patch-package": "^8.0.1",
     "sharp": "^0.34.5",
     "topojson-client": "^3.1.0",
     "typescript": "~5.9.2"

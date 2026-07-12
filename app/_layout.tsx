@@ -30,7 +30,12 @@ import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDi
 import { useChatsStore } from '@/store/chatsStore';
 import { adaptChatNotification } from '@/services/chatNotificationAdapter';
 import { routeChatNotificationTap, getPostLoginLandingRoute } from '@/services/notificationRouting';
-import { registerForPushNotifications, sendPushTokenToServer } from '@/services/pushNotifications';
+import {
+  registerForPushNotifications,
+  sendPushTokenToServer,
+  registerAndroidPushToken,
+  consumeAndroidInitialFcmTap,
+} from '@/services/pushNotifications';
 import { checkVersion, type VersionCheckResult } from '@/services/version';
 import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
 
@@ -313,6 +318,16 @@ function RootLayoutInner() {
             }
           }
 
+          // Android: a cold-start tap on an FCM message notification is
+          // displayed by notify-kit (not expo-notifications), so it never shows
+          // up in getLastNotificationResponseAsync above. Consume notify-kit's
+          // persisted initial notification and deep-link into the conversation.
+          if (Platform.OS === 'android') {
+            setTimeout(() => {
+              consumeAndroidInitialFcmTap();
+            }, 500);
+          }
+
           // No deep link took the user somewhere specific — if there's an
           // unread daily-matcher result waiting, surface the Matches tab
           // instead of the default beacon list. Mirrors the welcome.tsx
@@ -358,7 +373,18 @@ function RootLayoutInner() {
   }, []);
 
   useEffect(() => {
-    if (token && user) {
+    if (!(token && user)) return;
+    if (Platform.OS === 'android') {
+      // Android routes message pushes via raw FCM. Still run the expo path to
+      // create the 'default'/'news' notification channels + request permission
+      // (auto-displayed FCM `notification` messages for non-person pushes land
+      // on the 'default' channel), but ignore the returned Expo token — register
+      // the raw FCM device token instead.
+      registerForPushNotifications().catch(() => {});
+      registerAndroidPushToken().catch((err) =>
+        console.error('[push] Android FCM registration failed:', err),
+      );
+    } else {
       registerForPushNotifications().then((pushToken) => {
         if (pushToken) {
           sendPushTokenToServer(pushToken);

@@ -97,8 +97,31 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
 export async function sendPushTokenToServer(token: string): Promise<void> {
   try {
-    await auth.updatePushToken(token);
+    // iOS registers its Expo token via the unified endpoint. (Android registers
+    // its raw FCM token through registerAndroidPushToken below.)
+    await auth.registerPushToken(token, Platform.OS === 'ios' ? 'ios' : 'android', 'expo');
   } catch (err) {
     console.error('[push] Failed to send push token to server:', err);
   }
+}
+
+// ── Phase C: Android FCM registration ───────────────────────────────────────
+// Android routes message pushes via raw FCM (not Expo). The FCM handler +
+// token registration live in services/fcmMessaging.ts, which imports
+// @react-native-firebase — dynamically imported here so that RNFirebase JS is
+// only ever loaded on Android (iOS keeps the Expo gateway + Phase B NSE).
+
+export async function registerAndroidPushToken(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const { registerAndroidFcmToken } = await import('./fcmMessaging');
+  await registerAndroidFcmToken();
+}
+
+// Cold-start / background FCM tap consumer — routes the notification that
+// launched the app. Called from _layout once the router is mounted (mirrors the
+// expo-notifications getLastNotificationResponseAsync cold-start path).
+export async function consumeAndroidInitialFcmTap(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  const { consumeInitialFcmTap } = await import('./fcmMessaging');
+  await consumeInitialFcmTap();
 }

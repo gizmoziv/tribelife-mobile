@@ -135,6 +135,23 @@ export const auth = {
   capabilities: () =>
     request<{ capabilities: Capabilities }>('/api/auth/capabilities'),
 
+  // Phase C: unified push-token registration. Posts the new
+  // { token, platform, tokenType } body consumed by PUT /api/auth/push-token,
+  // which upserts device_tokens (and still writes userProfiles.expoPushToken for
+  // tokenType 'expo', for backward compat). Android registers its raw FCM token
+  // here; iOS registers its Expo token.
+  registerPushToken: (
+    token: string,
+    platform: 'ios' | 'android',
+    tokenType: 'expo' | 'fcm',
+  ) =>
+    request('/api/auth/push-token', {
+      method: 'PUT',
+      body: JSON.stringify({ token, platform, tokenType }),
+    }),
+
+  // Legacy wrapper — kept for backward compatibility. The endpoint still accepts
+  // the legacy { expoPushToken } body.
   updatePushToken: (expoPushToken: string) =>
     request('/api/auth/push-token', {
       method: 'PUT',
