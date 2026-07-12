@@ -1,0 +1,26 @@
+diff --git a/node_modules/react-native-notify-kit/dist/validators/validateAndroidNotification.js b/node_modules/react-native-notify-kit/dist/validators/validateAndroidNotification.js
+index 890b0e6..caa3793 100644
+--- a/node_modules/react-native-notify-kit/dist/validators/validateAndroidNotification.js
++++ b/node_modules/react-native-notify-kit/dist/validators/validateAndroidNotification.js
+@@ -452,6 +452,21 @@ export default function validateAndroidNotification(android) {
+         }
+         out.smallIconLevel = android.smallIconLevel;
+     }
++    /**
++     * shortcutId (TribeLife Phase C patch)
++     * Thread shortcutId through to the native NotificationCompat.Builder, which
++     * already calls builder.setShortcutId(androidModel.getShortcutId()) but only
++     * reads it from the bundle — the JS validator otherwise strips unknown fields.
++     * Enables Android conversation promotion (collapsed avatar + app-icon corner
++     * badge) via a long-lived Person sharing shortcut published by the custom
++     * ConversationShortcut native module.
++     */
++    if (objectHasProperty(android, 'shortcutId')) {
++        if (!isString(android.shortcutId)) {
++            throw new Error("'notification.android.shortcutId' expected a string value.");
++        }
++        out.shortcutId = android.shortcutId;
++    }
+     /**
+      * sortKey
+      */

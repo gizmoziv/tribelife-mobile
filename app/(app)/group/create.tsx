@@ -270,21 +270,14 @@ export default function CreateGroupScreen() {
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
   const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [slugEdited, setSlugEdited] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleNameChange = (text: string) => {
-    const trimmed = text.slice(0, 50);
-    setName(trimmed);
-    if (!slugEdited) {
-      setSlug(slugify(trimmed));
-    }
-  };
+  // The invite slug is derived from the name on the server (canonical + unique),
+  // so this is a read-only preview — it can't be edited independently of the name.
+  const slug = slugify(name.trim());
 
-  const handleSlugChange = (text: string) => {
-    setSlugEdited(true);
-    setSlug(text.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 30));
+  const handleNameChange = (text: string) => {
+    setName(text.slice(0, 50));
   };
 
   const handleCreate = async () => {
@@ -295,7 +288,8 @@ export default function CreateGroupScreen() {
     }
     setIsCreating(true);
     try {
-      const { conversation } = await groupsApi.create(trimmedName, slug || undefined, isPublic);
+      // Slug is derived server-side from the name — don't send a custom one.
+      const { conversation } = await groupsApi.create(trimmedName, undefined, isPublic);
       router.replace({
         pathname: '/(app)/chat/[conversationId]',
         params: {
@@ -570,18 +564,17 @@ export default function CreateGroupScreen() {
                 <View style={[styles.slugRow]}>
                   <Text style={[styles.slugPrefix, { color: colors.textMuted }]}>tribelife.app/g/</Text>
                   <View style={[styles.slugInputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <TextInput
-                      style={[styles.input, { color: colors.text }]}
-                      placeholder="my-group"
-                      placeholderTextColor={colors.textMuted}
-                      value={slug}
-                      onChangeText={handleSlugChange}
-                      maxLength={30}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
+                    <Text
+                      style={[styles.input, { color: slug ? colors.text : colors.textMuted }]}
+                      numberOfLines={1}
+                    >
+                      {slug || 'my-group'}
+                    </Text>
                   </View>
                 </View>
+                <Text style={[styles.charCount, { color: colors.textMuted }]}>
+                  Auto-generated from the name and must be unique.
+                </Text>
 
                 <PillButton
                   title="Create Group"

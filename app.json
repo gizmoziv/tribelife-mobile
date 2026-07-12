@@ -2,7 +2,7 @@
   "expo": {
     "name": "TribeLife App",
     "slug": "tribelife",
-    "version": "1.7.2",
+    "version": "1.7.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -138,7 +138,9 @@
           "microphonePermission": "TribeLife needs access to your microphone to send voice messages."
         }
       ],
-      "./plugins/withoutMediaPlaybackPermission"
+      "@bacons/apple-targets",
+      "./plugins/withoutMediaPlaybackPermission",
+      "./plugins/withCommunicationNotifications"
     ],
     "scheme": "tribelife",
     "extra": {
