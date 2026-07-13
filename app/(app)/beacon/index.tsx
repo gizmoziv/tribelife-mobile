@@ -30,6 +30,7 @@ import {
   SHADOWS,
   PREMIUM_BEACON_LIMIT,
 } from '@/constants';
+import { BEACON_FLAME_PATH, BEACON_FLAME_HERO_PATH } from '@/constants/beaconFlame';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useIsPremium } from '@/hooks/useCapability';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -138,13 +139,17 @@ function FlameIcon({ size = 18 }: { size?: number }) {
       }}
     >
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Defs>
+          <SvgLinearGradient id="beaconFlameSmall" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#9333EA" />
+            <Stop offset="0.5" stopColor="#E879A0" />
+            <Stop offset="1" stopColor="#F59E0B" />
+          </SvgLinearGradient>
+        </Defs>
         <Path
-          d="M12 22c4.97 0 8-3.03 8-7 0-2-1-3.5-2-5-1.5 1-2 2-2 2s-1-2-2-4c-1.5 2-3 4-3 7 0 1-1 2-2 2s-2-1-2-2c0-2.5 2-5 3-6-2 0-4 2-5 4-1 2-1 3-1 4 0 3.97 3.03 7 8 7z"
-          stroke="#F59E0B"
-          strokeWidth={1.5}
-          fill="rgba(245,158,11,0.15)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          d={BEACON_FLAME_PATH}
+          fill="url(#beaconFlameSmall)"
+          fillRule="evenodd"
         />
       </Svg>
     </Animated.View>
@@ -152,30 +157,13 @@ function FlameIcon({ size = 18 }: { size?: number }) {
 }
 
 // ── Hero flame (used in the "What is a Beacon?" explainer card) ───────────
-// A *real* flame is layered. Outer cool-red tongue, inner orange body, hot
-// yellow core, white-hot hotspot near the base — each independently scaling
-// on slightly different timelines so the whole thing breathes asymmetrically
-// instead of pulsing in lockstep. Four rising embers spawn at the flame base,
-// drift upward, and fade — driven by looped translateY + opacity curves.
+// The CPO's hand-drawn hollow flame (BEACON_FLAME_HERO_PATH), filled with the
+// brand gradient, gently breathing (scaleY flicker) and swaying. A soft radial
+// halo pulses behind it and four embers rise from the fire and fade. The
+// flame's inner cutout lets the halo glow through the middle.
 const AnimatedG = Animated.createAnimatedComponent(G);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
-
-// Logo-inspired paths: asymmetric single-tongue flame with a crest curling
-// to the right (the signature "wave break" in the TribeLife mark) and a
-// detached wisp on the lower-left. Inner layers nest inside the outer and
-// shift slightly to the right so the highlight catches on one side — the
-// same directional lighting the logo has.
-const FLAME_OUTER =
-  'M 50 108 C 32 108 20 98 18 82 C 14 68 20 56 30 50 C 20 38 26 22 38 18 C 44 8 58 8 60 20 C 66 12 76 18 72 32 C 82 36 86 58 82 76 C 80 98 72 108 50 108 Z';
-const FLAME_MID =
-  'M 52 100 C 40 100 32 92 30 80 C 28 68 32 58 40 52 C 32 42 38 28 46 26 C 50 20 60 22 60 32 C 66 26 72 34 68 44 C 74 52 76 68 72 80 C 70 94 62 100 52 100 Z';
-const FLAME_INNER =
-  'M 54 92 C 46 92 42 84 42 76 C 42 66 46 58 50 52 C 46 44 50 34 56 32 C 60 30 64 34 62 42 C 66 46 68 58 66 68 C 64 84 62 92 54 92 Z';
-const FLAME_CORE =
-  'M 56 54 C 52 58 50 64 52 70 C 54 74 60 72 60 66 C 60 60 60 56 56 54 Z';
-// Detached curl on the lower-left — the distinctive flame wisp from the logo.
-const FLAME_WISP = 'M 22 82 C 12 78 10 68 16 64 C 22 68 24 76 22 82 Z';
 
 function useFlickerLoop(
   val: Animated.Value,
@@ -208,12 +196,8 @@ function useFlickerLoop(
 }
 
 function HeroFlameIcon({ size = 56 }: { size?: number }) {
-  // Each flame layer gets its own Animated.Value so they don't synchronize.
-  const outerScale = useRef(new Animated.Value(1)).current;
-  const midScale = useRef(new Animated.Value(1)).current;
-  const innerScale = useRef(new Animated.Value(1)).current;
-  const coreScale = useRef(new Animated.Value(1)).current;
-  const wispScale = useRef(new Animated.Value(1)).current;
+  // One breathing flame body (was a 4-layer composite), plus sway + halo pulse.
+  const flameScale = useRef(new Animated.Value(1)).current;
   const sway = useRef(new Animated.Value(0)).current;
   const haloPulse = useRef(new Animated.Value(0.7)).current;
 
@@ -229,12 +213,8 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
   const ember3Op = useRef(new Animated.Value(0)).current;
   const ember4Op = useRef(new Animated.Value(0)).current;
 
-  // Flame layer flickers (fast → slow as you go outward mirrors real flame)
-  useFlickerLoop(coreScale, 0.88, 1.18, 220, 0);
-  useFlickerLoop(innerScale, 0.92, 1.12, 340, 120);
-  useFlickerLoop(midScale, 0.95, 1.08, 520, 260);
-  useFlickerLoop(outerScale, 0.97, 1.05, 780, 400);
-  useFlickerLoop(wispScale, 0.8, 1.2, 620, 180);
+  // Gentle flame breathing + slow sway + halo pulse.
+  useFlickerLoop(flameScale, 0.94, 1.07, 460, 0);
   useFlickerLoop(sway, -0.06, 0.06, 1400, 0);
   useFlickerLoop(haloPulse, 0.55, 0.95, 1600, 0);
 
@@ -324,29 +304,15 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
             <Stop offset="0.6" stopColor="#F97316" stopOpacity="0.15" />
             <Stop offset="1" stopColor="#F97316" stopOpacity="0" />
           </RadialGradient>
-          <SvgLinearGradient id="flameOuter" x1="0.5" y1="0" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#F97316" stopOpacity="0.9" />
-            <Stop offset="0.6" stopColor="#EF4444" stopOpacity="0.95" />
-            <Stop offset="1" stopColor="#B91C1C" stopOpacity="0.85" />
-          </SvgLinearGradient>
-          <SvgLinearGradient id="flameMid" x1="0.5" y1="0.1" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#FDE68A" stopOpacity="0.9" />
-            <Stop offset="0.5" stopColor="#F59E0B" stopOpacity="0.98" />
-            <Stop offset="1" stopColor="#EA580C" stopOpacity="0.95" />
-          </SvgLinearGradient>
-          <SvgLinearGradient id="flameInner" x1="0.5" y1="0.2" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#FEF3C7" stopOpacity="1" />
-            <Stop offset="0.7" stopColor="#FBBF24" stopOpacity="1" />
-            <Stop offset="1" stopColor="#F59E0B" stopOpacity="0.95" />
-          </SvgLinearGradient>
-          <SvgLinearGradient id="flameCore" x1="0.5" y1="0.3" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
-            <Stop offset="0.6" stopColor="#FEF3C7" stopOpacity="1" />
-            <Stop offset="1" stopColor="#FDE68A" stopOpacity="1" />
+          <SvgLinearGradient id="beaconFlameHero" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor="#9333EA" />
+            <Stop offset="0.5" stopColor="#E879A0" />
+            <Stop offset="1" stopColor="#F59E0B" />
           </SvgLinearGradient>
         </Defs>
 
-        {/* Soft radial halo that pulses behind the flame */}
+        {/* Soft radial halo that pulses behind the flame — glows through the
+            flame's inner cutout. */}
         <AnimatedEllipse
           cx="50"
           cy="92"
@@ -356,26 +322,14 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
           opacity={haloPulse}
         />
 
-        {/* Detached wisp at the lower-left — the signature flame curl from
-            the TribeLife logo. Lives slightly behind the main body so the
-            outer flame partly overlaps it. Flickers on its own phase. */}
-        <AnimatedG originX="18" originY="80" scaleY={wispScale}>
-          <Path d={FLAME_WISP} fill="url(#flameMid)" opacity={0.9} />
-        </AnimatedG>
-
-        {/* Flame body — four layers, each flickering on its own phase.
-            scaleY origin is near the base so layers stretch upward like real fire. */}
-        <AnimatedG originX="50" originY="108" scaleY={outerScale}>
-          <Path d={FLAME_OUTER} fill="url(#flameOuter)" opacity={0.9} />
-        </AnimatedG>
-        <AnimatedG originX="52" originY="100" scaleY={midScale}>
-          <Path d={FLAME_MID} fill="url(#flameMid)" />
-        </AnimatedG>
-        <AnimatedG originX="54" originY="92" scaleY={innerScale}>
-          <Path d={FLAME_INNER} fill="url(#flameInner)" />
-        </AnimatedG>
-        <AnimatedG originX="56" originY="70" scaleY={coreScale}>
-          <Path d={FLAME_CORE} fill="url(#flameCore)" />
+        {/* Flame body — the traced hollow flame, breathing via scaleY with the
+            origin at the base so it stretches upward like real fire. */}
+        <AnimatedG originX="50" originY="118" scaleY={flameScale}>
+          <Path
+            d={BEACON_FLAME_HERO_PATH}
+            fill="url(#beaconFlameHero)"
+            fillRule="evenodd"
+          />
         </AnimatedG>
 
         {/* Embers — rise from within the fire body, fade as they climb.

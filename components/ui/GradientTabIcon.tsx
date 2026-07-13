@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgGradient, Stop, Path, Circle } from 'react-native-svg';
+import { BEACON_FLAME_PATH } from '@/constants/beaconFlame';
 
 interface GradientTabIconProps {
   focused: boolean;
@@ -210,13 +211,9 @@ function ChatPaths({ color }: { color: string }) {
 }
 
 function BeaconPaths({ color }: { color: string }) {
-  // Bold flame icon — scaled up to match chat/profile visual weight
-  return (
-    <Path
-      d="M12 0.5C5.5 8 4 11.5 4 15C4 19.7 7.58 23.5 12 23.5C16.42 23.5 20 19.7 20 15C20 11.5 18.5 8 12 0.5ZM12 20C9.79 20 8 18.25 8 16C8 14.1 9.4 11.8 12 8.5C14.6 11.8 16 14.1 16 16C16 18.25 14.21 20 12 20Z"
-      fill={color}
-    />
-  );
+  // Hollow flame traced from the CPO's hand-drawn reference. Outer silhouette
+  // plus a self-shaped inner cutout → must render with fillRule="evenodd".
+  return <Path d={BEACON_FLAME_PATH} fill={color} fillRule="evenodd" />;
 }
 
 function NewsPaths({ color }: { color: string }) {
