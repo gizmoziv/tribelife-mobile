@@ -479,6 +479,26 @@ export function MessageBubble({
     );
   }
 
+  // Deleted-for-everyone tombstone. Replaces content/media/reactions/actions
+  // with a greyed, non-interactive line. Ephemeral: on reload the row is
+  // filtered out server-side. (Cast mirrors the editedAt access below —
+  // GlobeMessage doesn't declare deletedAt but the field rides along.)
+  const isDeleted = !!(message as { deletedAt?: string | null }).deletedAt;
+  if (isDeleted) {
+    return (
+      <View style={[styles.container, isMe && styles.containerMe]}>
+        <View style={isMe ? styles.bubbleWrapMe : styles.bubbleWrap}>
+          <View style={[styles.bubble, styles.tombstone, { borderColor: colors.border }]}>
+            <Text style={[styles.tombstoneText, { color: colors.textMuted }]}>
+              {'\u{1F6AB}'}{' '}
+              {isMe ? 'You deleted this message' : 'This message was deleted'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, isMe && styles.containerMe]}>
       {/* Avatar */}
@@ -789,6 +809,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: FONTS.regular,
     lineHeight: 22,
+  },
+  // Deleted-for-everyone tombstone: outlined, no fill, italic muted text.
+  tombstone: {
+    backgroundColor: 'transparent',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  tombstoneText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    fontStyle: 'italic',
+    lineHeight: 20,
   },
   // Phase 29: timestamp + tick share one baseline row. alignItems centers the
   // ✓✓ glyph against the small time text; the row shrinks to content so own

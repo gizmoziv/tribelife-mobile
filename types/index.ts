@@ -55,6 +55,7 @@ export interface Message {
   conversationId?: number;
   createdAt: string;
   editedAt?: string | null;
+  deletedAt?: string | null; // set → render a "message deleted" tombstone
   mentions?: number[];
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;

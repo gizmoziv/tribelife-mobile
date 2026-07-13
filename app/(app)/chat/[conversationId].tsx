@@ -46,6 +46,7 @@ import {
   onTypingStop,
   onMessageRejected,
   onMessageEdited,
+  onMessageDeleted,
   onMessageDelivered,
   onMessageRead,
   onReactionUpdate,
@@ -652,6 +653,10 @@ export default function DMThreadScreen() {
       setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
     });
 
+    const offDeleted = onMessageDeleted((p) => {
+      setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, deletedAt: p.deletedAt } : m));
+    });
+
     // ── Phase 29 (RCPT-03): live receipt watermarks ──────────────────────────
     // Backend emits these ONLY to the author's user:<senderId> room, with
     // userId = the recipient/reader whose watermark advanced. A single patch
@@ -708,6 +713,7 @@ export default function DMThreadScreen() {
       offTypingStop();
       offRejected();
       offEdited();
+      offDeleted();
       offDelivered();
       offRead();
       offMediaRemoved();
@@ -874,6 +880,29 @@ export default function DMThreadScreen() {
       .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
       .catch(() => {});
   }, [selectedMessage]);
+
+  // Delete-for-everyone: confirm, optimistically tombstone, revert on failure.
+  const confirmDeleteMessage = useCallback((message: Message) => {
+    Alert.alert(
+      'Delete message',
+      'Delete this message for everyone? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const stamp = new Date().toISOString();
+            setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, deletedAt: stamp } : m)));
+            chat.deleteMessage(message.id).catch(() => {
+              setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, deletedAt: null } : m)));
+              Alert.alert('Could not delete', 'Please try again.');
+            });
+          },
+        },
+      ],
+    );
+  }, []);
 
   const handleReport = useCallback(() => {
     if (!selectedMessage) return;
@@ -1403,6 +1432,9 @@ export default function DMThreadScreen() {
           isOwn={!!user && selectedMessage?.senderId === user.id}
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }
+            : undefined}
+          onDelete={selectedMessage && !!user && selectedMessage.senderId === user.id
+            ? () => confirmDeleteMessage(selectedMessage)
             : undefined}
           onPin={(() => {
             // D-04: DM — either participant can pin. D-02: Group — admin only.

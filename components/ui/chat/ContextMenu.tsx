@@ -29,7 +29,8 @@ interface ContextMenuProps {
   onCopy?: () => void;       // optional — omitted when there's no text content to copy
   onReply?: () => void;      // optional — news feed omits Reply row (news has no reply concept)
   onEdit?: () => void;       // optional — only shown when isOwn === true
-  isOwn?: boolean;           // default false — controls Edit row visibility
+  onDelete?: () => void;     // optional — delete-for-everyone; only shown when isOwn === true
+  isOwn?: boolean;           // default false — controls Edit/Delete row visibility
   onReport?: () => void;     // optional — news feed omits Report row (Phase 3 has no article moderation; future phase extends content_type enum to include 'news' and re-enables)
   onTranslate?: () => void;  // optional — news feed omits Translate row (D-05 tile-level toggle)
   onInfo?: () => void;       // optional — own group messages: opens the read-receipt breakdown
@@ -50,6 +51,7 @@ export function ContextMenu({
   onCopy,
   onReply,
   onEdit,
+  onDelete,
   isOwn = false,
   onReport,
   onTranslate,
@@ -103,6 +105,11 @@ export function ContextMenu({
 
   const handleEdit = () => {
     onEdit?.();
+    onClose();
+  };
+
+  const handleDelete = () => {
+    onDelete?.();
     onClose();
   };
 
@@ -221,6 +228,17 @@ export function ContextMenu({
               >
                 <Text style={styles.actionIcon}>&#x270F;&#xFE0F;</Text>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Edit</Text>
+              </TouchableOpacity>
+            )}
+
+            {onDelete && isOwn && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleDelete}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.actionIcon}>&#x1F5D1;&#xFE0F;</Text>
+                <Text style={[styles.actionLabel, { color: colors.error }]}>Delete</Text>
               </TouchableOpacity>
             )}
 

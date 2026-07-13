@@ -246,6 +246,11 @@ export const chat = {
       body: JSON.stringify({ content }),
     }),
 
+  deleteMessage: (messageId: number) =>
+    request<{ ok: true }>(`/api/chat/messages/${messageId}`, {
+      method: 'DELETE',
+    }),
+
   // Phase 14 SRCH-01/02: full-text search across all chats the caller has access to.
   // Abortable via AbortController — signal is forwarded to fetch via RequestInit spread.
   // 429 responses propagate as ApiError (status=429) for the caller to surface.

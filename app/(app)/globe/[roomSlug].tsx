@@ -50,6 +50,7 @@ import {
   onGlobeAgeGated,
   onGlobeRateLimited,
   onMessageEdited,
+  onMessageDeleted,
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
@@ -563,6 +564,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       setMessages(current.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
     });
 
+    const offDeleted = onMessageDeleted((p) => {
+      const current = useGlobeStore.getState().messages;
+      setMessages(current.map((m) => m.id === p.messageId ? { ...m, deletedAt: p.deletedAt } : m));
+    });
+
     // Reconnection handler
     const socket = getSocket();
     const handleReconnect = () => {
@@ -591,6 +597,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       offMediaRemoved();
       offMediaRejected();
       offEdited();
+      offDeleted();
       socket?.off('connect', handleReconnect);
       leaveGlobeRoom(roomSlug);
       // 260621-un7: stop signaling active-viewing on blur so push/bell/unread
@@ -727,6 +734,32 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     setMenuVisible(false);
     Alert.alert('Report', 'This message has been flagged for review.');
   }, []);
+
+  // Delete-for-everyone: confirm, optimistically tombstone, revert on failure.
+  const confirmDeleteMessage = useCallback((message: Message | GlobeMessage) => {
+    Alert.alert(
+      'Delete message',
+      'Delete this message for everyone? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const apply = (deletedAt: string | null) => {
+              const current = useGlobeStore.getState().messages;
+              setMessages(current.map((m) => (m.id === message.id ? { ...m, deletedAt } : m)));
+            };
+            apply(new Date().toISOString());
+            chat.deleteMessage(message.id).catch(() => {
+              apply(null);
+              Alert.alert('Could not delete', 'Please try again.');
+            });
+          },
+        },
+      ],
+    );
+  }, [setMessages]);
 
   const handleTranslate = useCallback(() => {
     if (!selectedMessage) return;
@@ -1277,6 +1310,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           isOwn={!!user && selectedMessage?.senderId === user.id}
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }
+            : undefined}
+          onDelete={selectedMessage && !!user && selectedMessage.senderId === user.id
+            ? () => confirmDeleteMessage(selectedMessage)
             : undefined}
           onPin={
             capabilities?.isStaff === true &&

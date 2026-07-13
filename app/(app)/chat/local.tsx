@@ -43,6 +43,7 @@ import {
   onTypingStop,
   onMessageRejected,
   onMessageEdited,
+  onMessageDeleted,
   onReactionUpdate,
   onMediaRemoved,
   onMediaRejected,
@@ -440,7 +441,11 @@ export default function LocalChatScreen() {
         setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
       });
 
-      cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offEdited, offMediaRemoved, offMediaRejected);
+      const offDeleted = onMessageDeleted((p) => {
+        setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, deletedAt: p.deletedAt } : m));
+      });
+
+      cleanups.push(offRoom, offTypingStart, offTypingStop, offRejected, offEdited, offDeleted, offMediaRemoved, offMediaRejected);
     });
 
     return () => {
@@ -614,6 +619,29 @@ export default function LocalChatScreen() {
       .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
       .catch(() => {});
   }, [selectedMessage]);
+
+  // Delete-for-everyone: confirm, optimistically tombstone, revert on failure.
+  const confirmDeleteMessage = useCallback((message: Message) => {
+    Alert.alert(
+      'Delete message',
+      'Delete this message for everyone? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const stamp = new Date().toISOString();
+            setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, deletedAt: stamp } : m)));
+            chat.deleteMessage(message.id).catch(() => {
+              setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, deletedAt: null } : m)));
+              Alert.alert('Could not delete', 'Please try again.');
+            });
+          },
+        },
+      ],
+    );
+  }, []);
 
   const handleReport = useCallback(() => {
     if (!selectedMessage) return;
@@ -952,6 +980,9 @@ export default function LocalChatScreen() {
           isOwn={!!user && selectedMessage?.senderId === user.id}
           onEdit={selectedMessage && !!user && selectedMessage.senderId === user.id
             ? () => { setEditingMessage(selectedMessage); }
+            : undefined}
+          onDelete={selectedMessage && !!user && selectedMessage.senderId === user.id
+            ? () => confirmDeleteMessage(selectedMessage)
             : undefined}
           onPin={
             capabilities?.isStaff === true &&

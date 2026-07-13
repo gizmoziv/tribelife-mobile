@@ -343,6 +343,16 @@ export function onMessageEdited(cb: (data: {
   return () => socket?.off('message:edited', cb);
 }
 
+export function onMessageDeleted(cb: (data: {
+  messageId: number;
+  roomId: string | null;
+  conversationId: number | null;
+  deletedAt: string;
+}) => void): () => void {
+  socket?.on('message:deleted', cb);
+  return () => socket?.off('message:deleted', cb);
+}
+
 // ── Read receipts (Phase 29) ──────────────────────────────────────────────────
 // Cleanup-returning listeners mirroring onMessageEdited above. Field names are
 // confirmed verbatim from the Phase 28 backend (socket/receipts.ts
