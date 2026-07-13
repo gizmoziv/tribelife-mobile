@@ -113,7 +113,16 @@ export default function AppLayout() {
         .catch(() => {});
       notificationsApi
         .summary()
-        .then(setSummary)
+        .then((s) => {
+          setSummary(s);
+          // #2: imperatively reconcile the OS app-icon badge to the fresh
+          // authoritative bell total on every mount + foreground. The reactive
+          // effect below only fires when bellCount *changes* — but a push sets
+          // the OS badge while backgrounded, and on resume bellCount is often
+          // unchanged, so the badge stayed stuck until app restart. Same bell
+          // total the backend now uses for the push badge (single source of truth).
+          Notifications.setBadgeCountAsync(s.groups + s.dms + s.matches + s.system).catch(() => {});
+        })
         .catch(() => {});
     };
 

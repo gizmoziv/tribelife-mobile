@@ -158,8 +158,11 @@ export const auth = {
       body: JSON.stringify({ expoPushToken }),
     }),
 
-  deleteAccount: () =>
-    request<{ ok: boolean }>('/api/auth/account', { method: 'DELETE' }),
+  deleteAccount: (feedback?: { reason: string; otherText?: string }) =>
+    request<{ ok: boolean }>('/api/auth/account', {
+      method: 'DELETE',
+      ...(feedback ? { body: JSON.stringify(feedback) } : {}),
+    }),
 };
 
 // ── Chat ───────────────────────────────────────────────────────────────────
@@ -731,6 +734,8 @@ export type SurveyPayload = {
   survey: {
     id: number;
     questionText: string;
+    status: 'live' | 'finished' | 'archived';
+    readOnly: boolean;
     options: SurveyOption[];
     hasVoted: boolean;
     votedOptionIds: number[];

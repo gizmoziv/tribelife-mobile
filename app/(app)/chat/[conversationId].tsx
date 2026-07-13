@@ -71,6 +71,9 @@ import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
+import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
+import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
+import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import type { Message, ChatsRow, GroupMember } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
@@ -218,6 +221,8 @@ export default function DMThreadScreen() {
   // re-snap loop (which fought FlatList's windowed layout) are removed. Same
   // fix already shipped for Globe (ISSUE-8) and the timezone room (chat/local).
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  // Viber-style floating sticky date header (fades in on scroll, out after ~1.5s).
+  const stickyDate = useStickyChatDate();
   // Phase 29: live subscription to THIS conversation's receipt slice so the
   // breakdown sheet's per-member counts re-render as watermarks advance.
   const conversationReceipts = useReceiptsStore(
@@ -1075,7 +1080,7 @@ export default function DMThreadScreen() {
   const noopLongPress = useCallback(() => {}, []);
   const noopReactionToggle = useCallback(() => {}, []);
 
-  const renderMessage = useCallback(({ item }: { item: Message }) => {
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isMe = item.senderId === user?.id;
     // Phase 29: the per-bubble tick ladder (single=sent, grey ✓✓=delivered to
     // all, accent ✓✓=read by all) renders on ALL own bubbles via MessageBubble.
@@ -1115,15 +1120,29 @@ export default function DMThreadScreen() {
         {bubble}
       </Animated.View>
     ) : bubble;
-    if (isReadOnlyPreview) return wrappedBubble;
-    return (
+    const body = isReadOnlyPreview ? wrappedBubble : (
       <SwipeableMessage onSwipeComplete={() => {
         setReplyTo({ id: item.id, senderHandle: item.senderHandle ?? 'user', content: item.content });
       }}>
         {wrappedBubble}
       </SwipeableMessage>
     );
-  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors, conversationId, otherUserIds]);
+    // Inverted FlatList: within a cell the transform flips child order, so the
+    // separator must be placed AFTER the bubble to render ABOVE the message (the
+    // visual top of this calendar day's group). Placing it before rendered it
+    // BELOW the day's first message (date appeared after the cluster, not before).
+    // The older neighbour (message rendered visually above this one) is
+    // reversedMessages[index + 1] — higher index = older.
+    const olderNeighbor = reversedMessages[index + 1];
+    return (
+      <>
+        {body}
+        {needsSeparatorAbove(item, olderNeighbor) && (
+          <ChatDateSeparator label={formatChatDateLabel(item.createdAt)} />
+        )}
+      </>
+    );
+  }, [user?.id, handleLongPress, handleReactionToggle, translations, highlightedId, scrollToMessage, isReadOnlyPreview, isGroup, noopLongPress, noopReactionToggle, flashHighlightedId, highlightAnim, colors, conversationId, otherUserIds, reversedMessages]);
 
   if (isLoading) {
     return (
@@ -1211,6 +1230,8 @@ export default function DMThreadScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
+          onViewableItemsChanged={stickyDate.onViewableItemsChanged}
+          viewabilityConfig={stickyDate.viewabilityConfig}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
@@ -1231,6 +1252,16 @@ export default function DMThreadScreen() {
             }, 200);
           }}
         />
+
+        {/* Floating sticky date pill — sibling overlay OUTSIDE the inverted
+            FlatList transform so it is not mirrored. Transient: fades in while
+            scrolling, out ~1.5s after scroll stops. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.stickyDateOverlay, { opacity: stickyDate.opacity }]}
+        >
+          <ChatDateSeparator label={stickyDate.label} />
+        </Animated.View>
 
         {typingText && (
           <View style={styles.typingContainer}>
@@ -1534,6 +1565,14 @@ const styles = StyleSheet.create({
   },
   messageListFill: { flex: 1 },
   messageList: { paddingHorizontal: 12, paddingVertical: 12 },
+  stickyDateOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 20,
+  },
   loadingOlder: { paddingVertical: 12, alignItems: 'center' },
   typingContainer: {
     paddingHorizontal: SPACING.page,

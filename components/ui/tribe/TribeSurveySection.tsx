@@ -1,10 +1,11 @@
 // TribeSurveySection — Community survey below the News carousel (Plan 19-03).
 //
-// Four state branches:
+// Five state branches:
 //   1. loading     — skeleton ActivityIndicator under "Coming Soon" title
 //   2. error / no active survey — neutral "More coming soon" placeholder (D-10, R7)
-//   3. votable     — 2×2 flexWrap chip grid, inline Other TextInput, explicit Submit (D-04–D-06)
-//   4. voted       — read-only horizontal % bar results + "Your vote" highlight (D-07–D-09)
+//   3. finished    — read-only final % results shown to EVERYONE + "Voting closed" (status='finished')
+//   4. votable     — 2×2 flexWrap chip grid, inline Other TextInput, explicit Submit (D-04–D-06)
+//   5. voted       — read-only horizontal % bar results + "Your vote" highlight (D-07–D-09)
 //
 // On successful vote the component re-fetches so hasVoted flips server-side.
 // A 409 ("Already voted" or "No active survey") is treated as already-voted → re-fetch.
@@ -126,6 +127,69 @@ export function TribeSurveySection() {
   }
 
   const { survey } = data;
+
+  // ── Finished — read-only final results shown to EVERYONE (incl. non-voters) ─
+  // Voting is closed server-side (status === 'finished' → readOnly). No vote
+  // interaction is rendered; results + percentages are visible to all.
+
+  if (survey.readOnly) {
+    const totalVotes = survey.options.reduce((sum, o) => sum + o.count, 0);
+
+    return (
+      <View style={styles.section}>
+        <Text style={[styles.title, { color: colors.text }]}>
+          {survey.questionText}
+        </Text>
+        <View style={styles.content}>
+          <Text style={[styles.votingClosed, { color: colors.textMuted }]}>
+            Voting closed
+          </Text>
+          {survey.options.map(option => {
+            const pct = totalVotes > 0
+              ? Math.round((option.count / totalVotes) * 100)
+              : 0;
+            const isOwn = survey.votedOptionIds.includes(option.id);
+            return (
+              <View key={option.id} style={styles.barRow}>
+                <View style={styles.barLabelRow}>
+                  <Text
+                    style={[
+                      styles.barLabel,
+                      { color: isOwn ? COLORS.primary : colors.text },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {option.label}
+                  </Text>
+                  {isOwn && (
+                    <View style={[styles.yourVoteTag, { backgroundColor: COLORS.primaryGlow }]}>
+                      <Text style={[styles.yourVoteText, { color: COLORS.primary }]}>
+                        Your vote
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={[styles.barTrack, { backgroundColor: colors.surface }]}>
+                  <View
+                    style={[
+                      styles.barFill,
+                      {
+                        width: `${pct}%` as `${number}%`,
+                        backgroundColor: isOwn ? COLORS.primary : colors.textMuted,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.barPct, { color: colors.textMuted }]}>
+                  {pct}%
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
 
   // ── Voted — read-only results (D-07/D-08/D-09) ────────────────────────────
 
@@ -391,6 +455,11 @@ const styles = StyleSheet.create({
   resultsSubtext: {
     fontFamily: FONTS.regular,
     fontSize: 13,
+    marginBottom: 4,
+  },
+  votingClosed: {
+    fontFamily: FONTS.medium,
+    fontSize: 12,
     marginBottom: 4,
   },
   barRow: {

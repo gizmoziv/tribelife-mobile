@@ -8,8 +8,44 @@ import { useChatsStore } from '@/store/chatsStore';
 let socket: Socket | null = null;
 let connecting: Promise<Socket | null> | null = null;
 
+// ── Active-viewing re-assertion state (in-room push / read-receipt leak fix) ──
+// The backend tracks, per socket, which room the device is viewing
+// (activeRoomKey) and whether the app is foregrounded (isForeground). Both get
+// reset out from under us two ways: an app background→foreground cycle
+// (app:background nulls activeRoomKey; app:foreground only restores isForeground)
+// and a socket RECONNECT (a fresh server socket starts activeRoomKey=null,
+// isForeground=true). The chat screens only emit viewing:set on mount, so after
+// either event the gate stayed isForeground:true + activeRoomKey:null →
+// viewing:false → in-room pushes leaked AND read receipts didn't register, until
+// the user navigated away and back. We track the intent here and RE-ASSERT it on
+// foreground + on every (re)connect. (Root-caused 2026-07-13 via DEBUG_ACTIVE_VIEWING:
+// same conversation, one user activeRoomKey:conversation:N/viewing:true throughout,
+// the leaking user activeRoomKey:null despite isForeground:true + socketCount:1.)
+let currentViewingKey: string | null = null;
+let appForeground = true;
+
+function reassertViewingState(sock: Socket | null): void {
+  if (!sock) return;
+  sock.emit(appForeground ? 'app:foreground' : 'app:background');
+  if (appForeground && currentViewingKey) {
+    sock.emit('viewing:set', { roomKey: currentViewingKey });
+  }
+}
+
 export async function connectSocket(): Promise<Socket | null> {
-  if (socket?.connected) return socket;
+  // Exactly ONE client instance, ever. If we already have one, reuse it —
+  // reconnecting the SAME instance if it dropped. The old `socket?.connected`
+  // check created a SECOND io() during the connect-handshake window (io() returns
+  // before 'connect' fires, so `socket` exists but `.connected` is still false and
+  // `connecting` has already resolved) — and there are ~7 mount-time callers that
+  // fire on launch. Each extra instance has reconnection:true, holds its own
+  // server socket, and orphans the listeners screens registered on the first
+  // instance → the multi-socket / stale-activeRoomKey leak (a device had 3 sockets,
+  // only one carrying the right activeRoomKey → in-room push leak + no read receipt).
+  if (socket) {
+    if (!socket.connected) socket.connect();
+    return socket;
+  }
   if (connecting) return connecting;
 
   connecting = (async () => {
@@ -36,6 +72,11 @@ export async function connectSocket(): Promise<Socket | null> {
       // overlap into a single fetch — cannot double-count (RESEARCH Pitfall 5).
       // Foreground half (AppState active) is already wired in app/_layout.tsx.
       useChatsStore.getState().hydrate();
+      // A fresh server socket starts activeRoomKey=null/isForeground=true, so
+      // re-assert what this device is actually viewing — otherwise the in-room
+      // push/read-receipt gate stays wrong after a reconnect until the user
+      // leaves + re-enters the screen.
+      reassertViewingState(s);
     });
 
     s.on('disconnect', (reason) => {
@@ -160,19 +201,28 @@ export function sendDmVoice(
 //   Local Chat / Globe room → `globe:<slug>`  (timezone/local MUST normalize to
 //   globe:<slug>, NOT timezone:<slug>, so a zone has one viewing identity).
 export function setViewing(roomKey: string): void {
+  currentViewingKey = roomKey;
   socket?.emit('viewing:set', { roomKey });
 }
 
 export function clearViewing(): void {
+  currentViewingKey = null;
   socket?.emit('viewing:clear');
 }
 
 export function emitForeground(): void {
+  appForeground = true;
   socket?.emit('app:foreground');
+  // app:background nulled activeRoomKey on the backend and app:foreground only
+  // restores isForeground — re-assert the room being viewed so the gate resumes
+  // suppressing in-room push/read-receipt for the screen still on top.
+  if (currentViewingKey) socket?.emit('viewing:set', { roomKey: currentViewingKey });
 }
 
 export function emitBackground(): void {
+  appForeground = false;
   socket?.emit('app:background');
+  // Keep currentViewingKey — the screen stays mounted; re-asserted on foreground.
 }
 
 /**

@@ -70,6 +70,9 @@ import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
+import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
+import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
+import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { Message, GlobeMessage } from '@/types';
 import Svg, { Path } from 'react-native-svg';
@@ -191,6 +194,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   // Reversed copy of messages for inverted FlatList — newest message is at
   // visual bottom (index 0 of inverted list = last chronological message).
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  // Viber-style floating sticky date header (fades in on scroll, out after ~1.5s).
+  const stickyDate = useStickyChatDate();
   // Pass reversedMessages so scrollToIndex targets the correct inverted index.
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -909,7 +914,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
 
   // ── Render message ──────────────────────────────────────────────────────
   const renderMessage = useCallback(
-    ({ item }: { item: GlobeMessage }) => {
+    ({ item, index }: { item: GlobeMessage; index: number }) => {
       const isMe = item.senderId === user?.id;
       const isFlash = item.id === flashHighlightedId;
       const bubble = (
@@ -933,23 +938,32 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           />
         </SwipeableMessage>
       );
-      if (isFlash) {
-        return (
-          <Animated.View
-            style={{
-              backgroundColor: highlightAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [colors.background, colors.accentSoft ?? colors.primaryGlow],
-              }),
-            }}
-          >
-            {bubble}
-          </Animated.View>
-        );
-      }
-      return bubble;
+      const body = isFlash ? (
+        <Animated.View
+          style={{
+            backgroundColor: highlightAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [colors.background, colors.accentSoft ?? colors.primaryGlow],
+            }),
+          }}
+        >
+          {bubble}
+        </Animated.View>
+      ) : bubble;
+      // Inverted list: cell content renders top→bottom visually, so the separator
+      // BEFORE the bubble sits ABOVE the message (visual top of this day's group).
+      // Older neighbour = reversedMessages[index + 1] (higher index = older).
+      const olderNeighbor = reversedMessages[index + 1];
+      return (
+        <>
+          {body}
+          {needsSeparatorAbove(item, olderNeighbor) && (
+            <ChatDateSeparator label={formatChatDateLabel(item.createdAt)} />
+          )}
+        </>
+      );
     },
-    [user?.id, flashHighlightedId, effectiveIsMember, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage, highlightAnim, colors],
+    [user?.id, flashHighlightedId, effectiveIsMember, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage, highlightAnim, colors, reversedMessages],
   );
 
   // ── Typing indicator display ────────────────────────────────────────────
@@ -1061,6 +1075,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
           scrollEventThrottle={16}
+          onViewableItemsChanged={stickyDate.onViewableItemsChanged}
+          viewabilityConfig={stickyDate.viewabilityConfig}
           onEndReached={handleLoadMore}
           onScrollToIndexFailed={(info) => {
             // Approximate scroll first to bring the target into the
@@ -1081,6 +1097,16 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
             ) : null
           }
         />
+
+        {/* Floating sticky date pill — sibling overlay OUTSIDE the inverted
+            FlatList transform so it is not mirrored. Transient: fades in while
+            scrolling, out ~1.5s after scroll stops. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.stickyDateOverlay, { opacity: stickyDate.opacity }]}
+        >
+          <ChatDateSeparator label={stickyDate.label} />
+        </Animated.View>
 
         {/* Scroll-to-bottom pill */}
         {!isAtBottom && newMessageCount > 0 && (
@@ -1435,6 +1461,14 @@ const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  stickyDateOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 20,
   },
   // Scroll-to-bottom pill
   scrollPillWrapper: {

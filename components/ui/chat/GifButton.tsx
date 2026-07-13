@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 import {
   GiphyDialog,
@@ -37,28 +38,37 @@ export function GifButton({ onGifSelected, disabled }: GifButtonProps) {
   const onGifSelectedRef = useRef(onGifSelected);
   onGifSelectedRef.current = onGifSelected;
 
-  useEffect(() => {
-    if (!isGiphyConfigured) return;
+  // Scope the Giphy listener to THIS screen's focus. GiphyDialog is a GLOBAL
+  // singleton, so a listener registered on mount stays live while the screen sits
+  // mounted-but-unfocused UNDERNEATH a pushed route (Expo Router keeps it mounted).
+  // Selecting a GIF then fired EVERY mounted GifButton's listener at once, so the
+  // gif posted to every open chat (repro: open a group → tap a name → 1:1 → send a
+  // GIF → it also posted back in the group, same timestamp). Binding to focus —
+  // add on focus, remove on blur — guarantees only the visible screen's listener runs.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isGiphyConfigured) return;
 
-    // pg rating per locked decision; GIF-focused content (search + trending).
-    GiphyDialog.configure({
-      rating: GiphyRating.PG,
-      mediaTypeConfig: [GiphyContentType.Gif],
-    });
+      // pg rating per locked decision; GIF-focused content (search + trending).
+      GiphyDialog.configure({
+        rating: GiphyRating.PG,
+        mediaTypeConfig: [GiphyContentType.Gif],
+      });
 
-    const sub = GiphyDialog.addListener(
-      GiphyDialogEvent.MediaSelected,
-      (e: { media: GiphyMedia }) => {
-        const url = giphyCdnUrl(e.media);
-        GiphyDialog.hide();
-        onGifSelectedRef.current(url);
-      },
-    );
+      const sub = GiphyDialog.addListener(
+        GiphyDialogEvent.MediaSelected,
+        (e: { media: GiphyMedia }) => {
+          const url = giphyCdnUrl(e.media);
+          GiphyDialog.hide();
+          onGifSelectedRef.current(url);
+        },
+      );
 
-    return () => {
-      sub.remove();
-    };
-  }, []);
+      return () => {
+        sub.remove();
+      };
+    }, []),
+  );
 
   if (!isGiphyConfigured) return null;
 

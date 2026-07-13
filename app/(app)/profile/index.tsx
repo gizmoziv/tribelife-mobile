@@ -61,6 +61,7 @@ import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { OrgCard } from '@/components/ui/OrgCard';
+import { DeleteAccountSurveyModal } from '@/components/ui/profile/DeleteAccountSurveyModal';
 import Svg, { Path, Circle } from 'react-native-svg';
 
 function ChevronIcon({ color }: { color: string }) {
@@ -102,6 +103,11 @@ export default function ProfileScreen() {
   const tabBarSpace = useTabBarSpace();
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  // Imperative re-entry guard — bulletproof against a same-frame double-tap
+  // (Submit-then-Skip before setDeletingAccount re-renders the disabled props).
+  const deletingRef = useRef(false);
   const [referralCount, setReferralCount] = useState(0);
   const [premiumMonthsEarned, setPremiumMonthsEarned] = useState(0);
   const [funnelData, setFunnelData] = useState<{
@@ -526,49 +532,35 @@ export default function ProfileScreen() {
     ]);
   };
 
+  // The custom survey modal IS the confirmation (it carries the permanent /
+  // cannot-be-undone warning), so this just opens it — no pre-Alert.
   const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all your data. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Are you sure?',
-              'All your conversations, beacons, and profile data will be permanently removed.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      try {
-                        await Purchases.logOut();
-                      } catch {
-                        /* ignore if not logged in */
-                      }
-                      await auth.deleteAccount();
-                      disconnectSocket();
-                      await logout();
-                      router.replace('/(auth)/welcome');
-                    } catch {
-                      Alert.alert(
-                        'Error',
-                        'Failed to delete account. Please try again.',
-                      );
-                    }
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
+    setDeleteModalVisible(true);
+  };
+
+  // Actual deletion. Feedback is optional and best-effort; deletion always runs.
+  const performDeletion = async (feedback?: {
+    reason: string;
+    otherText?: string;
+  }) => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    setDeletingAccount(true);
+    try {
+      try {
+        await Purchases.logOut();
+      } catch {
+        /* ignore if not logged in */
+      }
+      await auth.deleteAccount(feedback);
+      disconnectSocket();
+      await logout();
+      router.replace('/(auth)/welcome');
+    } catch {
+      deletingRef.current = false;
+      setDeletingAccount(false);
+      Alert.alert('Error', 'Failed to delete account. Please try again.');
+    }
   };
 
   const handleUpgrade = async () => {
@@ -1721,6 +1713,14 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <DeleteAccountSurveyModal
+        visible={deleteModalVisible}
+        onClose={() => setDeleteModalVisible(false)}
+        onSkipAndDelete={() => performDeletion()}
+        onSubmitAndDelete={(fb) => performDeletion(fb)}
+        deleting={deletingAccount}
+      />
     </SafeAreaView>
   );
 }

@@ -65,6 +65,9 @@ import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
+import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
+import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
+import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { getZoneForTimezone } from '@/utils/timezoneZones';
 import type { Message } from '@/types';
@@ -175,6 +178,8 @@ export default function LocalChatScreen() {
   // re-snap loop (which fought FlatList's windowed layout) are removed. Same
   // fix already shipped for the Globe/Town Square screen (ISSUE-8, 45ea975).
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
+  // Viber-style floating sticky date header (fades in on scroll, out after ~1.5s).
+  const stickyDate = useStickyChatDate();
   const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -751,7 +756,7 @@ export default function LocalChatScreen() {
       .finally(() => setLoadingOlder(false));
   }, [hasMore, loadingOlder, messages, roomId]);
 
-  const renderMessage = useCallback(({ item }: { item: Message }) => {
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isMe = item.senderId === user?.id;
     const isFlash = item.id === flashHighlightedId;
     const bubble = (
@@ -772,22 +777,31 @@ export default function LocalChatScreen() {
         />
       </SwipeableMessage>
     );
-    if (isFlash) {
-      return (
-        <Animated.View
-          style={{
-            backgroundColor: highlightAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [colors.background, colors.accentSoft ?? colors.primaryGlow],
-            }),
-          }}
-        >
-          {bubble}
-        </Animated.View>
-      );
-    }
-    return bubble;
-  }, [user?.id, flashHighlightedId, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage, highlightAnim, colors]);
+    const body = isFlash ? (
+      <Animated.View
+        style={{
+          backgroundColor: highlightAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [colors.background, colors.accentSoft ?? colors.primaryGlow],
+          }),
+        }}
+      >
+        {bubble}
+      </Animated.View>
+    ) : bubble;
+    // Inverted list: cell content renders top→bottom visually, so the separator
+    // BEFORE the bubble sits ABOVE the message (visual top of this day's group).
+    // Older neighbour = reversedMessages[index + 1] (higher index = older).
+    const olderNeighbor = reversedMessages[index + 1];
+    return (
+      <>
+        {body}
+        {needsSeparatorAbove(item, olderNeighbor) && (
+          <ChatDateSeparator label={formatChatDateLabel(item.createdAt)} />
+        )}
+      </>
+    );
+  }, [user?.id, flashHighlightedId, handleLongPress, handleReactionToggle, translations, router, highlightedId, scrollToMessage, highlightAnim, colors, reversedMessages]);
 
   if (isLoading) {
     return (
@@ -843,6 +857,8 @@ export default function LocalChatScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
+          onViewableItemsChanged={stickyDate.onViewableItemsChanged}
+          viewabilityConfig={stickyDate.viewabilityConfig}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
@@ -863,6 +879,16 @@ export default function LocalChatScreen() {
             }, 200);
           }}
         />
+
+        {/* Floating sticky date pill — sibling overlay OUTSIDE the inverted
+            FlatList transform so it is not mirrored. Transient: fades in while
+            scrolling, out ~1.5s after scroll stops. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.stickyDateOverlay, { opacity: stickyDate.opacity }]}
+        >
+          <ChatDateSeparator label={stickyDate.label} />
+        </Animated.View>
 
         {typingUsers.length > 0 && (
           <TypingIndicator users={typingUsers} />
@@ -1198,6 +1224,14 @@ const styles = StyleSheet.create({
   },
   messageList: { paddingHorizontal: 12, paddingVertical: 8 },
   loadingOlder: { paddingVertical: 12, alignItems: 'center' },
+  stickyDateOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 20,
+  },
   typingContainer: {
     paddingHorizontal: SPACING.page,
     paddingBottom: 4,

@@ -157,6 +157,25 @@ if (giphyKey) {
   GiphySDK.configure({ apiKey: giphyKey });
 }
 
+// ── Coalesced bell-summary refresh (Phase 1 #B) ─────────────────────────────
+// Rapid socket notification events (a busy room, a reconnect back-fill) would
+// otherwise each fire notificationsApi.summary(), tripping the backend's
+// 120 req/min limit (the /summary 429 bursts). A trailing debounce collapses a
+// burst into ONE authoritative refetch — the summary is idempotent, so only the
+// last value matters. The mount/foreground refetch in (app)/_layout.tsx is
+// unaffected (it's not bursty and stays immediate).
+let summaryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+function refreshBellSummarySoon(): void {
+  if (summaryRefreshTimer) clearTimeout(summaryRefreshTimer);
+  summaryRefreshTimer = setTimeout(() => {
+    summaryRefreshTimer = null;
+    notificationsApi
+      .summary()
+      .then((s) => useNotificationStore.getState().setSummary(s))
+      .catch(() => {});
+  }, 800);
+}
+
 function RootLayoutInner() {
   const { isDark } = useTheme();
   const { token, user, setAuth, setLoading } = useAuthStore();
@@ -246,10 +265,7 @@ function RootLayoutInner() {
           // rolling deploy. Adapt + feed useChatsStore so Chats badges stay correct.
           const cleanup = onNotification((raw) => {
             incrementUnread();
-            notificationsApi
-              .summary()
-              .then((s) => useNotificationStore.getState().setSummary(s))
-              .catch(() => {});
+            refreshBellSummarySoon();
             const adapted = adaptChatNotification(raw);
             if (adapted) {
               useChatsStore.getState().applyChatNotification(adapted);
@@ -263,10 +279,7 @@ function RootLayoutInner() {
             if (adapted) {
               useChatsStore.getState().applyChatNotification(adapted);
             }
-            notificationsApi
-              .summary()
-              .then((s) => useNotificationStore.getState().setSummary(s))
-              .catch(() => {});
+            refreshBellSummarySoon();
           });
 
           // Phase 10 D-09: per-source message events drive `lastMessage` updates
@@ -391,7 +404,11 @@ function RootLayoutInner() {
         }
       });
     }
-  }, [token, user]);
+    // Depend on user?.id (identity), NOT the whole user object: refreshSession()
+    // mints a new `user` reference on every foreground, which would otherwise
+    // re-run push registration each time. Registration only needs to run when the
+    // authenticated identity actually changes (login/logout).
+  }, [token, user?.id]);
 
   // ── RevenueCat user identification ───────────────────────────────────────
   // Tag future purchases with the real numeric user id so the backend webhook
