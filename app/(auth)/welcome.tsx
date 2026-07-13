@@ -17,6 +17,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/contexts/ThemeContext';
 import { auth } from '@/services/api';
 import { getPostLoginLandingRoute } from '@/services/notificationRouting';
 import { FONTS, COLORS, SPACING, SHADOWS, RADIUS } from '@/constants';
@@ -96,6 +97,7 @@ export default function WelcomeScreen() {
   const params = useLocalSearchParams<{ redirect?: string }>();
   const redirectTarget = sanitizeRedirect(params.redirect);
   const { setAuth } = useAuthStore();
+  const { setThemePreference } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [appleAvailable, setAppleAvailable] = useState(false);
@@ -124,9 +126,14 @@ export default function WelcomeScreen() {
         throw new Error('No ID token received from Google');
       }
 
-      const { token, user, needsOnboarding, capabilities } =
+      const { token, user, needsOnboarding, capabilities, isNewUser } =
         await auth.googleSignIn(idToken);
       await setAuth(token, user, capabilities, needsOnboarding);
+
+      // First-time accounts default to the dark theme (existing users and
+      // anyone with a stored preference are unaffected). Persist + apply live
+      // so it takes effect this session, not only after the next launch.
+      if (isNewUser) await setThemePreference('dark');
 
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding'); // onboarding always wins
@@ -179,13 +186,18 @@ export default function WelcomeScreen() {
         throw new Error('No identity token received from Apple');
       }
 
-      const { token, user, needsOnboarding, capabilities } =
+      const { token, user, needsOnboarding, capabilities, isNewUser } =
         await auth.appleSignIn(
           credential.identityToken,
           credential.fullName,
           credential.email,
         );
       await setAuth(token, user, capabilities, needsOnboarding);
+
+      // First-time accounts default to the dark theme (existing users and
+      // anyone with a stored preference are unaffected). Persist + apply live
+      // so it takes effect this session, not only after the next launch.
+      if (isNewUser) await setThemePreference('dark');
 
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding'); // onboarding always wins

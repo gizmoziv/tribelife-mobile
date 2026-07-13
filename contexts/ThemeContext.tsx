@@ -29,6 +29,7 @@ interface ThemeContextValue {
   theme: Theme;
   isDark: boolean;
   toggleTheme: () => void;
+  setThemePreference: (next: Theme) => Promise<void>;
   colors: ThemeColors;
 }
 
@@ -86,10 +87,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const toggleTheme = async () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
+  const setThemePreference = async (next: Theme) => {
     setTheme(next);
     await AsyncStorage.setItem(THEME_KEY, next);
+  };
+
+  const toggleTheme = () => {
+    void setThemePreference(theme === 'dark' ? 'light' : 'dark');
   };
 
   return (
@@ -98,6 +102,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         theme,
         isDark: theme === 'dark',
         toggleTheme,
+        setThemePreference,
         colors: theme === 'dark' ? darkColors : lightColors,
       }}
     >
