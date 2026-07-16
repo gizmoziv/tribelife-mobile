@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '@/constants';
 import { getToken } from './api';
-import type { Message } from '@/types';
+import type { Message, MessageAttachment } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useChatsStore } from '@/store/chatsStore';
 
@@ -140,8 +140,18 @@ export function getSocket(): Socket | null {
 }
 
 // ── Room (location-based) chat ─────────────────────────────────────────────
-export function sendRoomMessage(content: string, replyToId?: number, mediaUrls?: string[]): void {
-  socket?.emit('room:message', { content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
+export function sendRoomMessage(
+  content: string,
+  replyToId?: number,
+  mediaUrls?: string[],
+  attachments?: MessageAttachment[],
+): void {
+  socket?.emit('room:message', {
+    content,
+    replyToId,
+    ...(mediaUrls?.length ? { mediaUrls } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+  });
 }
 
 // Voice in the user's timezone room. The room is derived server-side from the
@@ -170,8 +180,20 @@ export function leaveConversation(conversationId: number): void {
   socket?.emit('dm:leave', { conversationId });
 }
 
-export function sendDirectMessage(conversationId: number, content: string, replyToId?: number, mediaUrls?: string[]): void {
-  socket?.emit('dm:message', { conversationId, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
+export function sendDirectMessage(
+  conversationId: number,
+  content: string,
+  replyToId?: number,
+  mediaUrls?: string[],
+  attachments?: MessageAttachment[],
+): void {
+  socket?.emit('dm:message', {
+    conversationId,
+    content,
+    replyToId,
+    ...(mediaUrls?.length ? { mediaUrls } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+  });
 }
 
 // Voice in a 1:1 or group DM. Broadcasts back on the existing dm:message event
@@ -402,8 +424,20 @@ export function leaveGlobeRoom(slug: string): void {
   socket?.emit('globe:leave', { slug });
 }
 
-export function sendGlobeMessage(slug: string, content: string, replyToId?: number, mediaUrls?: string[]): void {
-  socket?.emit('globe:message', { slug, content, replyToId, ...(mediaUrls?.length ? { mediaUrls } : {}) });
+export function sendGlobeMessage(
+  slug: string,
+  content: string,
+  replyToId?: number,
+  mediaUrls?: string[],
+  attachments?: MessageAttachment[],
+): void {
+  socket?.emit('globe:message', {
+    slug,
+    content,
+    replyToId,
+    ...(mediaUrls?.length ? { mediaUrls } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+  });
 }
 
 // Voice in a globe room. `slug` is the route-param slug (e.g. 'town-square',

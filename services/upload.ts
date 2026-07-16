@@ -205,3 +205,70 @@ export async function confirmMediaUpload(keys: string[]): Promise<{ confirmed: b
   if (!res.ok) throw new Error(`Media upload confirmation failed: ${res.statusText}`);
   return res.json();
 }
+
+// ── Document Upload Flow (Phase 30/31: PDF attachments) ─────────────────────
+// Mirrors the media trio above, but skips manipulateAsync/compression entirely
+// (D-02) — PDFs upload byte-for-byte — and hardcodes Content-Type: application/pdf
+// (never image/jpeg, and never read from blob.type which is unreliable on Android).
+
+/** Step 1: Request a pre-signed upload URL for a PDF document */
+export async function requestDocUploadUrl(filename: string): Promise<{
+  uploadUrl: string;
+  key: string;
+  cdnUrl: string;
+}> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/doc-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ filename }),
+  });
+
+  if (!res.ok) {
+    if (res.status === 429) throw new Error('Upload rate limit exceeded. Try again later.');
+    throw new Error(`Failed to get upload URL: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+/** Step 2: Upload the raw PDF blob directly to DO Spaces via pre-signed URL — no compression/re-encode */
+export async function uploadDocToSpaces(uploadUrl: string, fileUri: string): Promise<void> {
+  // Read file as blob via fetch (works reliably in RN for local file:// URIs).
+  const response = await fetch(fileUri);
+  const blob = await response.blob();
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    headers: {
+      'Content-Type': 'application/pdf',
+    },
+  });
+
+  if (!uploadRes.ok) {
+    const text = await uploadRes.text().catch(() => '');
+    throw new Error(`Upload failed: ${uploadRes.status} ${text}`);
+  }
+}
+
+/** Step 3: Confirm the doc upload — server HeadObjects (25MB/PDF gate) and sets ACL to public-read */
+export async function confirmDocUpload(key: string): Promise<{ cdnUrl: string }> {
+  const token = await getToken();
+
+  const res = await fetch(`${API_URL}/api/upload/doc-confirm`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ key }),
+  });
+
+  if (!res.ok) throw new Error(`Document confirmation failed: ${res.statusText}`);
+  return res.json();
+}
