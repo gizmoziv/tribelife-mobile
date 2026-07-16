@@ -138,6 +138,8 @@
           "microphonePermission": "TribeLife needs access to your microphone to send voice messages."
         }
       ],
+      "@config-plugins/react-native-pdf",
+      "@config-plugins/react-native-blob-util",
       "@bacons/apple-targets",
       "./plugins/withoutMediaPlaybackPermission",
       "./plugins/withCommunicationNotifications"

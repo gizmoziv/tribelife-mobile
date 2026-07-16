@@ -44,6 +44,19 @@ export interface ReplyTo {
   voiceDurationMs?: number | null;
 }
 
+// ── Phase 30/31: Document attachments (PDF) ─────────────────────────────────
+// Mirrors the backend field contract verbatim (tribelife-backend/src/db/schema.ts
+// MessageAttachment + .planning/phases/30-document-attachments-backend/30-01-PLAN.md
+// field_contract_for_downstream_plans). Persisted in `messages.attachments`, sent
+// in socket payloads, returned in history reads. Array length 1 in practice (one
+// PDF per message) but the type tolerates more.
+export interface MessageAttachment {
+  url: string;
+  name: string;
+  size: number;
+  type: 'pdf';
+}
+
 export interface Message {
   id: number;
   content: string;
@@ -68,6 +81,10 @@ export interface Message {
   voiceWaveform?: number[] | null;
   voiceTranscript?: string | null;
   kind?: 'user' | 'system';
+  // Document attachment fields (additive, nullable — Phase 30/31). Present when
+  // the message carries a PDF; server sets a readable fallback `content` line
+  // for old clients when this is set (Phase 30 D-06/D-07).
+  attachments?: MessageAttachment[] | null;
 }
 
 export interface Conversation {
@@ -229,6 +246,8 @@ export interface GlobeMessage {
   voiceWaveform?: number[] | null;
   voiceTranscript?: string | null;
   kind?: 'user' | 'system';
+  // Document attachment fields (additive, nullable — Phase 30/31). Mirrors Message.attachments.
+  attachments?: MessageAttachment[] | null;
 }
 
 // ── News ─────────────────────────────────────────────────────────────────────
