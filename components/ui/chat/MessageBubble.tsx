@@ -18,6 +18,7 @@ import { YouTubeCard } from '@/components/ui/chat/YouTubeCard';
 import { LinkPreviewCard } from '@/components/ui/chat/LinkPreviewCard';
 import { YouTubePlayerModal } from '@/components/ui/chat/YouTubePlayerModal';
 import { VoicePlayerBubble } from '@/components/ui/chat/VoicePlayerBubble';
+import { DocumentCard } from '@/components/ui/chat/DocumentCard';
 import { extractYouTubeIds } from '@/utils/youtube';
 import { VOICE_FALLBACK_STRING, formatDuration } from '@/constants/voice';
 import type { Message, GlobeMessage, ReplyTo } from '@/types';
@@ -224,7 +225,14 @@ export function MessageBubble({
 
   const mediaUrls = message.mediaUrls;
   const hasMedia = mediaUrls && mediaUrls.length > 0;
-  const isEmpty = !message.content && !hasMedia && !message.voiceUrl;
+  // Document attachment (Phase 31, D-03/D-06/DOC-11/DOC-14): a document
+  // message is standalone (Phase 30 sends it with only the fallback content,
+  // never mediaUrls) so hasAttachment and hasMedia are mutually exclusive in
+  // practice — checked FIRST below to be defensive and match the backend's
+  // own precedence.
+  const attachment = message.attachments?.[0] ?? null;
+  const hasAttachment = !!attachment;
+  const isEmpty = !message.content && !hasMedia && !message.voiceUrl && !hasAttachment;
   const BUBBLE_WIDTH = 260;
 
   // Partition media into GIFs (dedicated expo-image path) and photos (existing
@@ -556,7 +564,9 @@ export function MessageBubble({
                   </View>
                 </Pressable>
               )}
-              {isVoice ? (
+              {attachment ? (
+                <DocumentCard attachment={attachment} isMe />
+              ) : isVoice ? (
                 <VoicePlayerBubble
                   voiceUrl={message.voiceUrl as string}
                   voiceDurationMs={message.voiceDurationMs}
@@ -638,7 +648,9 @@ export function MessageBubble({
                   </View>
                 </Pressable>
               )}
-              {isVoice ? (
+              {attachment ? (
+                <DocumentCard attachment={attachment} isMe={false} />
+              ) : isVoice ? (
                 <VoicePlayerBubble
                   voiceUrl={message.voiceUrl as string}
                   voiceDurationMs={message.voiceDurationMs}
