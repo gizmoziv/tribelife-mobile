@@ -60,9 +60,10 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
+import { DocumentButton } from '@/components/ui/chat/DocumentButton';
 import { MicButton } from '@/components/ui/chat/MicButton';
 import { RecordingBar } from '@/components/ui/chat/RecordingBar';
-import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
@@ -75,7 +76,7 @@ import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
 import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import type { Message, GlobeMessage } from '@/types';
+import type { Message, GlobeMessage, MessageAttachment } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -896,6 +897,32 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   }, [roomSlug, isAgeGated, replyTo]);
 
+  // Document send mirrors the GIF standalone-send shape (D-01a): a PDF is
+  // sent as its own message — empty content, no mediaUrls, [attachment] only.
+  // No optimistic insert; the bubble appears on the server echo. Respects the
+  // same age-gate guard as the photo/GIF flows.
+  const handleDocumentPicked = useCallback(async (doc: { uri: string; name: string; size: number }) => {
+    if (!roomSlug || isAgeGated) return;
+    setIsUploading(true);
+    try {
+      const { uploadUrl, key, cdnUrl } = await requestDocUploadUrl(doc.name);
+      await uploadDocToSpaces(uploadUrl, doc.uri);
+      await confirmDocUpload(key);
+      const attachment: MessageAttachment = { url: cdnUrl, name: doc.name, size: doc.size, type: 'pdf' };
+      const replyToId = replyTo?.id ?? undefined;
+      sendGlobeMessage(roomSlug, '', replyToId, undefined, [attachment]);
+      setReplyTo(null);
+      setIsAtBottom(true);
+      resetNewMessageCount();
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+    } catch (err) {
+      console.error('[document] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [roomSlug, isAgeGated, replyTo]);
+
   // ── Send message ────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
     const content = input.trim();
@@ -1220,6 +1247,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                     )}
                     {!isAgeGated && (
                       <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
+                    )}
+                    {!isAgeGated && (
+                      <DocumentButton onDocumentPicked={handleDocumentPicked} disabled={isUploading} />
                     )}
                     {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                     <View

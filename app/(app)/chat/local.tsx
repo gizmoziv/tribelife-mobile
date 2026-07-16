@@ -54,9 +54,10 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
+import { DocumentButton } from '@/components/ui/chat/DocumentButton';
 import { MicButton } from '@/components/ui/chat/MicButton';
 import { RecordingBar } from '@/components/ui/chat/RecordingBar';
-import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
@@ -71,7 +72,7 @@ import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSep
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { getZoneForTimezone } from '@/utils/timezoneZones';
-import type { Message } from '@/types';
+import type { Message, MessageAttachment } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function SendIcon() {
@@ -737,6 +738,27 @@ export default function LocalChatScreen() {
     setReplyTo(null);
   }, [replyTo]);
 
+  // Document send mirrors the GIF standalone-send shape (D-01a): a PDF is
+  // sent as its own message — empty content, no mediaUrls, [attachment] only.
+  // No optimistic insert; the bubble appears on the server echo.
+  const handleDocumentPicked = useCallback(async (doc: { uri: string; name: string; size: number }) => {
+    setIsUploading(true);
+    try {
+      const { uploadUrl, key, cdnUrl } = await requestDocUploadUrl(doc.name);
+      await uploadDocToSpaces(uploadUrl, doc.uri);
+      await confirmDocUpload(key);
+      const attachment: MessageAttachment = { url: cdnUrl, name: doc.name, size: doc.size, type: 'pdf' };
+      const replyToId = replyTo?.id ?? undefined;
+      sendRoomMessage('', replyToId, undefined, [attachment]);
+      setReplyTo(null);
+    } catch (err) {
+      console.error('[document] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [replyTo]);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
@@ -954,6 +976,7 @@ export default function LocalChatScreen() {
           onSendVoice={handleSendVoice}
           onImagesSelected={handleImagesSelected}
           onGifSelected={handleGifSelected}
+          onDocumentPicked={handleDocumentPicked}
           selection={selection}
           onSelectionChange={setSelection}
           mentionScope={user?.timezone ? 'timezone' : undefined}
@@ -1065,6 +1088,7 @@ function ChatInput({
   onSendVoice,
   onImagesSelected,
   onGifSelected,
+  onDocumentPicked,
   selection,
   onSelectionChange,
   mentionScope,
@@ -1081,6 +1105,7 @@ function ChatInput({
   onSendVoice?: (cdnUrl: string, durationMs: number, waveform: number[]) => void;
   onImagesSelected?: (uris: string[]) => void;
   onGifSelected?: (gifUrl: string) => void;
+  onDocumentPicked?: (doc: { uri: string; name: string; size: number }) => void;
   selection?: { start: number; end: number };
   onSelectionChange?: (sel: { start: number; end: number }) => void;
   mentionScope?: MentionScope;
@@ -1122,6 +1147,9 @@ function ChatInput({
             )}
             {onGifSelected && (
               <GifButton onGifSelected={onGifSelected} disabled={isUploading} />
+            )}
+            {onDocumentPicked && (
+              <DocumentButton onDocumentPicked={onDocumentPicked} disabled={isUploading} />
             )}
             {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
             <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>

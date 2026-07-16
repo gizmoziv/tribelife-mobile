@@ -53,7 +53,8 @@ import {
   getSocket,
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
-import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
+import { DocumentButton } from '@/components/ui/chat/DocumentButton';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { voicePreviewLabel } from '@/constants/voice';
 import type { ChatsRow, PillFilter } from '@/types';
@@ -73,7 +74,7 @@ import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/Men
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { SwipeableChatRow } from '@/components/ui/chat/SwipeableChatRow';
-import type { Message, Conversation, ReactionGroup } from '@/types';
+import type { Message, Conversation, ReactionGroup, MessageAttachment } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function SendIcon() {
@@ -1569,6 +1570,27 @@ function LocalChatPanel() {
     setReplyTo(null);
   }, [input, replyTo]);
 
+  // Document send mirrors the photo standalone-send shape (D-01a): a PDF is
+  // sent as its own message — empty content, no mediaUrls, [attachment] only.
+  // No optimistic insert; the bubble appears on the server echo.
+  const handleDocumentPicked = useCallback(async (doc: { uri: string; name: string; size: number }) => {
+    setIsUploading(true);
+    try {
+      const { uploadUrl, key, cdnUrl } = await requestDocUploadUrl(doc.name);
+      await uploadDocToSpaces(uploadUrl, doc.uri);
+      await confirmDocUpload(key);
+      const attachment: MessageAttachment = { url: cdnUrl, name: doc.name, size: doc.size, type: 'pdf' };
+      const replyToId = replyTo?.id ?? undefined;
+      sendRoomMessage('', replyToId, undefined, [attachment]);
+      setReplyTo(null);
+    } catch (err) {
+      console.error('[document] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [replyTo]);
+
   const handleInputChange = (text: string) => {
     setInput(text);
     startTyping({ roomId });
@@ -1648,6 +1670,7 @@ function LocalChatPanel() {
         onSend={handleSend}
         isUploading={isUploading}
         onImagesSelected={handleImagesSelected}
+        onDocumentPicked={handleDocumentPicked}
         selection={selection}
         onSelectionChange={setSelection}
         mentionScope={user?.timezone ? 'timezone' : undefined}
@@ -2038,6 +2061,7 @@ function ChatInput({
   onSend,
   isUploading,
   onImagesSelected,
+  onDocumentPicked,
   selection,
   onSelectionChange,
   mentionScope,
@@ -2049,6 +2073,7 @@ function ChatInput({
   onSend: () => void;
   isUploading?: boolean;
   onImagesSelected?: (uris: string[]) => void;
+  onDocumentPicked?: (doc: { uri: string; name: string; size: number }) => void;
   selection?: { start: number; end: number };
   onSelectionChange?: (sel: { start: number; end: number }) => void;
   mentionScope?: MentionScope;
@@ -2081,6 +2106,9 @@ function ChatInput({
       <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
         {onImagesSelected && (
           <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+        )}
+        {onDocumentPicked && (
+          <DocumentButton onDocumentPicked={onDocumentPicked} disabled={isUploading} />
         )}
         {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
         <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>

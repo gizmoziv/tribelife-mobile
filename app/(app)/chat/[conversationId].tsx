@@ -60,9 +60,10 @@ import {
 } from '@/services/socket';
 import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
+import { DocumentButton } from '@/components/ui/chat/DocumentButton';
 import { MicButton } from '@/components/ui/chat/MicButton';
 import { RecordingBar } from '@/components/ui/chat/RecordingBar';
-import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload } from '@/services/upload';
+import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ReceiptBreakdownSheet } from '@/components/ui/chat/ReceiptBreakdownSheet';
@@ -75,7 +76,7 @@ import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
 import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
-import type { Message, ChatsRow, GroupMember } from '@/types';
+import type { Message, ChatsRow, GroupMember, MessageAttachment } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function SendIcon() {
@@ -1034,6 +1035,29 @@ export default function DMThreadScreen() {
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   }, [conversationId, replyTo]);
 
+  // Document send mirrors the GIF standalone-send shape (D-01a): a PDF is
+  // sent as its own message — empty content, no mediaUrls, [attachment] only.
+  // No optimistic insert; the bubble appears on the server echo.
+  const handleDocumentPicked = useCallback(async (doc: { uri: string; name: string; size: number }) => {
+    setIsUploading(true);
+    try {
+      const { uploadUrl, key, cdnUrl } = await requestDocUploadUrl(doc.name);
+      await uploadDocToSpaces(uploadUrl, doc.uri);
+      await confirmDocUpload(key);
+      const attachment: MessageAttachment = { url: cdnUrl, name: doc.name, size: doc.size, type: 'pdf' };
+      const replyToId = replyTo?.id ?? undefined;
+      sendDirectMessage(conversationId, '', replyToId, undefined, [attachment]);
+      setReplyTo(null);
+      stopTyping({ conversationId });
+      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+    } catch (err) {
+      console.error('[document] Upload failed:', err);
+      Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [conversationId, replyTo]);
+
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content) return;
@@ -1377,6 +1401,7 @@ export default function DMThreadScreen() {
                   <>
                     <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
                     <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
+                    <DocumentButton onDocumentPicked={handleDocumentPicked} disabled={isUploading} />
                     {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                     <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
                       <MentionTextInput
