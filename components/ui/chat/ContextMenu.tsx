@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Keyboard,
 } from 'react-native';
+import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import EmojiKeyboard from 'rn-emoji-keyboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -21,6 +22,80 @@ const QUICK_EMOJIS = [
   '\u{1F602}', // joy
   '\u{1F44F}', // clap
 ];
+
+// ── Monochrome action icons (Feather/Lucide stroke paths) ───────────────────
+// Emoji glyphs are multicolor and can't be tinted; these single-color stroke
+// icons take a `color` prop so every row's icon unifies to the theme text color
+// (light/dark aware), with Delete the lone red exception — matching Viber.
+const ICON_SIZE = 20;
+const stroke = (color: string) => ({
+  stroke: color,
+  strokeWidth: 2,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+});
+function Icon({ children }: { children: React.ReactNode }) {
+  return (
+    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24" fill="none">
+      {children}
+    </Svg>
+  );
+}
+const CopyIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Rect x={9} y={9} width={13} height={13} rx={2} {...stroke(color)} />
+    <Path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" {...stroke(color)} />
+  </Icon>
+);
+const ReplyIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Polyline points="9 14 4 9 9 4" {...stroke(color)} />
+    <Path d="M20 20v-7a4 4 0 00-4-4H4" {...stroke(color)} />
+  </Icon>
+);
+const PinIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Path d="M12 17v5" {...stroke(color)} />
+    <Path
+      d="M9 10.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V16a1 1 0 001 1h12a1 1 0 001-1v-.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0116 10.76V7a1 1 0 011-1 2 2 0 000-4H7a2 2 0 000 4 1 1 0 011 1z"
+      {...stroke(color)}
+    />
+  </Icon>
+);
+const EditIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" {...stroke(color)} />
+  </Icon>
+);
+const InfoIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Circle cx={12} cy={12} r={10} {...stroke(color)} />
+    <Line x1={12} y1={16} x2={12} y2={12} {...stroke(color)} />
+    <Line x1={12} y1={8} x2={12.01} y2={8} {...stroke(color)} />
+  </Icon>
+);
+const TranslateIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Circle cx={12} cy={12} r={10} {...stroke(color)} />
+    <Line x1={2} y1={12} x2={22} y2={12} {...stroke(color)} />
+    <Path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" {...stroke(color)} />
+  </Icon>
+);
+const ReportIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" {...stroke(color)} />
+    <Line x1={12} y1={9} x2={12} y2={13} {...stroke(color)} />
+    <Line x1={12} y1={17} x2={12.01} y2={17} {...stroke(color)} />
+  </Icon>
+);
+const DeleteIcon = ({ color }: { color: string }) => (
+  <Icon>
+    <Polyline points="3 6 5 6 21 6" {...stroke(color)} />
+    <Path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" {...stroke(color)} />
+    <Line x1={10} y1={11} x2={10} y2={17} {...stroke(color)} />
+    <Line x1={14} y1={11} x2={14} y2={17} {...stroke(color)} />
+  </Icon>
+);
 
 interface ContextMenuProps {
   visible: boolean;
@@ -175,14 +250,16 @@ export function ContextMenu({
             {/* Divider */}
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            {/* Action items — rows hidden when their prop is undefined (e.g. news tiles omit all three) */}
+            {/* Action items — rows hidden when their prop is undefined (e.g. news tiles omit all three).
+                Icons unify to colors.text; Delete is the destructive exception (red icon + red label)
+                and sits LAST (below Report), Viber-style. */}
             {onCopy && (
               <TouchableOpacity
                 style={styles.actionRow}
                 onPress={handleCopy}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x1F4CB;</Text>
+                <View style={styles.iconSlot}><CopyIcon color={colors.text} /></View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Copy text</Text>
               </TouchableOpacity>
             )}
@@ -193,7 +270,7 @@ export function ContextMenu({
                 onPress={handleReply}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x21A9;</Text>
+                <View style={styles.iconSlot}><ReplyIcon color={colors.text} /></View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Reply</Text>
               </TouchableOpacity>
             )}
@@ -204,7 +281,7 @@ export function ContextMenu({
                 onPress={handlePin}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x1F4CC;</Text>
+                <View style={styles.iconSlot}><PinIcon color={colors.text} /></View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Pin</Text>
               </TouchableOpacity>
             )}
@@ -215,7 +292,7 @@ export function ContextMenu({
                 onPress={handleUnpin}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x1F4CC;</Text>
+                <View style={styles.iconSlot}><PinIcon color={colors.text} /></View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Unpin</Text>
               </TouchableOpacity>
             )}
@@ -226,19 +303,8 @@ export function ContextMenu({
                 onPress={handleEdit}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x270F;&#xFE0F;</Text>
+                <View style={styles.iconSlot}><EditIcon color={colors.text} /></View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Edit</Text>
-              </TouchableOpacity>
-            )}
-
-            {onDelete && isOwn && (
-              <TouchableOpacity
-                style={styles.actionRow}
-                onPress={handleDelete}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.actionIcon}>&#x1F5D1;&#xFE0F;</Text>
-                <Text style={[styles.actionLabel, { color: colors.error }]}>Delete</Text>
               </TouchableOpacity>
             )}
 
@@ -248,7 +314,7 @@ export function ContextMenu({
                 onPress={handleInfo}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x2139;&#xFE0F;</Text>
+                <View style={styles.iconSlot}><InfoIcon color={colors.text} /></View>
                 <Text style={[styles.actionLabel, { color: colors.text }]}>Info</Text>
               </TouchableOpacity>
             )}
@@ -256,7 +322,7 @@ export function ContextMenu({
             {onTranslate && (
               translateDisabledHint ? (
                 <View style={[styles.actionRow, { opacity: 0.45 }]}>
-                  <Text style={styles.actionIcon}>&#x1F310;</Text>
+                  <View style={styles.iconSlot}><TranslateIcon color={colors.textMuted} /></View>
                   <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
                     {`Translate ${translateDisabledHint}`}
                   </Text>
@@ -267,7 +333,7 @@ export function ContextMenu({
                   onPress={handleTranslate}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.actionIcon}>&#x1F310;</Text>
+                  <View style={styles.iconSlot}><TranslateIcon color={colors.text} /></View>
                   <Text style={[styles.actionLabel, { color: colors.text }]}>
                     Translate
                   </Text>
@@ -281,8 +347,19 @@ export function ContextMenu({
                 onPress={handleReport}
                 activeOpacity={0.7}
               >
-                <Text style={styles.actionIcon}>&#x26A0;</Text>
-                <Text style={[styles.actionLabel, { color: colors.error }]}>Report</Text>
+                <View style={styles.iconSlot}><ReportIcon color={colors.text} /></View>
+                <Text style={[styles.actionLabel, { color: colors.text }]}>Report</Text>
+              </TouchableOpacity>
+            )}
+
+            {onDelete && isOwn && (
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleDelete}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconSlot}><DeleteIcon color={colors.error} /></View>
+                <Text style={[styles.actionLabel, { color: colors.error }]}>Delete</Text>
               </TouchableOpacity>
             )}
 
@@ -344,10 +421,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     gap: 12,
   },
-  actionIcon: {
-    fontSize: 18,
+  iconSlot: {
     width: 24,
-    textAlign: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionLabel: {
     fontSize: 16,
