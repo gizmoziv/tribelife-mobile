@@ -52,8 +52,7 @@ import {
   onMediaRejected,
   getSocket,
 } from '@/services/socket';
-import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
-import { DocumentButton } from '@/components/ui/chat/DocumentButton';
+import { AttachmentMenuButton } from '@/components/ui/chat/AttachmentMenuButton';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { voicePreviewLabel } from '@/constants/voice';
@@ -2104,11 +2103,12 @@ function ChatInput({
         />
       )}
       <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
-        {onImagesSelected && (
-          <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
-        )}
-        {onDocumentPicked && (
-          <DocumentButton onDocumentPicked={onDocumentPicked} disabled={isUploading} />
+        {(onImagesSelected || onDocumentPicked) && (
+          <AttachmentMenuButton
+            onImagesSelected={onImagesSelected}
+            onDocumentPicked={onDocumentPicked}
+            disabled={isUploading}
+          />
         )}
         {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
         <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>

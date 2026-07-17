@@ -58,9 +58,8 @@ import {
   clearViewing,
   conversationRoomKey,
 } from '@/services/socket';
-import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { AttachmentMenuButton } from '@/components/ui/chat/AttachmentMenuButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
-import { DocumentButton } from '@/components/ui/chat/DocumentButton';
 import { MicButton } from '@/components/ui/chat/MicButton';
 import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
@@ -1399,9 +1398,12 @@ export default function DMThreadScreen() {
                   />
                 ) : (
                   <>
-                    <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                    <AttachmentMenuButton
+                      onImagesSelected={handleImagesSelected}
+                      onDocumentPicked={handleDocumentPicked}
+                      disabled={isUploading}
+                    />
                     <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
-                    <DocumentButton onDocumentPicked={handleDocumentPicked} disabled={isUploading} />
                     {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                     <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
                       <MentionTextInput

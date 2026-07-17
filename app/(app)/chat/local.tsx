@@ -52,9 +52,8 @@ import {
   clearViewing,
   globeRoomKey,
 } from '@/services/socket';
-import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { AttachmentMenuButton } from '@/components/ui/chat/AttachmentMenuButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
-import { DocumentButton } from '@/components/ui/chat/DocumentButton';
 import { MicButton } from '@/components/ui/chat/MicButton';
 import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
@@ -1142,14 +1141,15 @@ function ChatInput({
           <RecordingBar onDiscard={onDiscardVoice} onSent={onSendVoice} />
         ) : (
           <>
-            {onImagesSelected && (
-              <AttachmentButton onImagesSelected={onImagesSelected} disabled={isUploading} />
+            {(onImagesSelected || onDocumentPicked) && (
+              <AttachmentMenuButton
+                onImagesSelected={onImagesSelected}
+                onDocumentPicked={onDocumentPicked}
+                disabled={isUploading}
+              />
             )}
             {onGifSelected && (
               <GifButton onGifSelected={onGifSelected} disabled={isUploading} />
-            )}
-            {onDocumentPicked && (
-              <DocumentButton onDocumentPicked={onDocumentPicked} disabled={isUploading} />
             )}
             {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
             <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>

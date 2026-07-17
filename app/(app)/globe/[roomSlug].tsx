@@ -58,9 +58,8 @@ import {
   clearViewing,
   globeRoomKey,
 } from '@/services/socket';
-import { AttachmentButton } from '@/components/ui/chat/AttachmentButton';
+import { AttachmentMenuButton } from '@/components/ui/chat/AttachmentMenuButton';
 import { GifButton } from '@/components/ui/chat/GifButton';
-import { DocumentButton } from '@/components/ui/chat/DocumentButton';
 import { MicButton } from '@/components/ui/chat/MicButton';
 import { RecordingBar } from '@/components/ui/chat/RecordingBar';
 import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocUploadUrl, uploadDocToSpaces, confirmDocUpload } from '@/services/upload';
@@ -1243,13 +1242,14 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                 ) : (
                   <>
                     {!isAgeGated && (
-                      <AttachmentButton onImagesSelected={handleImagesSelected} disabled={isUploading} />
+                      <AttachmentMenuButton
+                        onImagesSelected={handleImagesSelected}
+                        onDocumentPicked={handleDocumentPicked}
+                        disabled={isUploading}
+                      />
                     )}
                     {!isAgeGated && (
                       <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
-                    )}
-                    {!isAgeGated && (
-                      <DocumentButton onDocumentPicked={handleDocumentPicked} disabled={isUploading} />
                     )}
                     {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                     <View
