@@ -97,7 +97,7 @@ function CustomHeader({ title, onBack, colors, insetsTop }: CustomHeaderProps) {
         <Text style={[styles.headerBackText, { color: colors.text }]}>Back</Text>
       </Pressable>
       <View style={styles.headerTitleWrap} pointerEvents="none">
-        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1} ellipsizeMode="middle">
           {title}
         </Text>
       </View>
@@ -154,7 +154,7 @@ export default function PdfViewerScreen() {
   );
 
   return (
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <CustomHeader title={displayName} onBack={handleBack} colors={colors} insetsTop={insets.top} />
 
       {error ? (
@@ -216,7 +216,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 90,
+    // Reserve clearance on both sides so a long filename stays visually centered
+    // without sliding under the "< Back" pill (pill right edge ≈ SPACING.page(20)
+    // + pill width ≈ 78 ≈ 98px; 112 leaves a comfortable gap).
+    paddingHorizontal: 112,
   },
   headerTitle: {
     fontSize: 16,
