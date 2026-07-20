@@ -42,8 +42,12 @@ export function EsekCard({ product }: EsekCardProps) {
   // Silent degradation when the image request fails (mirror JobCard.logoFailed)
   const [imageFailed, setImageFailed] = useState(false);
 
-  const onSale =
-    product.compareAtPrice != null && product.compareAtPrice > product.price;
+  // Coerce defensively: Postgres numeric can arrive as a string, on which .toFixed()
+  // throws and `>` would compare lexicographically. Number() makes both robust.
+  const price = Number(product.price);
+  const compareAtPrice =
+    product.compareAtPrice == null ? null : Number(product.compareAtPrice);
+  const onSale = compareAtPrice != null && compareAtPrice > price;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -102,13 +106,13 @@ export function EsekCard({ product }: EsekCardProps) {
           {/* Price row — $price, plus struck-through compareAtPrice when on sale */}
           <View style={styles.priceRow}>
             <Text style={[styles.price, { color: colors.text }]}>
-              ${product.price.toFixed(2)}
+              ${price.toFixed(2)}
             </Text>
             {onSale && (
               <Text
                 style={[styles.compareAt, { color: colors.textMuted }]}
               >
-                ${product.compareAtPrice!.toFixed(2)}
+                ${compareAtPrice!.toFixed(2)}
               </Text>
             )}
           </View>
