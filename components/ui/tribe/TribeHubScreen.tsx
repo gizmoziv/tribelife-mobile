@@ -34,6 +34,7 @@ import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
 import { TribeTodaySection } from './TribeTodaySection';
 import { TribeNewsSection } from './TribeNewsSection';
 import { TribeJobsSection } from './TribeJobsSection';
+import { TribeEsekSection } from './TribeEsekSection';
 import { TribeSurveySection } from './TribeSurveySection';
 
 export function TribeHubScreen() {
@@ -106,6 +107,7 @@ export function TribeHubScreen() {
           onSetRefresh={(fn) => { newsSectionRefreshRef.current = fn; }}
         />
         <TribeJobsSection />
+        <TribeEsekSection />
         <TribeSurveySection />
       </ScrollView>
     </SafeAreaView>
