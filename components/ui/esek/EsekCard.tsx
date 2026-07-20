@@ -1,9 +1,9 @@
 // Phase 33: horizontal Esek marketplace card for the Tribe hub carousel.
 //
 // A fixed-width (~78% screen width, max 320px) product tile, structural clone of
-// JobCard. Locked layout — image / title / price ONLY (no vendor/category/meta):
-//   - Product image at the top (~75% of tile, square, cover)
-//   - Title below (up to 3 lines)
+// JobCard/NewsCard. Layout — image / title / price ONLY (no vendor/category/meta):
+//   - Product image at the top (16:9, cover) — matches NewsCard for uniform carousel height
+//   - Title below (2 lines max, matches NewsCard headline)
 //   - Price row at the bottom: $price, plus struck-through compareAtPrice on sale
 //   - Tap → open Esek product page in in-app WebBrowser (PAGE_SHEET)
 import React, { useCallback, useState } from 'react';
@@ -98,7 +98,7 @@ export function EsekCard({ product }: EsekCardProps) {
           {/* Title — up to 3 lines */}
           <Text
             style={[styles.title, { color: colors.text }]}
-            numberOfLines={3}
+            numberOfLines={2}
           >
             {product.title}
           </Text>
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 16 / 9, // match NewsCard so cards share the same image height
   },
   body: {
     padding: SPACING.md,
@@ -147,6 +147,9 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
     fontSize: 15,
     lineHeight: 21,
+    // Reserve exactly 2 lines (2 × lineHeight) so short and long titles yield
+    // identical card heights across the carousel.
+    minHeight: 42,
   },
   priceRow: {
     flexDirection: 'row',
