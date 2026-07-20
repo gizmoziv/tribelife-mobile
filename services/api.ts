@@ -16,6 +16,7 @@ import type {
   ConversationParticipant,
   NewsArticle,
   JobPosting,
+  EsekProduct,
   ReactionGroup,
   ChatsListResponse,
   SearchResponse,
@@ -679,6 +680,14 @@ export const jobsApi = {
   feed: (cursor?: string) =>
     request<{ jobs: JobPosting[]; hasMore: boolean; nextCursor: string | null }>(
       `/api/jobs/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`
+    ),
+};
+
+// ── Esek Marketplace ────────────────────────────────────────────────────────────
+export const esekApi = {
+  feed: (cursor?: string) =>
+    request<{ products: EsekProduct[]; hasMore: boolean; nextCursor: string | null }>(
+      `/api/marketplace/esek/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`
     ),
 };
 

@@ -281,6 +281,18 @@ export interface JobPosting {
   externalRef: string;
 }
 
+// ── Phase 33: Esek Marketplace ──────────────────────────────────────────────
+export interface EsekProduct {
+  id: number;
+  shopifyId: number;
+  title: string;
+  price: number;
+  compareAtPrice: number | null;
+  imageUrl: string;
+  handle: string;
+  productUrl: string;
+}
+
 // ── Phase 8: caps:invalidated socket event reason union ────────────────────
 // Loose mirror of `tribelife-backend/src/types/capabilities.ts CapsInvalidatedReason`.
 // No shared types package — keep manually in sync (per CONTEXT.md D-01 canonical_refs).
