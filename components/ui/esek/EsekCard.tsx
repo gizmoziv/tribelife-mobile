@@ -60,7 +60,7 @@ export function EsekCard({ product }: EsekCardProps) {
       esekApi.trackClick(product.shopifyId).catch(() => {});
       // Attribute the outbound click to TribeLife via UTM params.
       const sep = product.productUrl.includes('?') ? '&' : '?';
-      const url = `${product.productUrl}${sep}utm_source=tribelife_app&utm_location=marketplace`;
+      const url = `${product.productUrl}${sep}utm_source=tribelife_app&utm_medium=marketplace`;
       await WebBrowser.openBrowserAsync(url, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
       });
