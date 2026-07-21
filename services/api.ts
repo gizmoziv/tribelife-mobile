@@ -689,6 +689,12 @@ export const esekApi = {
     request<{ products: EsekProduct[]; hasMore: boolean; nextCursor: string | null }>(
       `/api/marketplace/esek/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`
     ),
+  // Fire-and-forget attribution: records a marketplace_item_click for this user.
+  trackClick: (shopifyId: number) =>
+    request<{ ok: true }>('/api/marketplace/esek/click', {
+      method: 'POST',
+      body: JSON.stringify({ shopifyId }),
+    }),
 };
 
 // ── Tribe Today ────────────────────────────────────────────────────────────────

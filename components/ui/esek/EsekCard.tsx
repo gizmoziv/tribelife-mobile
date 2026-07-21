@@ -19,6 +19,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '@/contexts/ThemeContext';
+import { esekApi } from '@/services/api';
 import { FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { EsekProduct } from '@/types';
 
@@ -55,13 +56,18 @@ export function EsekCard({ product }: EsekCardProps) {
   const handleOpen = useCallback(async () => {
     try {
       Haptics.selectionAsync();
-      await WebBrowser.openBrowserAsync(product.productUrl, {
+      // Fire-and-forget click attribution — must never block or break the open.
+      esekApi.trackClick(product.shopifyId).catch(() => {});
+      // Attribute the outbound click to TribeLife via UTM params.
+      const sep = product.productUrl.includes('?') ? '&' : '?';
+      const url = `${product.productUrl}${sep}utm_source=tribelife_app&utm_location=marketplace`;
+      await WebBrowser.openBrowserAsync(url, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
       });
     } catch {
       // user dismissed or browser unavailable — silent
     }
-  }, [product.productUrl]);
+  }, [product.productUrl, product.shopifyId]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
