@@ -24,6 +24,7 @@ import type {
   ChevraSectionResponse,
   LinkPreview,
   AccessStatus,
+  SocialEntry,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -192,6 +193,72 @@ export const auth = {
     request<{ ok: boolean }>('/api/auth/account', {
       method: 'DELETE',
       ...(feedback ? { body: JSON.stringify(feedback) } : {}),
+    }),
+};
+
+// ── Access (Phase 35 — required referral gate + apply for access) ──────────
+// Both route paths below and the failure-response convention are ASSUMED
+// Phase 34 shapes at the time this plan was written, since RECONCILED and
+// CONFIRMED against Phase 34's own finished plans (34-01/34-02) — see this
+// plan's "Phase 34 Contract" section (35-01-PLAN.md). Per D-19, every such
+// shape lives ONLY in this file; no screen/component/store may hardcode
+// either path or repeat a response field name.
+export type ReferralValidationResult =
+  | { valid: true }
+  | { valid: false; attemptsRemaining: number | null; exhausted: boolean };
+
+export const accessApi = {
+  // POST /api/referrals/validate — normalizes BOTH candidate Phase 34
+  // response conventions (HTTP 200 with a discriminated body, or a thrown
+  // ApiError) into one ReferralValidationResult. Never re-throws and never
+  // surfaces err.message/err.data to the caller — discarding the cause here
+  // is what makes handle enumeration structurally impossible (D-04), rather
+  // than relying on every screen to remember not to render it.
+  validateReferral: async (handle: string): Promise<ReferralValidationResult> => {
+    try {
+      const data = await request<{
+        valid: boolean;
+        exhausted?: boolean;
+        attemptsRemaining?: number;
+        blank?: boolean;
+      }>('/api/referrals/validate', {
+        method: 'POST',
+        body: JSON.stringify({ handle }),
+      });
+
+      if (data.valid) return { valid: true };
+
+      const attemptsRemaining =
+        typeof data.attemptsRemaining === 'number' && Number.isFinite(data.attemptsRemaining)
+          ? data.attemptsRemaining
+          : null;
+      const exhausted =
+        typeof data.exhausted === 'boolean' ? data.exhausted : attemptsRemaining === 0;
+      return { valid: false, attemptsRemaining, exhausted };
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const body = err.data as { attemptsRemaining?: number; exhausted?: boolean } | undefined;
+        const attemptsRemaining =
+          typeof body?.attemptsRemaining === 'number' && Number.isFinite(body.attemptsRemaining)
+            ? body.attemptsRemaining
+            : null;
+        const exhausted = typeof body?.exhausted === 'boolean' ? body.exhausted : false;
+        return { valid: false, attemptsRemaining, exhausted };
+      }
+      // Network failure (not an ApiError) — generic failure arm, stay on step.
+      return { valid: false, attemptsRemaining: null, exhausted: false };
+    }
+  },
+
+  // POST /api/access-requests — the gated user's exit path (not gated by
+  // requireApprovedAccess). Does not depend on the success-response body
+  // (which is a superset, `{ ok: true, accessRequest: {...} }`); lets
+  // ApiError propagate so the caller can show a generic failure alert. Never
+  // log reason/socials — user-submitted personal data.
+  submitAccessRequest: (reason: string, socials: SocialEntry[]) =>
+    request<{ ok: true }>('/api/access-requests', {
+      method: 'POST',
+      body: JSON.stringify({ reason, socials }),
     }),
 };
 

@@ -6,6 +6,16 @@ export * from './capabilities';
 // unaffected (34-CONTEXT D-03).
 export type AccessStatus = 'pending' | 'approved' | 'rejected';
 
+// Access-request "socials" repeater entry shape — CONFIRMED verbatim from
+// 34-CONTEXT D-01. Do not rename these keys.
+export type SocialPlatform = 'linkedin' | 'instagram' | 'facebook' | 'other';
+
+export interface SocialEntry {
+  platform: SocialPlatform;
+  platformOther?: string;
+  handle: string;
+}
+
 export interface User {
   id: number;
   email: string;

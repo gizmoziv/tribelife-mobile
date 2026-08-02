@@ -18,7 +18,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/contexts/ThemeContext';
-import { auth } from '@/services/api';
+import { auth, extractAccessStatus } from '@/services/api';
 import { getPostLoginLandingRoute } from '@/services/notificationRouting';
 import { FONTS, COLORS, SPACING, SHADOWS, RADIUS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
@@ -126,9 +126,9 @@ export default function WelcomeScreen() {
         throw new Error('No ID token received from Google');
       }
 
-      const { token, user, needsOnboarding, capabilities, isNewUser } =
-        await auth.googleSignIn(idToken);
-      await setAuth(token, user, capabilities, needsOnboarding);
+      const googleResponse = await auth.googleSignIn(idToken);
+      const { token, user, needsOnboarding, capabilities, isNewUser } = googleResponse;
+      await setAuth(token, user, capabilities, needsOnboarding, extractAccessStatus(googleResponse));
 
       // First-time accounts default to the dark theme (existing users and
       // anyone with a stored preference are unaffected). Persist + apply live
@@ -186,13 +186,13 @@ export default function WelcomeScreen() {
         throw new Error('No identity token received from Apple');
       }
 
-      const { token, user, needsOnboarding, capabilities, isNewUser } =
-        await auth.appleSignIn(
-          credential.identityToken,
-          credential.fullName,
-          credential.email,
-        );
-      await setAuth(token, user, capabilities, needsOnboarding);
+      const appleResponse = await auth.appleSignIn(
+        credential.identityToken,
+        credential.fullName,
+        credential.email,
+      );
+      const { token, user, needsOnboarding, capabilities, isNewUser } = appleResponse;
+      await setAuth(token, user, capabilities, needsOnboarding, extractAccessStatus(appleResponse));
 
       // First-time accounts default to the dark theme (existing users and
       // anyone with a stored preference are unaffected). Persist + apply live
