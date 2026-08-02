@@ -40,12 +40,14 @@ type HandleResult = 'none' | 'invalid' | 'available' | 'taken';
 // Phase 35 (T-35-03): the ONLY referral-failure copy in this file. Every
 // failure path renders this identifier — never a repeated literal — so the
 // failure cause can never vary by cause (D-04).
-const REFERRAL_FAILURE_MESSAGE = "We couldn't verify that handle. Check it and try again.";
+const REFERRAL_FAILURE_MESSAGE = "We couldn't verify that referral code. Check it and try again.";
 
-// Phase 35: two-step onboarding state machine. `null` is load-bearing — the
-// attribution read below is asynchronous, so any synchronous default would
-// render one frame of the wrong step, and a deep-link user seeing the
-// referral step even for a frame violates D-01.
+// Phase 35 follow-on: two-step onboarding state machine. Profile is now the
+// first step for everyone; 'referral' is the follow-up screen reached only
+// when the organic Continue gate needs a code. `null` stays load-bearing —
+// the attribution read below is asynchronous, so any synchronous default
+// would render one frame of an editable referral field before a deep-link
+// user's captured ref flips it read-only.
 type OnboardingStep = 'referral' | 'profile';
 
 export default function OnboardingScreen() {
@@ -79,20 +81,24 @@ export default function OnboardingScreen() {
   const [isValidatingReferral, setIsValidatingReferral] = useState(false);
   const [referralValidated, setReferralValidated] = useState(false);
 
-  // Read captured attribution from AsyncStorage on mount to decide read-only vs editable
+  // Read captured attribution from AsyncStorage on mount to decide read-only vs editable.
+  // Profile screen comes first for everyone now — only `recognizedRef` (set
+  // below when a deep-link ref was captured) distinguishes the read-only
+  // deep-link path from the organic path. The `step === null` gate above
+  // stays load-bearing: this read is async, so rendering synchronously would
+  // flash a one-frame editable referral field at deep-link users before it
+  // flips to read-only.
   useEffect(() => {
     AsyncStorage.multiGet(['attributionRef', 'attributionSource']).then(([[, ref], [, source]]) => {
       if (ref) {
         setRecognizedRef(ref);
         setRecognizedSource((source as 'handle_code' | 'profile_share' | 'group_invite' | null) ?? null);
-        setStep('profile');
-      } else {
-        setStep('referral');
       }
+      setStep('profile');
     }).catch(() => {
-      // Storage failure: leave the user on the gated path rather than stuck
-      // on the loading indicator.
-      setStep('referral');
+      // Storage failure: leave the user on the profile screen rather than
+      // stuck on the loading indicator.
+      setStep('profile');
     });
   }, []);
 
@@ -168,26 +174,24 @@ export default function OnboardingScreen() {
         if (result.exhausted) {
           router.replace('/(auth)/apply-for-access' as any);
         }
+        return;
       }
     } finally {
       setIsValidatingReferral(false);
     }
+
+    // Valid: the profile screen's handle/timezone/terms state already lives
+    // in this component, so onboarding can complete immediately without a
+    // second user tap. setStep('profile') above means a failed submit here
+    // leaves the user on the profile screen with the code shown read-only.
+    await submitOnboarding();
   };
 
-  const handleSubmit = async () => {
-    if (!handle.trim()) {
-      Alert.alert('Handle Required', 'Please choose a handle before continuing.');
-      return;
-    }
-    if (handleResult !== 'available' || isChecking) {
-      Alert.alert('Handle Unavailable', 'Please choose an available handle before continuing.');
-      return;
-    }
-    if (!acceptedTerms) {
-      Alert.alert('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
-      return;
-    }
-
+  // Follow-on restructure: the body of the original handleSubmit, moved
+  // verbatim so it can be invoked both from the profile screen's Continue
+  // button (after the organic referral gate below) and from
+  // handleReferralContinue once a code is validated on the follow-up screen.
+  const submitOnboarding = async () => {
     setIsSubmitting(true);
     try {
       // Resolve referral values from component state (populated on mount).
@@ -253,6 +257,60 @@ export default function OnboardingScreen() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    if (!handle.trim()) {
+      Alert.alert('Handle Required', 'Please choose a handle before continuing.');
+      return;
+    }
+    if (handleResult !== 'available' || isChecking) {
+      Alert.alert('Handle Unavailable', 'Please choose an available handle before continuing.');
+      return;
+    }
+    if (!acceptedTerms) {
+      Alert.alert('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
+
+    // Organic referral gate: only applies when there is no recognized
+    // deep-link ref and no code already validated on the follow-up screen.
+    // Uses isValidatingReferral (not isSubmitting) so this never
+    // double-toggles the submit spinner against submitOnboarding below.
+    if (!recognizedRef && !referralValidated) {
+      const trimmed = typedReferrer.trim();
+      if (!trimmed) {
+        // Blank: send to the follow-up referral screen. No request, no
+        // attempt consumed.
+        setStep('referral');
+        return;
+      }
+
+      setIsValidatingReferral(true);
+      let result: Awaited<ReturnType<typeof accessApi.validateReferral>>;
+      try {
+        result = await accessApi.validateReferral(trimmed);
+      } finally {
+        setIsValidatingReferral(false);
+      }
+
+      if (result.valid) {
+        setReferralValidated(true);
+        // fall through to submission below
+      } else if (result.exhausted) {
+        // Exhausted: routing to the follow-up screen would be a dead end —
+        // every Continue there fails too.
+        router.replace('/(auth)/apply-for-access' as any);
+        return;
+      } else {
+        setReferralError(REFERRAL_FAILURE_MESSAGE);
+        setAttemptsRemaining(result.attemptsRemaining);
+        setStep('referral');
+        return;
+      }
+    }
+
+    await submitOnboarding();
   };
 
   const handleVisitGlobe = async () => {
@@ -404,7 +462,7 @@ export default function OnboardingScreen() {
                     <View style={[styles.inputContainer, styles.referralInputContainer]}>
                       <TextInput
                         style={[styles.input, styles.referralInput]}
-                        placeholder="their handle"
+                        placeholder="referral code"
                         placeholderTextColor={COLORS.textMuted}
                         value={typedReferrer}
                         onChangeText={(text) => setTypedReferrer(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
@@ -413,7 +471,7 @@ export default function OnboardingScreen() {
                         maxLength={30}
                       />
                     </View>
-                    <Text style={styles.referralHint}>Optional — leave blank to skip</Text>
+                    <Text style={styles.referralHint}>Optional — leave blank if you don't have one</Text>
                   </View>
                 )}
 
@@ -467,14 +525,14 @@ export default function OnboardingScreen() {
             <AnimatedEntry style={styles.header}>
               <Text style={[styles.title, { color: COLORS.text }]}>Who invited you?</Text>
               <Text style={[styles.subtitle, { color: COLORS.textMuted }]}>
-                TribeLife is invite-only. Enter the handle of the member who invited you.
+                TribeLife is invite-only. Enter the referral code from the member who invited you.
               </Text>
 
               <View style={styles.referralStepForm}>
                 <View style={[styles.inputContainer, styles.referralInputContainer]}>
                   <TextInput
                     style={[styles.input, styles.referralInput]}
-                    placeholder="their handle"
+                    placeholder="referral code"
                     placeholderTextColor={COLORS.textMuted}
                     value={typedReferrer}
                     onChangeText={(text) => {
