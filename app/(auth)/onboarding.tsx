@@ -18,7 +18,7 @@ import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth } from '@/services/api';
+import { auth, accessApi } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -36,6 +36,11 @@ function GlobeIcon() {
 }
 
 type HandleResult = 'none' | 'invalid' | 'available' | 'taken';
+
+// Phase 35 (T-35-03): the ONLY referral-failure copy in this file. Every
+// failure path renders this identifier — never a repeated literal — so the
+// failure cause can never vary by cause (D-04).
+const REFERRAL_FAILURE_MESSAGE = "We couldn't verify that handle. Check it and try again.";
 
 // Phase 35: two-step onboarding state machine. `null` is load-bearing — the
 // attribution read below is asynchronous, so any synchronous default would
@@ -65,6 +70,14 @@ export default function OnboardingScreen() {
 
   // Phase 35 step machine — resolved inside the attribution effect below.
   const [step, setStep] = useState<OnboardingStep | null>(null);
+
+  // Phase 35 referral-step state. attemptsRemaining is a display mirror of
+  // the server's most recent response and nothing else — never derived,
+  // never decremented, never seeded with a starting value (D-05, T-35-04).
+  const [referralError, setReferralError] = useState<string | null>(null);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+  const [isValidatingReferral, setIsValidatingReferral] = useState(false);
+  const [referralValidated, setReferralValidated] = useState(false);
 
   // Read captured attribution from AsyncStorage on mount to decide read-only vs editable
   useEffect(() => {
@@ -126,6 +139,40 @@ export default function OnboardingScreen() {
       }
     }, 600);
   }, []);
+
+  // Phase 35 (D-03, D-05, D-06, D-07, T-35-06): fires only on an explicit
+  // Continue tap — never from typing, never from a timer — so each call
+  // consumes at most one of the server's three attempts.
+  const handleReferralContinue = async () => {
+    if (isValidatingReferral) return;
+
+    const trimmed = typedReferrer.trim();
+    if (!trimmed) {
+      // Blank field: straight to the apply form, no request, no attempt
+      // consumed (D-07). This branch must return before validateReferral
+      // is ever called.
+      router.push('/(auth)/apply-for-access' as any);
+      return;
+    }
+
+    setReferralError(null);
+    setIsValidatingReferral(true);
+    try {
+      const result = await accessApi.validateReferral(trimmed);
+      if (result.valid) {
+        setReferralValidated(true);
+        setStep('profile');
+      } else {
+        setReferralError(REFERRAL_FAILURE_MESSAGE);
+        setAttemptsRemaining(result.attemptsRemaining);
+        if (result.exhausted) {
+          router.replace('/(auth)/apply-for-access' as any);
+        }
+      }
+    } finally {
+      setIsValidatingReferral(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!handle.trim()) {
@@ -344,11 +391,11 @@ export default function OnboardingScreen() {
                 </GlassCard>
 
                 {/* Referral field — read-only when ref captured, editable in organic case */}
-                {isReadOnlyRef ? (
+                {(isReadOnlyRef || referralValidated) ? (
                   <GlassCard>
                     <View style={styles.referralReadOnlyRow}>
                       <Text style={styles.referralLabel}>Referred by</Text>
-                      <Text style={styles.referralHandle}>@{recognizedRef}</Text>
+                      <Text style={styles.referralHandle}>@{recognizedRef ?? typedReferrer}</Text>
                     </View>
                   </GlassCard>
                 ) : (
@@ -417,8 +464,60 @@ export default function OnboardingScreen() {
               </AnimatedEntry>
             </>
           ) : (
-            // Referral step insertion point — Task 2 fills this.
-            <></>
+            <AnimatedEntry style={styles.header}>
+              <Text style={[styles.title, { color: COLORS.text }]}>Who invited you?</Text>
+              <Text style={[styles.subtitle, { color: COLORS.textMuted }]}>
+                TribeLife is invite-only. Enter the handle of the member who invited you.
+              </Text>
+
+              <View style={styles.referralStepForm}>
+                <View style={[styles.inputContainer, styles.referralInputContainer]}>
+                  <TextInput
+                    style={[styles.input, styles.referralInput]}
+                    placeholder="their handle"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={typedReferrer}
+                    onChangeText={(text) => {
+                      setTypedReferrer(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                      setReferralError(null);
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={30}
+                    autoFocus
+                  />
+                </View>
+
+                {referralError !== null && (
+                  <Text style={[styles.referralErrorText, { color: COLORS.error }]}>{referralError}</Text>
+                )}
+
+                {attemptsRemaining !== null && (
+                  <Text style={[styles.referralAttemptsText, { color: COLORS.textMuted }]}>
+                    {attemptsRemaining} attempt{attemptsRemaining === 1 ? '' : 's'} remaining
+                  </Text>
+                )}
+
+                <PillButton
+                  title="Continue"
+                  onPress={handleReferralContinue}
+                  variant="primary"
+                  size="lg"
+                  loading={isValidatingReferral}
+                  disabled={isValidatingReferral}
+                  style={{ width: '100%', marginTop: SPACING.lg }}
+                />
+
+                <TouchableOpacity
+                  onPress={() => router.push('/(auth)/apply-for-access' as any)}
+                  style={styles.referralSkipButton}
+                >
+                  <Text style={[styles.referralSkipText, { color: COLORS.textMuted }]}>
+                    I don't have a referral code
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </AnimatedEntry>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -616,5 +715,29 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.regular,
     color: COLORS.textMuted,
     marginTop: 4,
+  },
+  referralStepForm: {
+    width: '100%',
+    marginTop: SPACING.xl,
+    gap: 10,
+  },
+  referralErrorText: {
+    fontSize: 13,
+    fontFamily: FONTS.medium,
+    paddingLeft: 16,
+  },
+  referralAttemptsText: {
+    fontSize: 13,
+    fontFamily: FONTS.regular,
+    paddingLeft: 16,
+  },
+  referralSkipButton: {
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+  },
+  referralSkipText: {
+    fontSize: 14,
+    fontFamily: FONTS.medium,
   },
 });
