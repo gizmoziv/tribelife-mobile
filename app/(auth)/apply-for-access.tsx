@@ -113,6 +113,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     padding: SPACING.page,
+    paddingTop: 60,
     paddingBottom: SPACING['2xl'],
   },
   header: {
