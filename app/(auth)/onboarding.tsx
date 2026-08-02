@@ -149,8 +149,8 @@ export default function OnboardingScreen() {
     const trimmed = typedReferrer.trim();
     if (!trimmed) {
       // Blank field: straight to the apply form, no request, no attempt
-      // consumed (D-07). This branch must return before validateReferral
-      // is ever called.
+      // consumed (D-07). This branch must return before the validation
+      // call below is ever reached.
       router.push('/(auth)/apply-for-access' as any);
       return;
     }
