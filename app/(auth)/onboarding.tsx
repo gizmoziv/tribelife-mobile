@@ -37,6 +37,12 @@ function GlobeIcon() {
 
 type HandleResult = 'none' | 'invalid' | 'available' | 'taken';
 
+// Phase 35: two-step onboarding state machine. `null` is load-bearing — the
+// attribution read below is asynchronous, so any synchronous default would
+// render one frame of the wrong step, and a deep-link user seeing the
+// referral step even for a frame violates D-01.
+type OnboardingStep = 'referral' | 'profile';
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -57,14 +63,24 @@ export default function OnboardingScreen() {
   const [recognizedSource, setRecognizedSource] = useState<'handle_code' | 'profile_share' | 'group_invite' | null>(null);
   const [typedReferrer, setTypedReferrer] = useState('');
 
+  // Phase 35 step machine — resolved inside the attribution effect below.
+  const [step, setStep] = useState<OnboardingStep | null>(null);
+
   // Read captured attribution from AsyncStorage on mount to decide read-only vs editable
   useEffect(() => {
     AsyncStorage.multiGet(['attributionRef', 'attributionSource']).then(([[, ref], [, source]]) => {
       if (ref) {
         setRecognizedRef(ref);
         setRecognizedSource((source as 'handle_code' | 'profile_share' | 'group_invite' | null) ?? null);
+        setStep('profile');
+      } else {
+        setStep('referral');
       }
-    }).catch(() => {/* silent — field stays editable */});
+    }).catch(() => {
+      // Storage failure: leave the user on the gated path rather than stuck
+      // on the loading indicator.
+      setStep('referral');
+    });
   }, []);
 
   const isReadOnlyRef = !!recognizedRef;
@@ -261,7 +277,11 @@ export default function OnboardingScreen() {
                 </View>
               </GlassCard>
             </AnimatedEntry>
-          ) : (
+          ) : step === null ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
+          ) : step === 'profile' ? (
             <>
               <AnimatedEntry style={styles.header}>
                 <View style={[styles.waveContainer, { backgroundColor: colors.surfaceGlass }]}>
@@ -396,6 +416,9 @@ export default function OnboardingScreen() {
                 />
               </AnimatedEntry>
             </>
+          ) : (
+            // Referral step insertion point — Task 2 fills this.
+            <></>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -405,6 +428,12 @@ export default function OnboardingScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 120,
+  },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: SPACING.page,
