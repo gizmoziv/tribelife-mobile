@@ -84,6 +84,26 @@ export async function connectSocket(): Promise<Socket | null> {
     });
 
     s.on('connect_error', (err) => {
+      // Phase 35 (Touchpoint 4, D-13/D-15/D-20): Phase 34's io.use() middleware
+      // refuses the handshake for a pending/rejected user with exactly these
+      // two literals. Match byte-for-byte — do not reword, prefix, or re-case.
+      // Treat as TERMINAL: this is a server-denied handshake (socket.io
+      // classifies it as such and does not run the normal reconnection
+      // backoff for it), but connectSocket()'s reuse branch would otherwise
+      // manually re-dial this now-permanently-inactive instance on every
+      // subsequent call, producing a fresh refusal + misleading error log
+      // each time. Dropping the module singleton reference is what actually
+      // stops that repetition. Do NOT add a module-level latch that outlives
+      // this attempt — that would block the D-17 unlock path after approval;
+      // a fresh connectSocket() call after the block clears must be able to
+      // dial cleanly.
+      if (err.message === 'access_pending' || err.message === 'access_rejected') {
+        s.io.reconnection(false);
+        s.disconnect();
+        if (socket === s) socket = null;
+        console.log('[socket] Handshake refused (access gate):', err.message);
+        return;
+      }
       console.error('[socket] Connection error:', err.message);
     });
 

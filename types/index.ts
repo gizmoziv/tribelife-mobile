@@ -1,5 +1,11 @@
 export * from './capabilities';
 
+// ── Phase 35: Required Referral Gate + Apply for Access (mobile) ───────────
+// Mirrors tribelife-backend's user_profiles.access_status column (Phase 34).
+// null/absent means NOT gated — existing users and old server builds are
+// unaffected (34-CONTEXT D-03).
+export type AccessStatus = 'pending' | 'approved' | 'rejected';
+
 export interface User {
   id: number;
   email: string;
@@ -14,6 +20,8 @@ export interface User {
   acceptedTermsAt: string | null;
   handleUpdatedAt: string | null;
   bio: string | null;
+  // Phase 35: optional — absent on old server builds. null/absent = not gated.
+  accessStatus?: AccessStatus | null;
 }
 
 export interface ReactionGroup {

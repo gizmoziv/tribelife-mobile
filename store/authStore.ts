@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { User, Capabilities } from '@/types';
-import { setToken, clearToken, auth } from '@/services/api';
+import type { User, Capabilities, AccessStatus } from '@/types';
+import { setToken, clearToken, auth, extractAccessStatus } from '@/services/api';
 
 interface AuthState {
   user: User | null;
@@ -9,9 +9,13 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   needsOnboarding: boolean;
+  // Phase 35: null = not gated (existing user, or old server build that omits
+  // the field). 'pending'/'rejected' drives the root-layout block gate.
+  accessStatus: AccessStatus | null;
 
-  setAuth: (token: string, user: User, capabilities: Capabilities, needsOnboarding?: boolean) => Promise<void>;
+  setAuth: (token: string, user: User, capabilities: Capabilities, needsOnboarding?: boolean, accessStatus?: AccessStatus | null) => Promise<void>;
   setCapabilities: (capabilities: Capabilities) => void;
+  setAccessStatus: (status: AccessStatus | null) => void;
   refreshCapabilities: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
@@ -27,13 +31,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
   isAuthenticated: false,
   needsOnboarding: false,
+  accessStatus: null,
 
-  setAuth: async (token, user, capabilities, needsOnboarding = false) => {
+  setAuth: async (token, user, capabilities, needsOnboarding = false, accessStatus = null) => {
     await setToken(token);
-    set({ token, user, capabilities, isAuthenticated: true, isLoading: false, needsOnboarding });
+    set({ token, user, capabilities, isAuthenticated: true, isLoading: false, needsOnboarding, accessStatus });
   },
 
   setCapabilities: (capabilities) => set({ capabilities }),
+
+  // Phase 35: consumed by 35-02 after a successful access-request submission
+  // (D-09: submission sets accessStatus = 'pending' locally, reconciled by
+  // the refreshSession() call that follows it).
+  setAccessStatus: (status) => set({ accessStatus: status }),
 
   refreshCapabilities: async () => {
     try {
@@ -55,8 +65,15 @@ export const useAuthStore = create<AuthState>((set) => ({
   // endpoint.
   refreshSession: async () => {
     try {
-      const { user, capabilities } = await auth.me();
-      set({ user, capabilities });
+      // Phase 35: keep the WHOLE auth.me() response instead of destructuring
+      // only user/capabilities — this is the mechanism D-17's foreground
+      // unlock depends on. Destructuring here would silently drop accessStatus.
+      const meResponse = await auth.me();
+      set({
+        user: meResponse.user,
+        capabilities: meResponse.capabilities,
+        accessStatus: extractAccessStatus(meResponse),
+      });
     } catch (err) {
       console.warn('[session] refresh failed', err);
     }
@@ -73,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await clearToken();
-    set({ user: null, token: null, capabilities: null, isAuthenticated: false, needsOnboarding: false });
+    set({ user: null, token: null, capabilities: null, isAuthenticated: false, needsOnboarding: false, accessStatus: null });
   },
 
   setLoading: (isLoading) => set({ isLoading }),

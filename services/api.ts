@@ -23,6 +23,7 @@ import type {
   ChevraSection,
   ChevraSectionResponse,
   LinkPreview,
+  AccessStatus,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -83,6 +84,34 @@ export class ApiError extends Error {
   }
 }
 
+// ── Phase 35: accessStatus extraction ───────────────────────────────────────
+// CONFIRMED (Phase 34 34-01 §7): accessStatus is nested at response.user.accessStatus
+// in all three session responses (googleSignIn, appleSignIn, me). We ALSO check a
+// top-level sibling because Phase 34's own research and Phase 35's research
+// disagreed about placement before reconciliation — kept deliberately as drift
+// insurance now that the nested placement is confirmed unnecessary-but-retained.
+// Guards every read (input is unknown); returns null for anything that isn't one
+// of the three literals, which the caller treats as "not gated".
+function isAccessStatus(value: unknown): value is AccessStatus {
+  return value === 'pending' || value === 'approved' || value === 'rejected';
+}
+
+export function extractAccessStatus(response: unknown): AccessStatus | null {
+  if (!response || typeof response !== 'object') return null;
+  const obj = response as Record<string, unknown>;
+
+  const nestedUser = obj.user;
+  if (nestedUser && typeof nestedUser === 'object') {
+    const nested = (nestedUser as Record<string, unknown>).accessStatus;
+    if (isAccessStatus(nested)) return nested;
+  }
+
+  const topLevel = obj.accessStatus;
+  if (isAccessStatus(topLevel)) return topLevel;
+
+  return null;
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const auth = {
   googleSignIn: (idToken: string) =>
@@ -131,7 +160,7 @@ export const auth = {
     ),
 
   me: (timezone?: string) =>
-    request<{ user: User; needsOnboarding: boolean; capabilities: Capabilities }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
+    request<{ user: User; needsOnboarding: boolean; capabilities: Capabilities; accessStatus?: AccessStatus | null }>(`/api/auth/me${timezone ? `?timezone=${encodeURIComponent(timezone)}` : ''}`),
 
   capabilities: () =>
     request<{ capabilities: Capabilities }>('/api/auth/capabilities'),

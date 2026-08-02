@@ -23,7 +23,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, getToken, notificationsApi } from '@/services/api';
+import { auth, getToken, notificationsApi, extractAccessStatus } from '@/services/api';
 import { connectSocket, emitForeground, emitBackground } from '@/services/socket';
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDirectMessage } from '@/services/socket';
@@ -38,6 +38,7 @@ import {
 } from '@/services/pushNotifications';
 import { checkVersion, type VersionCheckResult } from '@/services/version';
 import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
+import { AccessBlockScreen } from '@/components/ui/AccessBlockScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -178,7 +179,7 @@ function refreshBellSummarySoon(): void {
 
 function RootLayoutInner() {
   const { isDark } = useTheme();
-  const { token, user, setAuth, setLoading } = useAuthStore();
+  const { token, user, setAuth, setLoading, isAuthenticated, accessStatus } = useAuthStore();
   const { incrementUnread, addNotification, markOneRead } = useNotificationStore();
   const router = useRouter();
 
@@ -236,8 +237,10 @@ function RootLayoutInner() {
         }
         if (token) {
           const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
-          const { user, needsOnboarding, capabilities } = await auth.me(deviceTimezone);
-          await setAuth(token, user, capabilities, needsOnboarding);
+          const meResponse = await auth.me(deviceTimezone);
+          const { user, needsOnboarding, capabilities } = meResponse;
+          const resolvedStatus = extractAccessStatus(meResponse);
+          await setAuth(token, user, capabilities, needsOnboarding, resolvedStatus);
 
           // Tracks whether a deep link (pending group invite or cold-start push
           // tap) consumed the initial nav slot. If still false after both
@@ -253,8 +256,12 @@ function RootLayoutInner() {
             deepLinkHandled = true;
           }
 
-          // Connect socket
-          const socket = await connectSocket();
+          // Connect socket — Phase 35: skip entirely for a pending/rejected
+          // session. Phase 34 refuses the handshake for these statuses, so
+          // dialing it here would burn a connect_error on every launch. The
+          // status is already known synchronously (resolvedStatus, above).
+          const socketBlocked = resolvedStatus === 'pending' || resolvedStatus === 'rejected';
+          const socket = socketBlocked ? null : await connectSocket();
 
           // Listen for real-time notifications. Optimistically bump the raw
           // unread count, then refetch the authoritative per-type summary so
@@ -556,6 +563,24 @@ function RootLayoutInner() {
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <StatusBar style={isDark ? 'light' : 'dark'} />
           <ForceUpdateModal message={versionResult.message} />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // Phase 35 (D-13/D-14/D-15/D-20): this is a UX gate only — Phase 34 owns
+  // server-side enforcement (requireApprovedAccess + the socket handshake
+  // refusal). Placed here, above <Stack>, because five top-level routes
+  // (g/[slug], u/[handle], user/[handle], org/[slug], org/invite/[token]) are
+  // siblings of (app) and would bypass any (app)/_layout.tsx effect guard.
+  // isAuthenticated is required so an unauthenticated user still reaches
+  // welcome.tsx.
+  if (isAuthenticated && (accessStatus === 'pending' || accessStatus === 'rejected')) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+          <AccessBlockScreen status={accessStatus} />
         </SafeAreaProvider>
       </GestureHandlerRootView>
     );
