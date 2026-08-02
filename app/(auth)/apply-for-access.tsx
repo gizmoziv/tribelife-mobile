@@ -117,6 +117,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING['2xl'],
   },
   header: {
+    // Matches the footprint of the onboarding profile step's icon block so
+    // this title starts at the same height as "One last thing".
+    paddingTop: 72 + SPACING.md,
     marginBottom: SPACING.xl,
   },
   title: {

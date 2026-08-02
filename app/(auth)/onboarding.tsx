@@ -30,7 +30,11 @@ function GlobeIcon() {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
       <SvgCircle cx={12} cy={12} r={10} stroke="#7A8BA8" strokeWidth={1.5} />
-      <Path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" stroke="#7A8BA8" strokeWidth={1.5} />
+      <Path
+        d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"
+        stroke="#7A8BA8"
+        strokeWidth={1.5}
+      />
     </Svg>
   );
 }
@@ -40,7 +44,8 @@ type HandleResult = 'none' | 'invalid' | 'available' | 'taken';
 // Phase 35 (T-35-03): the ONLY referral-failure copy in this file. Every
 // failure path renders this identifier — never a repeated literal — so the
 // failure cause can never vary by cause (D-04).
-const REFERRAL_FAILURE_MESSAGE = "We couldn't verify that referral code. Check it and try again.";
+const REFERRAL_FAILURE_MESSAGE =
+  "We couldn't verify that referral code. Check it and try again.";
 
 // Phase 35 follow-on: two-step onboarding state machine. Profile is now the
 // first step for everyone; 'referral' is the follow-up screen reached only
@@ -67,7 +72,9 @@ export default function OnboardingScreen() {
 
   // Referral field state
   const [recognizedRef, setRecognizedRef] = useState<string | null>(null);
-  const [recognizedSource, setRecognizedSource] = useState<'handle_code' | 'profile_share' | 'group_invite' | null>(null);
+  const [recognizedSource, setRecognizedSource] = useState<
+    'handle_code' | 'profile_share' | 'group_invite' | null
+  >(null);
   const [typedReferrer, setTypedReferrer] = useState('');
 
   // Phase 35 step machine — resolved inside the attribution effect below.
@@ -77,7 +84,9 @@ export default function OnboardingScreen() {
   // the server's most recent response and nothing else — never derived,
   // never decremented, never seeded with a starting value (D-05, T-35-04).
   const [referralError, setReferralError] = useState<string | null>(null);
-  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(
+    null,
+  );
   const [isValidatingReferral, setIsValidatingReferral] = useState(false);
   const [referralValidated, setReferralValidated] = useState(false);
 
@@ -89,17 +98,25 @@ export default function OnboardingScreen() {
   // flash a one-frame editable referral field at deep-link users before it
   // flips to read-only.
   useEffect(() => {
-    AsyncStorage.multiGet(['attributionRef', 'attributionSource']).then(([[, ref], [, source]]) => {
-      if (ref) {
-        setRecognizedRef(ref);
-        setRecognizedSource((source as 'handle_code' | 'profile_share' | 'group_invite' | null) ?? null);
-      }
-      setStep('profile');
-    }).catch(() => {
-      // Storage failure: leave the user on the profile screen rather than
-      // stuck on the loading indicator.
-      setStep('profile');
-    });
+    AsyncStorage.multiGet(['attributionRef', 'attributionSource'])
+      .then(([[, ref], [, source]]) => {
+        if (ref) {
+          setRecognizedRef(ref);
+          setRecognizedSource(
+            (source as
+              | 'handle_code'
+              | 'profile_share'
+              | 'group_invite'
+              | null) ?? null,
+          );
+        }
+        setStep('profile');
+      })
+      .catch(() => {
+        // Storage failure: leave the user on the profile screen rather than
+        // stuck on the loading indicator.
+        setStep('profile');
+      });
   }, []);
 
   const isReadOnlyRef = !!recognizedRef;
@@ -199,7 +216,12 @@ export default function OnboardingScreen() {
       // organic typed  → use manual_entry source
       // empty organic  → omit both (same as original organic flow)
       let referralCode: string | undefined;
-      let attributionSource: 'handle_code' | 'profile_share' | 'group_invite' | 'manual_entry' | undefined;
+      let attributionSource:
+        | 'handle_code'
+        | 'profile_share'
+        | 'group_invite'
+        | 'manual_entry'
+        | undefined;
 
       if (recognizedRef) {
         referralCode = recognizedRef;
@@ -252,7 +274,7 @@ export default function OnboardingScreen() {
       Alert.alert(
         'Setup Failed',
         err instanceof Error ? err.message : 'Please try again',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
       );
     } finally {
       setIsSubmitting(false);
@@ -261,15 +283,24 @@ export default function OnboardingScreen() {
 
   const handleSubmit = async () => {
     if (!handle.trim()) {
-      Alert.alert('Handle Required', 'Please choose a handle before continuing.');
+      Alert.alert(
+        'Handle Required',
+        'Please choose a handle before continuing.',
+      );
       return;
     }
     if (handleResult !== 'available' || isChecking) {
-      Alert.alert('Handle Unavailable', 'Please choose an available handle before continuing.');
+      Alert.alert(
+        'Handle Unavailable',
+        'Please choose an available handle before continuing.',
+      );
       return;
     }
     if (!acceptedTerms) {
-      Alert.alert('Terms Required', 'Please agree to the Terms of Service and Privacy Policy to continue.');
+      Alert.alert(
+        'Terms Required',
+        'Please agree to the Terms of Service and Privacy Policy to continue.',
+      );
       return;
     }
 
@@ -334,16 +365,18 @@ export default function OnboardingScreen() {
     none: '',
     available: 'Available',
     taken: 'Already taken',
-    invalid: handle.length < 3
-      ? 'At least 3 characters required'
-      : 'Letters, numbers, and underscores only',
+    invalid:
+      handle.length < 3
+        ? 'At least 3 characters required'
+        : 'Letters, numbers, and underscores only',
   }[handleResult];
 
-  const inputBorderColor = handleResult === 'available'
-    ? COLORS.success
-    : handleResult === 'taken' || handleResult === 'invalid'
-      ? COLORS.error
-      : colors.border;
+  const inputBorderColor =
+    handleResult === 'available'
+      ? COLORS.success
+      : handleResult === 'taken' || handleResult === 'invalid'
+        ? COLORS.error
+        : colors.border;
 
   return (
     <LinearGradient
@@ -354,20 +387,44 @@ export default function OnboardingScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           {showGlobeCta ? (
             <AnimatedEntry style={styles.ctaContainer}>
               <GlassCard>
                 <View style={styles.ctaContent}>
-                  <View style={[styles.ctaIconContainer, { backgroundColor: colors.surfaceGlass }]}>
+                  <View
+                    style={[
+                      styles.ctaIconContainer,
+                      { backgroundColor: colors.surfaceGlass },
+                    ]}
+                  >
                     <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
-                      <SvgCircle cx={12} cy={12} r={10} stroke={COLORS.primary} strokeWidth={1.5} />
-                      <Path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" stroke={COLORS.primary} strokeWidth={1.5} />
+                      <SvgCircle
+                        cx={12}
+                        cy={12}
+                        r={10}
+                        stroke={COLORS.primary}
+                        strokeWidth={1.5}
+                      />
+                      <Path
+                        d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"
+                        stroke={COLORS.primary}
+                        strokeWidth={1.5}
+                      />
                     </Svg>
                   </View>
-                  <Text style={[styles.ctaTitle, { color: colors.text }]}>Discover your community</Text>
-                  <Text style={[styles.ctaSubtitle, { color: colors.textMuted }]}>
-                    Join Town Square and connect with Jews worldwide in real-time
+                  <Text style={[styles.ctaTitle, { color: colors.text }]}>
+                    Discover your community
+                  </Text>
+                  <Text
+                    style={[styles.ctaSubtitle, { color: colors.textMuted }]}
+                  >
+                    Join Town Square and connect with Jews worldwide in
+                    real-time
                   </Text>
                   <PillButton
                     title="Visit Globe"
@@ -376,8 +433,15 @@ export default function OnboardingScreen() {
                     size="lg"
                     style={{ width: '100%', marginTop: SPACING.lg }}
                   />
-                  <TouchableOpacity onPress={handleSkipGlobe} style={styles.skipButton}>
-                    <Text style={[styles.skipText, { color: colors.textMuted }]}>Maybe later</Text>
+                  <TouchableOpacity
+                    onPress={handleSkipGlobe}
+                    style={styles.skipButton}
+                  >
+                    <Text
+                      style={[styles.skipText, { color: colors.textMuted }]}
+                    >
+                      Maybe later
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </GlassCard>
@@ -389,30 +453,43 @@ export default function OnboardingScreen() {
           ) : step === 'profile' ? (
             <>
               <AnimatedEntry style={styles.header}>
-                <View style={[styles.waveContainer, { backgroundColor: colors.surfaceGlass }]}>
+                <View
+                  style={[
+                    styles.waveContainer,
+                    { backgroundColor: colors.surfaceGlass },
+                  ]}
+                >
                   <Text style={styles.waveEmoji}>
                     <Text style={{ fontFamily: undefined }}>{'👋'}</Text>
                   </Text>
                 </View>
-                <Text style={[styles.title, { color: COLORS.text }]}>One last thing</Text>
+                <Text style={[styles.title, { color: COLORS.text }]}>
+                  One last thing
+                </Text>
                 <Text style={[styles.subtitle, { color: COLORS.textMuted }]}>
-                  Choose your community handle. This is how others will find and mention you.
+                  Choose your community handle. This is how others will find and
+                  mention you.
                 </Text>
               </AnimatedEntry>
 
               <AnimatedEntry delay={150} style={styles.form}>
                 {/* Handle input */}
-                <View style={[
-                  styles.inputContainer,
-                  {
-                    borderColor: inputBorderColor,
-                    backgroundColor: colors.surfaceGlass,
-                  },
-                ]}>
+                <View
+                  style={[
+                    styles.inputContainer,
+                    {
+                      borderColor: inputBorderColor,
+                      backgroundColor: colors.surfaceGlass,
+                    },
+                  ]}
+                >
                   <GlowBadge text="@" color={COLORS.accent} size="sm" />
                   <TextInput
                     ref={handleInputRef}
-                    style={[styles.input, { color: colors.text, fontFamily: FONTS.medium }]}
+                    style={[
+                      styles.input,
+                      { color: colors.text, fontFamily: FONTS.medium },
+                    ]}
                     placeholder="your_handle"
                     placeholderTextColor={colors.textMuted}
                     value={handle}
@@ -431,8 +508,15 @@ export default function OnboardingScreen() {
                   </Text>
                   {isChecking && (
                     <View style={styles.checkingInline}>
-                      <ActivityIndicator size="small" color={colors.textMuted} />
-                      <Text style={[styles.statusText, { color: colors.textMuted }]}>Checking…</Text>
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.textMuted}
+                      />
+                      <Text
+                        style={[styles.statusText, { color: colors.textMuted }]}
+                      >
+                        Checking…
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -442,41 +526,64 @@ export default function OnboardingScreen() {
                   <View style={styles.timezoneRow}>
                     <GlobeIcon />
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.timezoneLabel, { color: colors.textMuted }]}>Your timezone (auto-detected)</Text>
-                      <Text style={[styles.timezoneValue, { color: colors.text }]}>{detectedTimezone}</Text>
+                      <Text
+                        style={[
+                          styles.timezoneLabel,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Your timezone (auto-detected)
+                      </Text>
+                      <Text
+                        style={[styles.timezoneValue, { color: colors.text }]}
+                      >
+                        {detectedTimezone}
+                      </Text>
                     </View>
                   </View>
                 </GlassCard>
 
                 {/* Referral field — read-only when ref captured, editable in organic case */}
-                {(isReadOnlyRef || referralValidated) ? (
+                {isReadOnlyRef || referralValidated ? (
                   <GlassCard>
                     <View style={styles.referralReadOnlyRow}>
-                      <Text style={styles.referralLabel}>Referred by</Text>
-                      <Text style={styles.referralHandle}>@{recognizedRef ?? typedReferrer}</Text>
+                      <Text style={styles.referralLabel}>Referral</Text>
+                      <Text style={styles.referralHandle}>
+                        @{recognizedRef ?? typedReferrer}
+                      </Text>
                     </View>
                   </GlassCard>
                 ) : (
                   <View>
-                    <Text style={styles.referralLabel}>Referred by</Text>
-                    <View style={[styles.inputContainer, styles.referralInputContainer]}>
+                    <Text style={styles.referralLabel}>Referral</Text>
+                    <View
+                      style={[
+                        styles.inputContainer,
+                        styles.referralInputContainer,
+                      ]}
+                    >
                       <TextInput
                         style={[styles.input, styles.referralInput]}
                         placeholder="referral code"
                         placeholderTextColor={COLORS.textMuted}
                         value={typedReferrer}
-                        onChangeText={(text) => setTypedReferrer(text.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                        onChangeText={(text) =>
+                          setTypedReferrer(
+                            text.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+                          )
+                        }
                         autoCapitalize="none"
                         autoCorrect={false}
                         maxLength={30}
                       />
                     </View>
-                    <Text style={styles.referralHint}>Optional — leave blank if you don't have one</Text>
+                    {/* <Text style={styles.referralHint}>Optional — leave blank if you don't have one</Text> */}
                   </View>
                 )}
 
                 <Text style={[styles.hint, { color: colors.textMuted }]}>
-                  Your timezone determines which local chat room you'll be placed in. You can change this later.
+                  Your timezone determines which local chat room you'll be
+                  placed in. You can change this later.
                 </Text>
 
                 {/* Terms */}
@@ -485,26 +592,45 @@ export default function OnboardingScreen() {
                   onPress={() => setAcceptedTerms(!acceptedTerms)}
                   activeOpacity={0.7}
                 >
-                  <View style={[
-                    styles.checkbox,
-                    {
-                      borderColor: acceptedTerms ? COLORS.secondary : COLORS.error,
-                      backgroundColor: acceptedTerms ? COLORS.secondary : 'transparent',
-                      borderWidth: acceptedTerms ? 1.5 : 2,
-                    },
-                  ]}>
-                    {acceptedTerms && <Text style={styles.checkmark}>{'✓'}</Text>}
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        borderColor: acceptedTerms
+                          ? COLORS.secondary
+                          : COLORS.error,
+                        backgroundColor: acceptedTerms
+                          ? COLORS.secondary
+                          : 'transparent',
+                        borderWidth: acceptedTerms ? 1.5 : 2,
+                      },
+                    ]}
+                  >
+                    {acceptedTerms && (
+                      <Text style={styles.checkmark}>{'✓'}</Text>
+                    )}
                   </View>
                   <Text style={[styles.termsText, { color: colors.textMuted }]}>
                     I agree to the{' '}
-                    <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/terms')}>
+                    <Text
+                      style={styles.termsLink}
+                      onPress={() =>
+                        Linking.openURL('https://tribelife.app/terms')
+                      }
+                    >
                       Terms of Service
-                    </Text>
-                    {' '}and{' '}
-                    <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tribelife.app/privacy')}>
+                    </Text>{' '}
+                    and{' '}
+                    <Text
+                      style={styles.termsLink}
+                      onPress={() =>
+                        Linking.openURL('https://tribelife.app/privacy')
+                      }
+                    >
                       Privacy Policy
                     </Text>
-                    , including zero tolerance for objectionable content or abusive behavior.
+                    , including zero tolerance for objectionable content or
+                    abusive behavior.
                   </Text>
                 </TouchableOpacity>
               </AnimatedEntry>
@@ -523,20 +649,28 @@ export default function OnboardingScreen() {
             </>
           ) : (
             <AnimatedEntry style={styles.header}>
-              <Text style={[styles.title, { color: COLORS.text }]}>Who invited you?</Text>
+              <View style={styles.iconlessHeaderSpacer} />
+              <Text style={[styles.title, { color: COLORS.text }]}>
+                Who invited you?
+              </Text>
               <Text style={[styles.subtitle, { color: COLORS.textMuted }]}>
-                TribeLife is invite-only. Enter the referral code from the member who invited you.
+                TribeLife is invite-only. Enter the referral code from the
+                member who invited you.
               </Text>
 
               <View style={styles.referralStepForm}>
-                <View style={[styles.inputContainer, styles.referralInputContainer]}>
+                <View
+                  style={[styles.inputContainer, styles.referralInputContainer]}
+                >
                   <TextInput
                     style={[styles.input, styles.referralInput]}
                     placeholder="referral code"
                     placeholderTextColor={COLORS.textMuted}
                     value={typedReferrer}
                     onChangeText={(text) => {
-                      setTypedReferrer(text.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                      setTypedReferrer(
+                        text.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+                      );
                       setReferralError(null);
                     }}
                     autoCapitalize="none"
@@ -547,12 +681,22 @@ export default function OnboardingScreen() {
                 </View>
 
                 {referralError !== null && (
-                  <Text style={[styles.referralErrorText, { color: COLORS.error }]}>{referralError}</Text>
+                  <Text
+                    style={[styles.referralErrorText, { color: COLORS.error }]}
+                  >
+                    {referralError}
+                  </Text>
                 )}
 
                 {attemptsRemaining !== null && (
-                  <Text style={[styles.referralAttemptsText, { color: COLORS.textMuted }]}>
-                    {attemptsRemaining} attempt{attemptsRemaining === 1 ? '' : 's'} remaining
+                  <Text
+                    style={[
+                      styles.referralAttemptsText,
+                      { color: COLORS.textMuted },
+                    ]}
+                  >
+                    {attemptsRemaining} attempt
+                    {attemptsRemaining === 1 ? '' : 's'} remaining
                   </Text>
                 )}
 
@@ -570,7 +714,12 @@ export default function OnboardingScreen() {
                   onPress={() => router.push('/(auth)/apply-for-access' as any)}
                   style={styles.referralSkipButton}
                 >
-                  <Text style={[styles.referralSkipText, { color: COLORS.textMuted }]}>
+                  <Text
+                    style={[
+                      styles.referralSkipText,
+                      { color: COLORS.textMuted },
+                    ]}
+                  >
                     I don't have a referral code
                   </Text>
                 </TouchableOpacity>
@@ -608,6 +757,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.md,
+  },
+  // Reserves the footprint of the profile step's waveContainer icon block so
+  // this step's title starts at the same height as "One last thing".
+  iconlessHeaderSpacer: {
+    height: 72 + SPACING.md,
   },
   waveEmoji: { fontSize: 36 },
   title: {
