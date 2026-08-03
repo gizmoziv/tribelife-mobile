@@ -174,7 +174,7 @@ export default function OnboardingScreen() {
       // Blank field: straight to the apply form, no request, no attempt
       // consumed (D-07). This branch must return before the validation
       // call below is ever reached.
-      router.push('/(auth)/apply-for-access' as any);
+      goToApplyForAccess('push');
       return;
     }
 
@@ -189,7 +189,7 @@ export default function OnboardingScreen() {
         setReferralError(REFERRAL_FAILURE_MESSAGE);
         setAttemptsRemaining(result.attemptsRemaining);
         if (result.exhausted) {
-          router.replace('/(auth)/apply-for-access' as any);
+          goToApplyForAccess('replace');
         }
         return;
       }
@@ -208,68 +208,83 @@ export default function OnboardingScreen() {
   // verbatim so it can be invoked both from the profile screen's Continue
   // button (after the organic referral gate below) and from
   // handleReferralContinue once a code is validated on the follow-up screen.
+  // Pure persistence — writes handle/timezone/terms (plus any resolved referral)
+  // and reconciles the session. Deliberately performs NO navigation: the
+  // apply-for-access path must persist without entering the app, so callers own
+  // where the user goes next.
+  const persistOnboarding = async () => {
+    // Resolve referral values from component state (populated on mount).
+    // recognized ref → keep its captured source (handle_code/profile_share/group_invite)
+    // organic typed  → use manual_entry source
+    // empty organic  → omit both (same as original organic flow)
+    let referralCode: string | undefined;
+    let attributionSource:
+      | 'handle_code'
+      | 'profile_share'
+      | 'group_invite'
+      | 'manual_entry'
+      | undefined;
+
+    if (recognizedRef) {
+      referralCode = recognizedRef;
+      attributionSource = recognizedSource ?? undefined;
+    } else if (typedReferrer.trim()) {
+      referralCode = typedReferrer.trim().toLowerCase();
+      attributionSource = 'manual_entry';
+    }
+
+    await auth.onboarding(
+      handle,
+      detectedTimezone,
+      true,
+      referralCode,
+      attributionSource,
+    );
+    completeOnboarding({
+      handle,
+      timezone: detectedTimezone,
+      acceptedTermsAt: new Date().toISOString(),
+    });
+    await refreshSession();
+    // Clear AsyncStorage attribution on success ONLY (recognized ref case).
+    // For organic typed there is nothing in AsyncStorage to clear.
+    // Failed submits keep the keys so a retry preserves attribution.
+    if (recognizedRef) {
+      await Promise.all([
+        AsyncStorage.removeItem('attributionRef'),
+        AsyncStorage.removeItem('attributionSource'),
+      ]);
+    }
+  };
+
+  // App-entry routing tail. Runs ONLY for users who are actually entering the
+  // app — never on the apply-for-access path, where accessStatus is about to
+  // gate them and any navigation here would fight the root-layout gate.
+  const enterApp = async () => {
+    // Deferred deep-link: if a /g/:slug interstitial wrote a pending group
+    // slug to the clipboard before install, recoverAttributionFromClipboard
+    // (in _layout.tsx) has already persisted it to AsyncStorage. Consume it
+    // here so first-onboarding lands the user on the Join Group screen
+    // instead of the default beacon/globe CTA.
+    const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
+    if (pendingGroupSlug) {
+      await AsyncStorage.removeItem('pendingGroupSlug');
+      router.replace(`/g/${pendingGroupSlug}` as any);
+      return;
+    }
+    const ctaDismissed = await AsyncStorage.getItem('globe_cta_dismissed');
+    if (ctaDismissed === 'true') {
+      router.replace('/(app)/beacon');
+    } else {
+      setShowGlobeCta(true);
+    }
+  };
+
   const submitOnboarding = async () => {
     setIsSubmitting(true);
     try {
-      // Resolve referral values from component state (populated on mount).
-      // recognized ref → keep its captured source (handle_code/profile_share/group_invite)
-      // organic typed  → use manual_entry source
-      // empty organic  → omit both (same as original organic flow)
-      let referralCode: string | undefined;
-      let attributionSource:
-        | 'handle_code'
-        | 'profile_share'
-        | 'group_invite'
-        | 'manual_entry'
-        | undefined;
-
-      if (recognizedRef) {
-        referralCode = recognizedRef;
-        attributionSource = recognizedSource ?? undefined;
-      } else if (typedReferrer.trim()) {
-        referralCode = typedReferrer.trim().toLowerCase();
-        attributionSource = 'manual_entry';
-      }
-
-      await auth.onboarding(
-        handle,
-        detectedTimezone,
-        true,
-        referralCode,
-        attributionSource,
-      );
-      completeOnboarding({
-        handle,
-        timezone: detectedTimezone,
-        acceptedTermsAt: new Date().toISOString(),
-      });
-      await refreshSession();
-      // Clear AsyncStorage attribution on success ONLY (recognized ref case).
-      // For organic typed there is nothing in AsyncStorage to clear.
-      // Failed submits keep the keys so a retry preserves attribution.
-      if (recognizedRef) {
-        await Promise.all([
-          AsyncStorage.removeItem('attributionRef'),
-          AsyncStorage.removeItem('attributionSource'),
-        ]);
-      }
-      // Deferred deep-link: if a /g/:slug interstitial wrote a pending group
-      // slug to the clipboard before install, recoverAttributionFromClipboard
-      // (in _layout.tsx) has already persisted it to AsyncStorage. Consume it
-      // here so first-onboarding lands the user on the Join Group screen
-      // instead of the default beacon/globe CTA.
-      const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
-      if (pendingGroupSlug) {
-        await AsyncStorage.removeItem('pendingGroupSlug');
-        router.replace(`/g/${pendingGroupSlug}` as any);
-        return;
-      }
-      const ctaDismissed = await AsyncStorage.getItem('globe_cta_dismissed');
-      if (ctaDismissed === 'true') {
-        router.replace('/(app)/beacon');
-      } else {
-        setShowGlobeCta(true);
-      }
+      await persistOnboarding();
+      await enterApp();
     } catch (err) {
       Alert.alert(
         'Setup Failed',
@@ -278,6 +293,24 @@ export default function OnboardingScreen() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Routing to the apply screen unmounts this component, so the validated
+  // profile-form values are handed over as params. That screen persists them
+  // only after the access request succeeds, so needsOnboarding and accessStatus
+  // flip in the same beat — persisting here instead would flip needsOnboarding
+  // while access_status is still NULL (its column default), and
+  // (auth)/_layout.tsx would push the user straight into the app past the gate.
+  const goToApplyForAccess = (mode: 'push' | 'replace') => {
+    const target = {
+      pathname: '/(auth)/apply-for-access',
+      params: { handle: handle.trim(), timezone: detectedTimezone },
+    } as any;
+    if (mode === 'replace') {
+      router.replace(target);
+    } else {
+      router.push(target);
     }
   };
 
@@ -331,7 +364,7 @@ export default function OnboardingScreen() {
       } else if (result.exhausted) {
         // Exhausted: routing to the follow-up screen would be a dead end —
         // every Continue there fails too.
-        router.replace('/(auth)/apply-for-access' as any);
+        goToApplyForAccess('replace');
         return;
       } else {
         setReferralError(REFERRAL_FAILURE_MESSAGE);
@@ -711,7 +744,7 @@ export default function OnboardingScreen() {
                 />
 
                 <TouchableOpacity
-                  onPress={() => router.push('/(auth)/apply-for-access' as any)}
+                  onPress={() => goToApplyForAccess('push')}
                   style={styles.referralSkipButton}
                 >
                   <Text

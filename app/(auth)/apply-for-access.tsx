@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
-import { accessApi } from '@/services/api';
+import { accessApi, auth } from '@/services/api';
 import type { SocialEntry } from '@/types';
 import { FONTS, COLORS, SPACING, RADIUS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
@@ -17,6 +18,11 @@ export default function ApplyForAccessScreen() {
   const user = useAuthStore((s) => s.user);
   const setAccessStatus = useAuthStore((s) => s.setAccessStatus);
   const refreshSession = useAuthStore((s) => s.refreshSession);
+  const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
+
+  // Handed over by onboarding.tsx, which unmounts when it routes here.
+  const { handle: pendingHandle, timezone: pendingTimezone } =
+    useLocalSearchParams<{ handle?: string; timezone?: string }>();
 
   const [reason, setReason] = useState('');
   const [socials, setSocials] = useState<SocialEntry[]>([{ platform: 'linkedin', handle: '' }]);
@@ -35,8 +41,38 @@ export default function ApplyForAccessScreen() {
     setSocialsError(null);
 
     try {
+      // ORDER IS LOAD-BEARING. The access request flips access_status to
+      // 'pending' server-side FIRST; only then do we persist the handle, which
+      // is what flips needsOnboarding false. Reversed — or persisted back on the
+      // profile screen — a user would briefly be onboarded while access_status
+      // is still NULL (the column has no default, and NULL means ungated
+      // everywhere), and (auth)/_layout.tsx would replace the route with
+      // /(app)/beacon, skipping the referral gate entirely.
       await accessApi.submitAccessRequest(reason.trim(), socials);
       setAccessStatus('pending');
+
+      // Persist the profile-form values carried over from onboarding.tsx, which
+      // unmounted on navigation here. Without this the handle stays at the
+      // account-creation placeholder (`_temp_{userId}`) forever, so an approved
+      // applicant still reads as needing onboarding and is bounced back to the
+      // profile screen on every launch.
+      if (pendingHandle && pendingTimezone) {
+        try {
+          await auth.onboarding(pendingHandle, pendingTimezone, true);
+          completeOnboarding({
+            handle: pendingHandle,
+            timezone: pendingTimezone,
+            acceptedTermsAt: new Date().toISOString(),
+          });
+        } catch {
+          // Non-fatal: the application itself is already in, and the user is
+          // gated on 'pending' either way. They keep the placeholder handle and
+          // are routed back to the profile screen once approved, which is the
+          // pre-existing recovery path — far better than surfacing a failure
+          // for an action that succeeded.
+        }
+      }
+
       await refreshSession();
       // No navigation here — the root-layout gate re-renders into the
       // pending block screen the moment the store flips (D-12, D-13).
