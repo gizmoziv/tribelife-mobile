@@ -32,11 +32,14 @@ export const JOB_CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.78), 320);
 
 export interface JobCardProps {
   job: JobPosting;
+  /** Renders at 100% of the container width instead of JOB_CARD_WIDTH — for
+   * the vertical, single-type feed (TribeJobsList) rather than the carousel. */
+  fullWidth?: boolean;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function JobCard({ job }: JobCardProps) {
+export function JobCard({ job, fullWidth }: JobCardProps) {
   const { colors } = useTheme();
 
   // Silent degradation when logo URL is null or the image request fails
@@ -72,7 +75,7 @@ export function JobCard({ job }: JobCardProps) {
           {
             backgroundColor: colors.surfaceGlass,
             borderColor: colors.border,
-            width: JOB_CARD_WIDTH,
+            width: fullWidth ? '100%' : JOB_CARD_WIDTH,
           },
         ]}
       >

@@ -73,6 +73,8 @@ import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
+import { ScrollToBottomButton } from '@/components/chat/ScrollToBottomButton';
+import { useScrollToBottom } from '@/hooks/useScrollToBottom';
 import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import type { Message, ChatsRow, GroupMember, MessageAttachment } from '@/types';
@@ -215,6 +217,11 @@ export default function DMThreadScreen() {
   // threshold (null = closed). Opened via the long-press "Info" action (groups).
   const [breakdownCreatedAt, setBreakdownCreatedAt] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const { isAtBottom, handleScroll, scrollToBottom } = useScrollToBottom(flatListRef);
+  // Measured height of the composer block below (edit/reply banners + input
+  // row, or the archived/join bar) so the scroll-to-bottom FAB floats just
+  // above it instead of a fixed offset — that block's height varies.
+  const [composerHeight, setComposerHeight] = useState(80);
   // Reversed copy for the inverted FlatList — index 0 = newest message =
   // visual bottom. Inverting fixes the composer floating mid-screen after the
   // keyboard collapses + the message jitter: the list opens at the bottom
@@ -1284,6 +1291,8 @@ export default function DMThreadScreen() {
           contentContainerStyle={styles.messageList}
           onViewableItemsChanged={stickyDate.onViewableItemsChanged}
           viewabilityConfig={stickyDate.viewabilityConfig}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
@@ -1315,6 +1324,15 @@ export default function DMThreadScreen() {
           <ChatDateSeparator label={stickyDate.label} />
         </Animated.View>
 
+        {/* Scroll-to-bottom FAB — Viber-style, appears once scrolled past the
+            threshold, regardless of unread count. Floats just above the
+            measured composer block so it never covers the send/mic icon. */}
+        <ScrollToBottomButton
+          visible={!isAtBottom}
+          onPress={scrollToBottom}
+          bottom={composerHeight + SPACING.sm}
+        />
+
         {typingText && (
           <View style={styles.typingContainer}>
             <View style={[styles.typingPill, { backgroundColor: colors.surfaceGlass }]}>
@@ -1331,6 +1349,7 @@ export default function DMThreadScreen() {
         {/* D-11: Archived group — disabled composer, no join CTA (archived is terminal).
             D-09: Non-member preview — "Join Community" CTA.
             Default: standard composer for members of healthy groups. */}
+        <View onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
         {isGroup && isArchived ? (
           <View style={[styles.archivedBar, { paddingBottom: keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace }]}>
             <Text style={[styles.archivedBarText, { color: colors.textMuted }]}>
@@ -1442,6 +1461,7 @@ export default function DMThreadScreen() {
             </View>
           </>
         )}
+        </View>
 
         <ContextMenu
           visible={menuVisible}

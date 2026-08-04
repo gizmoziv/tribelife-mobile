@@ -33,11 +33,14 @@ export const ESEK_CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.78), 320);
 
 export interface EsekCardProps {
   product: EsekProduct;
+  /** Renders at 100% of the container width instead of ESEK_CARD_WIDTH — for
+   * the vertical, single-type feed (TribeEsekList) rather than the carousel. */
+  fullWidth?: boolean;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function EsekCard({ product }: EsekCardProps) {
+export function EsekCard({ product, fullWidth }: EsekCardProps) {
   const { colors } = useTheme();
 
   // Silent degradation when the image request fails (mirror JobCard.logoFailed)
@@ -84,7 +87,7 @@ export function EsekCard({ product }: EsekCardProps) {
           {
             backgroundColor: colors.surfaceGlass,
             borderColor: colors.border,
-            width: ESEK_CARD_WIDTH,
+            width: fullWidth ? '100%' : ESEK_CARD_WIDTH,
           },
         ]}
       >

@@ -32,14 +32,23 @@ import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
 import { TribeTodaySection } from './TribeTodaySection';
+import { TribeFilterPills, type TribeFilterKey } from './TribeFilterPills';
 import { TribeNewsSection } from './TribeNewsSection';
 import { TribeJobsSection } from './TribeJobsSection';
 import { TribeEsekSection } from './TribeEsekSection';
 import { TribeSurveySection } from './TribeSurveySection';
+import { TribeNewsList } from './TribeNewsList';
+import { TribeJobsList } from './TribeJobsList';
+import { TribeEsekList } from './TribeEsekList';
 
 export function TribeHubScreen() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
+
+  // Single-select filter pill, default 'all'. 'all' renders today's page
+  // unchanged (3 horizontal carousels + survey); a specific type switches to
+  // a single, vertically-scrolling, lazy-loaded feed of just that type.
+  const [filter, setFilter] = useState<TribeFilterKey>('all');
 
   // In-app banner shown when a news_breaking push arrives while this screen
   // is mounted. The OS push for the same event is suppressed by the handler
@@ -87,7 +96,9 @@ export function TribeHubScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      {hasNewArticles && (
+      {/* Banner only fires a refresh on the News carousel (via the ref below),
+          which is only mounted in the 'all' view — suppress it otherwise. */}
+      {hasNewArticles && filter === 'all' && (
         <TouchableOpacity
           onPress={handleBannerTap}
           activeOpacity={0.85}
@@ -98,18 +109,34 @@ export function TribeHubScreen() {
           </Text>
         </TouchableOpacity>
       )}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace }]}
-      >
+
+      {/* Candle Lighting + filter pills are a fixed header, above whichever
+          body renders below — mirrors the Chats tab (search + pills fixed,
+          only the list scrolls). */}
+      <View style={styles.topSection}>
         <TribeTodaySection />
-        <TribeNewsSection
-          onSetRefresh={(fn) => { newsSectionRefreshRef.current = fn; }}
-        />
-        <TribeJobsSection />
-        <TribeEsekSection />
-        <TribeSurveySection />
-      </ScrollView>
+        <TribeFilterPills value={filter} onChange={setFilter} />
+      </View>
+
+      {filter === 'all' ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: tabBarSpace }}
+        >
+          <TribeNewsSection
+            onSetRefresh={(fn) => { newsSectionRefreshRef.current = fn; }}
+          />
+          <TribeJobsSection />
+          <TribeEsekSection />
+          <TribeSurveySection />
+        </ScrollView>
+      ) : (
+        <View style={styles.filteredBody}>
+          {filter === 'news' && <TribeNewsList />}
+          {filter === 'jobs' && <TribeJobsList />}
+          {filter === 'marketplace' && <TribeEsekList />}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -118,8 +145,11 @@ export function TribeHubScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: {
+  topSection: {
     paddingTop: SPACING.md,
+  },
+  filteredBody: {
+    flex: 1,
   },
   newArticlesBanner: {
     marginHorizontal: SPACING.md,

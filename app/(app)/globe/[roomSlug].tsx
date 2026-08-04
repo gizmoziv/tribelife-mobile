@@ -72,6 +72,7 @@ import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
+import { ScrollToBottomButton } from '@/components/chat/ScrollToBottomButton';
 import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
@@ -85,20 +86,6 @@ function SendIcon() {
       <Path
         d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
         stroke="#FFF"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function ChevronDownIcon({ color }: { color: string }) {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M6 9l6 6 6-6"
-        stroke={color}
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -158,7 +145,6 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     rooms,
     messages,
     typingHandles,
-    newMessageCount,
     isAtBottom,
     isLoadingMessages,
     hasMoreMessages,
@@ -192,6 +178,10 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  // Measured height of the composer block below (edit/reply banners + input
+  // row, or the join-chat bar) so the scroll-to-bottom FAB floats just above
+  // it instead of a fixed offset — that block's height varies.
+  const [composerHeight, setComposerHeight] = useState(80);
   // Reversed copy of messages for inverted FlatList — newest message is at
   // visual bottom (index 0 of inverted list = last chronological message).
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
@@ -1167,17 +1157,14 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           <ChatDateSeparator label={stickyDate.label} />
         </Animated.View>
 
-        {/* Scroll-to-bottom pill */}
-        {!isAtBottom && newMessageCount > 0 && (
-          <Pressable onPress={scrollToBottom} style={styles.scrollPillWrapper}>
-            <View style={[styles.scrollPill, { backgroundColor: COLORS.primary }, SHADOWS.md]}>
-              <ChevronDownIcon color="#FFF" />
-              <Text style={styles.scrollPillText}>
-                {newMessageCount} new message{newMessageCount !== 1 ? 's' : ''}
-              </Text>
-            </View>
-          </Pressable>
-        )}
+        {/* Scroll-to-bottom FAB — Viber-style, appears once scrolled past the
+            threshold, regardless of unread count. Floats just above the
+            measured composer block so it never covers the send/mic icon. */}
+        <ScrollToBottomButton
+          visible={!isAtBottom}
+          onPress={scrollToBottom}
+          bottom={composerHeight + SPACING.sm}
+        />
 
         {/* Typing indicator */}
         {typingText && (
@@ -1191,6 +1178,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
         )}
 
         {/* Phase 11 D-12: composer hidden in read-only mode; replaced by Join CTA. */}
+        <View onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
         {effectiveIsMember ? (
           <>
             {/* Edit composer — shown when editing an own message */}
@@ -1322,6 +1310,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
             </TouchableOpacity>
           </View>
         )}
+        </View>
 
         {/* Context menu */}
         <ContextMenu
@@ -1535,26 +1524,6 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     zIndex: 20,
-  },
-  // Scroll-to-bottom pill
-  scrollPillWrapper: {
-    position: 'absolute',
-    bottom: 80,
-    alignSelf: 'center',
-    zIndex: 10,
-  },
-  scrollPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: RADIUS.pill,
-  },
-  scrollPillText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontFamily: FONTS.medium,
   },
   // Typing indicator
   typingContainer: {

@@ -415,7 +415,7 @@ export default function AppLayout() {
           tabBarIcon: ({ color, focused }) => (
             <GradientTabIcon icon="chai" color={color} focused={focused} />
           ),
-          headerTitle: 'Tribe',
+          headerTitle: 'tribelife',
         }}
       />
       <Tabs.Screen

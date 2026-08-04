@@ -67,6 +67,8 @@ import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/Men
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
+import { ScrollToBottomButton } from '@/components/chat/ScrollToBottomButton';
+import { useScrollToBottom } from '@/hooks/useScrollToBottom';
 import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
@@ -173,6 +175,12 @@ export default function LocalChatScreen() {
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  const { isAtBottom, handleScroll, scrollToBottom } = useScrollToBottom(flatListRef);
+  // Measured height of the composer block below (edit/reply banners + input
+  // row) so the scroll-to-bottom FAB floats just above it instead of a fixed
+  // offset — that block's height varies (reply/edit banner, recording bar,
+  // keyboard-open vs. tab-bar-open bottom padding).
+  const [composerHeight, setComposerHeight] = useState(80);
   // Reversed copy for the inverted FlatList — index 0 = newest message =
   // visual bottom. Inverting fixes the up/down "jump": the list opens at the
   // bottom natively, so the old timed scrollToEnd cascade + onContentSizeChange
@@ -908,6 +916,8 @@ export default function LocalChatScreen() {
           contentContainerStyle={styles.messageList}
           onViewableItemsChanged={stickyDate.onViewableItemsChanged}
           viewabilityConfig={stickyDate.viewabilityConfig}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
@@ -939,52 +949,63 @@ export default function LocalChatScreen() {
           <ChatDateSeparator label={stickyDate.label} />
         </Animated.View>
 
+        {/* Scroll-to-bottom FAB — Viber-style, appears once scrolled past the
+            threshold, regardless of unread count. Floats just above the
+            measured composer block so it never covers the send/mic icon. */}
+        <ScrollToBottomButton
+          visible={!isAtBottom}
+          onPress={scrollToBottom}
+          bottom={composerHeight + SPACING.sm}
+        />
+
         {typingUsers.length > 0 && (
           <TypingIndicator users={typingUsers} />
         )}
 
-        {editingMessage ? (
-          <EditComposer
-            initialContent={editingMessage.content}
-            saving={savingEdit}
-            onSave={async (next) => {
-              setSavingEdit(true);
-              try {
-                const { message } = await chat.editMessage(editingMessage.id, next);
-                setMessages((prev) => prev.map((m) => m.id === message.id ? { ...m, content: message.content, editedAt: message.editedAt } : m));
-                setEditingMessage(null);
-              } catch (err: any) {
-                Alert.alert('Could not edit message', err?.message ?? 'Please try again.');
-              } finally {
-                setSavingEdit(false);
-              }
-            }}
-            onCancel={() => setEditingMessage(null)}
-          />
-        ) : null}
-        <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+        <View onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
+          {editingMessage ? (
+            <EditComposer
+              initialContent={editingMessage.content}
+              saving={savingEdit}
+              onSave={async (next) => {
+                setSavingEdit(true);
+                try {
+                  const { message } = await chat.editMessage(editingMessage.id, next);
+                  setMessages((prev) => prev.map((m) => m.id === message.id ? { ...m, content: message.content, editedAt: message.editedAt } : m));
+                  setEditingMessage(null);
+                } catch (err: any) {
+                  Alert.alert('Could not edit message', err?.message ?? 'Please try again.');
+                } finally {
+                  setSavingEdit(false);
+                }
+              }}
+              onCancel={() => setEditingMessage(null)}
+            />
+          ) : null}
+          <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
 
-        <ChatInput
-          value={input}
-          onChangeText={handleInputChange}
-          onSend={handleSend}
-          isUploading={isUploading}
-          isRecording={isRecording}
-          onStartRecording={() => setIsRecording(true)}
-          onDiscardVoice={() => setIsRecording(false)}
-          onSendVoice={handleSendVoice}
-          onImagesSelected={handleImagesSelected}
-          onGifSelected={handleGifSelected}
-          onDocumentPicked={handleDocumentPicked}
-          selection={selection}
-          onSelectionChange={setSelection}
-          mentionScope={user?.timezone ? 'timezone' : undefined}
-          mentionContextId={user?.timezone ?? ''}
-          onMentionSelect={(newText, newCursor) => {
-            setInput(newText);
-            setSelection({ start: newCursor, end: newCursor });
-          }}
-        />
+          <ChatInput
+            value={input}
+            onChangeText={handleInputChange}
+            onSend={handleSend}
+            isUploading={isUploading}
+            isRecording={isRecording}
+            onStartRecording={() => setIsRecording(true)}
+            onDiscardVoice={() => setIsRecording(false)}
+            onSendVoice={handleSendVoice}
+            onImagesSelected={handleImagesSelected}
+            onGifSelected={handleGifSelected}
+            onDocumentPicked={handleDocumentPicked}
+            selection={selection}
+            onSelectionChange={setSelection}
+            mentionScope={user?.timezone ? 'timezone' : undefined}
+            mentionContextId={user?.timezone ?? ''}
+            onMentionSelect={(newText, newCursor) => {
+              setInput(newText);
+              setSelection({ start: newCursor, end: newCursor });
+            }}
+          />
+        </View>
 
         <ContextMenu
           visible={menuVisible}

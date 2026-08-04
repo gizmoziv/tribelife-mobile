@@ -30,7 +30,7 @@ import {
   SHADOWS,
   PREMIUM_BEACON_LIMIT,
 } from '@/constants';
-import { BEACON_FLAME_PATH, BEACON_FLAME_HERO_PATH } from '@/constants/beaconFlame';
+import { BEACON_FLAME_PATH } from '@/constants/beaconFlame';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useIsPremium } from '@/hooks/useCapability';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -157,10 +157,11 @@ function FlameIcon({ size = 18 }: { size?: number }) {
 }
 
 // ── Hero flame (used in the "What is a Beacon?" explainer card) ───────────
-// The CPO's hand-drawn hollow flame (BEACON_FLAME_HERO_PATH), filled with the
-// brand gradient, gently breathing (scaleY flicker) and swaying. A soft radial
-// halo pulses behind it and four embers rise from the fire and fade. The
-// flame's inner cutout lets the halo glow through the middle.
+// The traced flame artwork (assets/beacon-flame.png), gently breathing
+// (scaleY flicker) and swaying. A soft radial halo pulses behind it and four
+// embers rise from the fire and fade.
+const BEACON_FLAME_HERO_ASPECT = 306 / 480; // width/height of assets/beacon-flame.png
+
 const AnimatedG = Animated.createAnimatedComponent(G);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
@@ -289,30 +290,43 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
     outputRange: ['-57.2958deg', '57.2958deg'],
   });
 
+  const containerHeight = size * 1.3;
+  const flameHeight = size * 1.1;
+  const flameWidth = flameHeight * BEACON_FLAME_HERO_ASPECT;
+
+  // Breathing scaleY is anchored at the flame's base (not its center) so it
+  // stretches upward like real fire — a plain View's scale transform pivots
+  // around its own center by default, so translateY compensates to pin the
+  // base in place: T = (H/2)(1 - s) for a scale factor s.
+  const flameTranslateY = flameScale.interpolate({
+    inputRange: [0.94, 1.07],
+    outputRange: [flameHeight * 0.03, flameHeight * -0.035],
+  });
+
   return (
     <Animated.View
       style={{
         width: size,
-        height: size * 1.3,
+        height: containerHeight,
         transform: [{ rotate: swayRotate }],
       }}
     >
-      <Svg width={size} height={size * 1.3} viewBox="0 0 100 130" fill="none">
+      <Svg
+        width={size}
+        height={containerHeight}
+        viewBox="0 0 100 130"
+        fill="none"
+        style={StyleSheet.absoluteFill}
+      >
         <Defs>
           <RadialGradient id="halo" cx="50%" cy="78%" r="55%">
-            <Stop offset="0" stopColor="#F59E0B" stopOpacity="0.55" />
-            <Stop offset="0.6" stopColor="#F97316" stopOpacity="0.15" />
-            <Stop offset="1" stopColor="#F97316" stopOpacity="0" />
+            <Stop offset="0" stopColor="#FA5504" stopOpacity="0.55" />
+            <Stop offset="0.6" stopColor="#E32A03" stopOpacity="0.18" />
+            <Stop offset="1" stopColor="#E32A03" stopOpacity="0" />
           </RadialGradient>
-          <SvgLinearGradient id="beaconFlameHero" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#9333EA" />
-            <Stop offset="0.5" stopColor="#E879A0" />
-            <Stop offset="1" stopColor="#F59E0B" />
-          </SvgLinearGradient>
         </Defs>
 
-        {/* Soft radial halo that pulses behind the flame — glows through the
-            flame's inner cutout. */}
+        {/* Soft radial halo that pulses behind the flame. */}
         <AnimatedEllipse
           cx="50"
           cy="92"
@@ -321,26 +335,43 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
           fill="url(#halo)"
           opacity={haloPulse}
         />
+      </Svg>
 
-        {/* Flame body — the traced hollow flame, breathing via scaleY with the
-            origin at the base so it stretches upward like real fire. */}
-        <AnimatedG originX="50" originY="118" scaleY={flameScale}>
-          <Path
-            d={BEACON_FLAME_HERO_PATH}
-            fill="url(#beaconFlameHero)"
-            fillRule="evenodd"
-          />
-        </AnimatedG>
+      {/* Flame body — the traced artwork, breathing via scaleY anchored at
+          its base so it stretches upward like real fire. */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: (size - flameWidth) / 2,
+          width: flameWidth,
+          height: flameHeight,
+          transform: [{ translateY: flameTranslateY }, { scaleY: flameScale }],
+        }}
+      >
+        <Image
+          source={require('@/assets/beacon-flame.png')}
+          style={{ width: flameWidth, height: flameHeight }}
+          resizeMode="contain"
+        />
+      </Animated.View>
 
-        {/* Embers — rise from within the fire body, fade as they climb.
-            Spawn points scatter across the flame body so they feel like
-            ash kicked up by a bonfire, not a single wick's smoke trail. */}
+      {/* Embers — rise from within the fire body, fade as they climb.
+          Spawn points scatter across the flame body so they feel like
+          ash kicked up by a bonfire, not a single wick's smoke trail. */}
+      <Svg
+        width={size}
+        height={containerHeight}
+        viewBox="0 0 100 130"
+        fill="none"
+        style={StyleSheet.absoluteFill}
+      >
         <AnimatedG transform={[{ translateY: ember1Y }]}>
           <AnimatedCircle
             cx="36"
             cy="72"
             r="1.8"
-            fill="#FDE68A"
+            fill="#FDF260"
             opacity={ember1Op}
           />
         </AnimatedG>
@@ -349,7 +380,7 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
             cx="62"
             cy="66"
             r="2.2"
-            fill="#F59E0B"
+            fill="#FA8B04"
             opacity={ember2Op}
           />
         </AnimatedG>
@@ -367,7 +398,7 @@ function HeroFlameIcon({ size = 56 }: { size?: number }) {
             cx="44"
             cy="78"
             r="1.3"
-            fill="#FDE68A"
+            fill="#FCD826"
             opacity={ember4Op}
           />
         </AnimatedG>

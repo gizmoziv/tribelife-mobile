@@ -33,6 +33,9 @@ export const NEWS_CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.78), 320);
 
 export interface NewsCardProps {
   article: NewsArticle;
+  /** Renders at 100% of the container width instead of NEWS_CARD_WIDTH — for
+   * the vertical, single-type feed (TribeNewsList) rather than the carousel. */
+  fullWidth?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,7 +54,7 @@ function formatRelativeTime(iso: string): string {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function NewsCard({ article }: NewsCardProps) {
+export function NewsCard({ article, fullWidth }: NewsCardProps) {
   const { colors } = useTheme();
 
   // Flip to no-image layout if the OG image URL fails (broken CDN, 404, etc.)
@@ -94,7 +97,7 @@ export function NewsCard({ article }: NewsCardProps) {
           {
             backgroundColor: colors.surfaceGlass,
             borderColor: colors.border,
-            width: NEWS_CARD_WIDTH,
+            width: fullWidth ? '100%' : NEWS_CARD_WIDTH,
           },
         ]}
       >
