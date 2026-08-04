@@ -96,7 +96,9 @@ export default function ApplyForAccessScreen() {
 
           <AnimatedEntry delay={100} style={styles.form}>
             {/* Email — read-only (D-08) */}
-            <GlassCard style={styles.fieldSpacer}>
+            <GlassCard
+              style={{ ...styles.fieldSpacer, backgroundColor: COLORS.surfaceGlass, borderColor: COLORS.border }}
+            >
               <View style={styles.emailRow}>
                 <Text style={styles.emailLabel}>Email</Text>
                 <Text style={styles.emailValue}>{user?.email}</Text>
@@ -115,6 +117,10 @@ export default function ApplyForAccessScreen() {
               editable={!submitting}
               style={styles.reasonInput}
               containerStyle={styles.fieldSpacer}
+              backgroundColor={COLORS.surfaceGlass}
+              unfocusedBorderColor={COLORS.border}
+              textColor={COLORS.text}
+              placeholderColor={COLORS.textMuted}
             />
             <Text style={styles.charCounter}>{reason.length}/{REASON_MAX_LENGTH}</Text>
 

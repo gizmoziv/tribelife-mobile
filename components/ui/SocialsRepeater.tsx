@@ -70,7 +70,10 @@ export function SocialsRepeater({ value, onChange, disabled, error }: SocialsRep
   return (
     <View>
       {rows.map((row, index) => (
-        <GlassCard key={index} style={styles.row}>
+        <GlassCard
+          key={index}
+          style={{ ...styles.row, backgroundColor: COLORS.surfaceGlass, borderColor: COLORS.border }}
+        >
           <TouchableOpacity
             style={styles.platformSelector}
             onPress={() => !disabled && setPickerOpenForIndex(index)}
@@ -90,6 +93,10 @@ export function SocialsRepeater({ value, onChange, disabled, error }: SocialsRep
             maxLength={200}
             editable={!disabled}
             containerStyle={styles.fieldSpacer}
+            backgroundColor={COLORS.surfaceGlass}
+            unfocusedBorderColor={COLORS.border}
+            textColor={COLORS.text}
+            placeholderColor={COLORS.textMuted}
           />
 
           {row.platform === 'other' && (
@@ -100,6 +107,10 @@ export function SocialsRepeater({ value, onChange, disabled, error }: SocialsRep
               maxLength={40}
               editable={!disabled}
               containerStyle={styles.fieldSpacer}
+              backgroundColor={COLORS.surfaceGlass}
+              unfocusedBorderColor={COLORS.border}
+              textColor={COLORS.text}
+              placeholderColor={COLORS.textMuted}
             />
           )}
 

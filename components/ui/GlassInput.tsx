@@ -16,6 +16,13 @@ interface GlassInputProps extends TextInputProps {
   glowOnFocus?: boolean;
   glowColor?: string;
   containerStyle?: ViewStyle;
+  // Overrides for screens with a fixed (non-theme-following) background, e.g.
+  // the auth flow's dark gradient — same idea as `glowColor` above. Omit to
+  // keep the default theme-following behavior.
+  backgroundColor?: string;
+  unfocusedBorderColor?: string;
+  textColor?: string;
+  placeholderColor?: string;
 }
 
 export function GlassInput({
@@ -24,6 +31,10 @@ export function GlassInput({
   glowColor = COLORS.accent,
   containerStyle,
   style,
+  backgroundColor,
+  unfocusedBorderColor,
+  textColor,
+  placeholderColor,
   ...inputProps
 }: GlassInputProps) {
   const { colors } = useTheme();
@@ -52,12 +63,13 @@ export function GlassInput({
     inputProps.onBlur?.(e);
   };
 
+  const baseBorderColor = unfocusedBorderColor ?? colors.border;
   const borderColor = glowOnFocus
     ? glowAnim.interpolate({
         inputRange: [0, 1],
-        outputRange: [colors.border, glowColor],
+        outputRange: [baseBorderColor, glowColor],
       })
-    : colors.border;
+    : baseBorderColor;
 
   return (
     <View style={containerStyle}>
@@ -68,7 +80,7 @@ export function GlassInput({
         style={[
           styles.container,
           {
-            backgroundColor: colors.surfaceGlass,
+            backgroundColor: backgroundColor ?? colors.surfaceGlass,
             borderColor,
           },
           isFocused && glowOnFocus ? {
@@ -82,10 +94,10 @@ export function GlassInput({
           {...inputProps}
           style={[
             styles.input,
-            { color: colors.text, fontFamily: FONTS.regular },
+            { color: textColor ?? colors.text, fontFamily: FONTS.regular },
             style,
           ]}
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={placeholderColor ?? colors.textMuted}
           onFocus={handleFocus}
           onBlur={handleBlur}
         />
