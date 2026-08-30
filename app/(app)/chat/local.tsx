@@ -62,6 +62,7 @@ import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { AttachmentComposer } from '@/components/ui/chat/AttachmentComposer';
 import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
@@ -73,7 +74,7 @@ import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSep
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
 import { getZoneForTimezone } from '@/utils/timezoneZones';
-import type { Message, MessageAttachment } from '@/types';
+import type { Message, MessageAttachment, PendingAttachment } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 function SendIcon() {
@@ -169,6 +170,9 @@ export default function LocalChatScreen() {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  // Quick task 260830-kkb: staged media/GIF/PDF attachment, cleared on send or
+  // dismissal. D-02: choosing a new one silently replaces this via plain assignment.
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
@@ -719,11 +723,11 @@ export default function LocalChatScreen() {
       const keys = successfulUploads.map((u) => u.key);
       await confirmMediaUpload(keys);
       const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
-      const text = input.trim();
-      const replyToId = replyTo?.id ?? undefined;
-      sendRoomMessage(text, replyToId, mediaUrls);
-      setInput('');
-      setReplyTo(null);
+      // Quick task 260830-kkb: stage instead of sending — handleSend is now the
+      // single place that combines this with typed text (STAGE-02). D-06: every
+      // failure path above returns before reaching this line, so nothing partial
+      // is ever staged.
+      setPendingAttachment({ kind: 'images', urls: mediaUrls });
       if (successfulUploads.length < uris.length) {
         Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
       }
@@ -733,31 +737,26 @@ export default function LocalChatScreen() {
     } finally {
       setIsUploading(false);
     }
-  }, [input, replyTo]);
-
-  // GIF tap-to-send: a Giphy selection sends IMMEDIATELY as its own media-only
-  // message (empty content + the Giphy CDN URL in mediaUrls). Mirrors the photo
-  // send shape (sendRoomMessage with mediaUrls) — relies on server broadcast,
-  // no optimistic insert, like photos here.
-  const handleGifSelected = useCallback((gifUrl: string) => {
-    const replyToId = replyTo?.id ?? undefined;
-    sendRoomMessage('', replyToId, [gifUrl]);
-    setReplyTo(null);
   }, [replyTo]);
 
-  // Document send mirrors the GIF standalone-send shape (D-01a): a PDF is
-  // sent as its own message — empty content, no mediaUrls, [attachment] only.
-  // No optimistic insert; the bubble appears on the server echo.
+  // GIF staging (260830-kkb): synchronous — the Giphy CDN url is already final,
+  // so there is no upload flag. Stages instead of sending; handleSend combines
+  // it with typed text (STAGE-03).
+  const handleGifSelected = useCallback((gifUrl: string) => {
+    setPendingAttachment({ kind: 'gif', url: gifUrl });
+  }, [replyTo]);
+
+  // Document staging (260830-kkb): keeps the presign/upload/confirm + Alert +
+  // isUploading exactly as before; only the emit-and-clear tail changes — it
+  // now stages instead of sending, and handleSend combines it with typed text
+  // (STAGE-04). D-06: the catch block returns nothing partially staged.
   const handleDocumentPicked = useCallback(async (doc: { uri: string; name: string; size: number }) => {
     setIsUploading(true);
     try {
       const { uploadUrl, key, cdnUrl } = await requestDocUploadUrl(doc.name);
       await uploadDocToSpaces(uploadUrl, doc.uri);
       await confirmDocUpload(key);
-      const attachment: MessageAttachment = { url: cdnUrl, name: doc.name, size: doc.size, type: 'pdf' };
-      const replyToId = replyTo?.id ?? undefined;
-      sendRoomMessage('', replyToId, undefined, [attachment]);
-      setReplyTo(null);
+      setPendingAttachment({ kind: 'document', url: cdnUrl, name: doc.name, size: doc.size });
     } catch (err) {
       console.error('[document] Upload failed:', err);
       Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
@@ -766,15 +765,33 @@ export default function LocalChatScreen() {
     }
   }, [replyTo]);
 
+  // Quick task 260830-kkb: handleSend is the single reader of text + staged
+  // media (STAGE-07). Deliberately minimal (per this file's existing
+  // convention) — no scroll timeout, no explicit typing-stop (typing is
+  // handled by the input-change timeout in handleInputChange).
   const handleSend = useCallback(() => {
     const content = input.trim();
-    if (!content) return;
+    if ((!content && !pendingAttachment) || isUploading) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
-    sendRoomMessage(content, replyToId);
+
+    let mediaUrls: string[] | undefined;
+    let attachments: MessageAttachment[] | undefined;
+    if (pendingAttachment) {
+      if (pendingAttachment.kind === 'images') {
+        mediaUrls = pendingAttachment.urls;
+      } else if (pendingAttachment.kind === 'gif') {
+        mediaUrls = [pendingAttachment.url];
+      } else {
+        attachments = [{ url: pendingAttachment.url, name: pendingAttachment.name, size: pendingAttachment.size, type: 'pdf' }];
+      }
+    }
+
+    sendRoomMessage(content, replyToId, mediaUrls, attachments);
     setInput('');
     setReplyTo(null);
-  }, [input, replyTo]);
+    setPendingAttachment(null);
+  }, [input, replyTo, pendingAttachment, isUploading]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // appears when the server echoes on room:message (handled by onRoomMessage).
@@ -983,12 +1000,14 @@ export default function LocalChatScreen() {
             />
           ) : null}
           <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+          <AttachmentComposer attachment={pendingAttachment} onCancel={() => setPendingAttachment(null)} />
 
           <ChatInput
             value={input}
             onChangeText={handleInputChange}
             onSend={handleSend}
             isUploading={isUploading}
+            hasPendingAttachment={!!pendingAttachment}
             isRecording={isRecording}
             onStartRecording={() => setIsRecording(true)}
             onDiscardVoice={() => setIsRecording(false)}
@@ -1102,6 +1121,7 @@ function ChatInput({
   onChangeText,
   onSend,
   isUploading,
+  hasPendingAttachment,
   isRecording,
   onStartRecording,
   onDiscardVoice,
@@ -1119,6 +1139,10 @@ function ChatInput({
   onChangeText: (text: string) => void;
   onSend: () => void;
   isUploading?: boolean;
+  /** Quick task 260830-kkb (D-09): a staged media/GIF/PDF attachment occupies
+   * the send slot even with empty text, and factors into canSend. Optional so
+   * `chat/index.tsx`'s separate ChatInput copy is unaffected. */
+  hasPendingAttachment?: boolean;
   isRecording?: boolean;
   onStartRecording?: () => void;
   onDiscardVoice?: () => void;
@@ -1143,6 +1167,10 @@ function ChatInput({
   }, []);
 
   const bottomPadding = keyboardVisible ? (Platform.OS === 'ios' ? 24 : 8) : tabBarSpace;
+  // Quick task 260830-kkb (D-09): drives the Send Pressable's disabled +
+  // opacity. True when there is trimmed text OR a staged attachment, and not
+  // uploading — attachment-only sends must remain legal (D-04).
+  const canSend = (!!value.trim() || !!hasPendingAttachment) && !isUploading;
 
   return (
     <View style={{ position: 'relative' }}>
@@ -1188,14 +1216,16 @@ function ChatInput({
               />
             </View>
             {/* Send-slot swap (VOICE-01): mic on empty input, send otherwise —
-                never both. */}
-            {!value.trim() && !isUploading && onStartRecording ? (
+                never both. D-09 (260830-kkb): a staged attachment also
+                occupies the send slot, otherwise an attachment-only message
+                could never be sent. */}
+            {!value.trim() && !isUploading && !hasPendingAttachment && onStartRecording ? (
               <MicButton onPress={onStartRecording} />
             ) : (
               <Pressable
                 onPress={onSend}
-                disabled={!value.trim() || isUploading}
-                style={({ pressed }) => [{ opacity: value.trim() && !isUploading ? (pressed ? 0.8 : 1) : 0.4 }]}
+                disabled={!canSend}
+                style={({ pressed }) => [{ opacity: canSend ? (pressed ? 0.8 : 1) : 0.4 }]}
               >
                 <LinearGradient
                   colors={[...COLORS.gradientPrimary]}
