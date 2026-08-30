@@ -43,7 +43,7 @@ const AVATAR_COLORS = [
   '#FEB2B2', // blush
 ];
 
-function getAvatarColor(name: string): string {
+export function getAvatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);

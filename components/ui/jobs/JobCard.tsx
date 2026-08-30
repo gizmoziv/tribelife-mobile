@@ -19,6 +19,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '@/contexts/ThemeContext';
+import { getAvatarColor } from '@/components/ui/AvatarCircle';
 import { FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { JobPosting } from '@/types';
 
@@ -45,6 +46,10 @@ export function JobCard({ job, fullWidth }: JobCardProps) {
   // Silent degradation when logo URL is null or the image request fails
   const [logoFailed, setLogoFailed] = useState(false);
   const showLogo = !!job.logoUrl && !logoFailed;
+
+  // Guard against missing/empty company — mirrors AvatarCircle's safeName guard.
+  const safeCompany = job.company && job.company.length > 0 ? job.company : '?';
+  const logoLetter = safeCompany.charAt(0).toUpperCase();
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -90,7 +95,17 @@ export function JobCard({ job, fullWidth }: JobCardProps) {
                 onError={() => setLogoFailed(true)}
               />
             ) : (
-              <View style={[styles.logo, { backgroundColor: colors.surface }]} />
+              <View
+                style={[
+                  styles.logo,
+                  styles.logoFallback,
+                  { backgroundColor: getAvatarColor(safeCompany) },
+                ]}
+              >
+                <Text style={[styles.logoLetter, { color: colors.text }]}>
+                  {logoLetter}
+                </Text>
+              </View>
             )}
             <Text
               style={[styles.headline, { color: colors.text, flex: 1 }]}
@@ -149,6 +164,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
+  },
+  logoFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoLetter: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 16,
   },
   headline: {
     fontFamily: FONTS.bold,
