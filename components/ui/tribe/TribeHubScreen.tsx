@@ -50,6 +50,12 @@ export function TribeHubScreen() {
   // a single, vertically-scrolling, lazy-loaded feed of just that type.
   const [filter, setFilter] = useState<TribeFilterKey>('all');
 
+  // Owned here (not in TribeJobsList) because that child unmounts whenever
+  // the filter pill moves off Jobs. `false` (all jobs) is the intended
+  // default for a fresh app session — this survives navigation within a
+  // session, it is not persisted storage.
+  const [myLocation, setMyLocation] = useState(false);
+
   // In-app banner shown when a news_breaking push arrives while this screen
   // is mounted. The OS push for the same event is suppressed by the handler
   // in services/pushNotifications.ts (foreground + ctx.type==='tribe').
@@ -133,7 +139,12 @@ export function TribeHubScreen() {
       ) : (
         <View style={styles.filteredBody}>
           {filter === 'news' && <TribeNewsList />}
-          {filter === 'jobs' && <TribeJobsList />}
+          {filter === 'jobs' && (
+            <TribeJobsList
+              myLocation={myLocation}
+              onMyLocationChange={setMyLocation}
+            />
+          )}
           {filter === 'marketplace' && <TribeEsekList />}
         </View>
       )}

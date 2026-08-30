@@ -8,7 +8,9 @@
 // (server-side, always including null-location + remote jobs). The row is
 // always mounted above all three body states (loading/empty/list) so a user
 // whose filtered feed comes back empty can still reach the toggle to switch
-// it back off.
+// it back off. The toggle's value is owned by TribeHubScreen and received
+// as a prop, which is what makes it survive this component unmounting when
+// the filter pill moves off Jobs.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -33,7 +35,12 @@ function Separator() {
   return <View style={{ height: CARD_GAP }} />;
 }
 
-export function TribeJobsList() {
+interface TribeJobsListProps {
+  myLocation: boolean;
+  onMyLocationChange: (next: boolean) => void;
+}
+
+export function TribeJobsList({ myLocation, onMyLocationChange }: TribeJobsListProps) {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
 
@@ -42,11 +49,12 @@ export function TribeJobsList() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [myLocation, setMyLocation] = useState(false);
   const fetchingRef = useRef(false);
   // Mirrors `myLocation`, written synchronously in the toggle handler — used
   // to discard stale in-flight responses issued under a since-changed flag.
-  const myLocationRef = useRef(false);
+  // Also seeded from, and re-mirrored against, the prop so a remount that
+  // starts with the filter already on is not treated as a stale flag.
+  const myLocationRef = useRef(myLocation);
 
   const load = useCallback(
     async (mode: 'initial' | 'more', flag: boolean) => {
@@ -79,6 +87,7 @@ export function TribeJobsList() {
   );
 
   useEffect(() => {
+    myLocationRef.current = myLocation;
     load('initial', myLocation);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myLocation]);
@@ -97,8 +106,8 @@ export function TribeJobsList() {
     setJobs([]);
     setCursor(null);
     setHasMore(true);
-    setMyLocation(next);
-  }, []);
+    onMyLocationChange(next);
+  }, [onMyLocationChange]);
 
   const renderItem = useCallback<ListRenderItem<JobPosting>>(
     ({ item }) => <JobCard job={item} fullWidth />,
