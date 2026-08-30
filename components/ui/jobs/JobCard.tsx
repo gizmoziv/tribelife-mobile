@@ -1,7 +1,8 @@
 // Phase 24: horizontal job card for the Tribe hub carousel.
 //
 // A fixed-width (~78% screen width, max 320px) card variant, structural clone of NewsCard:
-//   - Company logo (40×40) + job title header row (replaces 16:9 OG image)
+//   - Job title header row, with a 40×40 company logo shown only when one is
+//     available (replaces 16:9 OG image)
 //   - Always-shown 2-line truncated description abstract
 //   - Footer: company · location|Remote · MM/DD/YYYY
 //   - Tap → open job posting in in-app WebBrowser (SFSafariViewController / CCT)
@@ -19,7 +20,6 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '@/contexts/ThemeContext';
-import { getAvatarColor } from '@/components/ui/AvatarCircle';
 import { FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { JobPosting } from '@/types';
 
@@ -46,10 +46,6 @@ export function JobCard({ job, fullWidth }: JobCardProps) {
   // Silent degradation when logo URL is null or the image request fails
   const [logoFailed, setLogoFailed] = useState(false);
   const showLogo = !!job.logoUrl && !logoFailed;
-
-  // Guard against missing/empty company — mirrors AvatarCircle's safeName guard.
-  const safeCompany = job.company && job.company.length > 0 ? job.company : '?';
-  const logoLetter = safeCompany.charAt(0).toUpperCase();
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -87,25 +83,13 @@ export function JobCard({ job, fullWidth }: JobCardProps) {
         <View style={styles.body}>
           {/* Logo + title header row — replaces the 16:9 OG image */}
           <View style={styles.headerRow}>
-            {showLogo ? (
+            {showLogo && (
               <Image
                 source={{ uri: job.logoUrl! }}
                 style={[styles.logo, { backgroundColor: colors.surface }]}
                 resizeMode="contain"
                 onError={() => setLogoFailed(true)}
               />
-            ) : (
-              <View
-                style={[
-                  styles.logo,
-                  styles.logoFallback,
-                  { backgroundColor: getAvatarColor(safeCompany) },
-                ]}
-              >
-                <Text style={[styles.logoLetter, { color: colors.text }]}>
-                  {logoLetter}
-                </Text>
-              </View>
             )}
             <Text
               style={[styles.headline, { color: colors.text, flex: 1 }]}
@@ -164,14 +148,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-  },
-  logoFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoLetter: {
-    fontFamily: FONTS.semiBold,
-    fontSize: 16,
   },
   headline: {
     fontFamily: FONTS.bold,
