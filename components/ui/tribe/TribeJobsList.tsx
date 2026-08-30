@@ -4,16 +4,16 @@
 // horizontal. Owns its own pagination state independently of the carousel —
 // switching pills always starts a fresh feed from page 1.
 //
-// Quick task 260830-etv (D-07/D-08): adds a "My Location" toggle chip that
-// filters the feed to the caller's timezone zone (server-side, always
-// including null-location + remote jobs). The chip is always mounted above
-// all three body states (loading/empty/list) so a user whose filtered feed
-// comes back empty can still reach the toggle to switch it back off.
+// A label + Switch row filters the feed to the caller's timezone zone
+// (server-side, always including null-location + remote jobs). The row is
+// always mounted above all three body states (loading/empty/list) so a user
+// whose filtered feed comes back empty can still reach the toggle to switch
+// it back off.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  Pressable,
+  Switch,
   FlatList,
   ActivityIndicator,
   StyleSheet,
@@ -24,7 +24,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { jobsApi } from '@/services/api';
 import { JobCard } from '@/components/ui/jobs/JobCard';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
-import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
+import { COLORS, FONTS, SPACING } from '@/constants';
 import type { JobPosting } from '@/types';
 
 const CARD_GAP = 12;
@@ -113,29 +113,18 @@ export function TribeJobsList() {
     </View>
   ) : null;
 
-  const chip = (
-    <Pressable
-      onPress={handleToggleMyLocation}
-      accessibilityRole="button"
-      accessibilityState={{ selected: myLocation }}
-      style={[
-        styles.chip,
-        myLocation
-          ? { backgroundColor: 'rgba(129, 140, 248, 0.85)', borderColor: 'rgba(129, 140, 248, 0.95)' }
-          : { backgroundColor: colors.surfaceGlass, borderColor: colors.border },
-      ]}
-    >
-      <Text
-        style={[
-          styles.chipText,
-          myLocation
-            ? { color: '#FFFFFF', fontFamily: FONTS.semiBold }
-            : { color: colors.textMuted, fontFamily: FONTS.medium },
-        ]}
-      >
-        My Location
+  const toggleRow = (
+    <View style={styles.toggleRow}>
+      <Text style={[styles.toggleLabel, { color: colors.text }]}>
+        My Timezone
       </Text>
-    </Pressable>
+      <Switch
+        value={myLocation}
+        onValueChange={handleToggleMyLocation}
+        trackColor={{ false: colors.border, true: COLORS.primary }}
+        thumbColor="#FFF"
+      />
+    </View>
   );
 
   let body: React.ReactNode;
@@ -150,7 +139,7 @@ export function TribeJobsList() {
       <View style={styles.loadingContainer}>
         <Text style={[styles.emptyText, { color: colors.textMuted }]}>
           {myLocation
-            ? 'No jobs found near you yet — tap "My Location" to see all jobs'
+            ? 'No jobs found in your timezone yet — turn off "My Timezone" to see all jobs'
             : 'No job postings yet — check back soon'}
         </Text>
       </View>
@@ -161,7 +150,10 @@ export function TribeJobsList() {
         data={jobs}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        contentContainerStyle={[styles.listContent, { paddingBottom: tabBarSpace }]}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarSpace },
+        ]}
         ItemSeparatorComponent={Separator}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
@@ -173,7 +165,7 @@ export function TribeJobsList() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.chipRow}>{chip}</View>
+      <View style={styles.chipRow}>{toggleRow}</View>
       {body}
     </View>
   );
@@ -190,17 +182,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.page,
     paddingVertical: SPACING.xs,
   },
-  chip: {
+  toggleRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.pill,
-    borderWidth: 1,
+    justifyContent: 'space-between',
   },
-  chipText: {
-    fontSize: 13,
+  toggleLabel: {
+    fontFamily: FONTS.medium,
+    fontSize: 14,
   },
   listContent: {
     paddingHorizontal: SPACING.page,
