@@ -773,10 +773,15 @@ export const newsApi = {
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 export const jobsApi = {
-  feed: (cursor?: string) =>
-    request<{ jobs: JobPosting[]; hasMore: boolean; nextCursor: string | null }>(
-      `/api/jobs/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`
-    ),
+  feed: (cursor?: string, myLocation?: boolean) => {
+    const parts: string[] = [];
+    if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
+    if (myLocation) parts.push('myLocation=true');
+    const qs = parts.length ? `?${parts.join('&')}` : '';
+    return request<{ jobs: JobPosting[]; hasMore: boolean; nextCursor: string | null }>(
+      `/api/jobs/feed${qs}`
+    );
+  },
 };
 
 // ── Esek Marketplace ────────────────────────────────────────────────────────────
