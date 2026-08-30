@@ -67,6 +67,7 @@ import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
+import { AttachmentComposer } from '@/components/ui/chat/AttachmentComposer';
 import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
@@ -76,7 +77,7 @@ import { ScrollToBottomButton } from '@/components/chat/ScrollToBottomButton';
 import { formatChatDateLabel, needsSeparatorAbove } from '@/services/chatDateSeparators';
 import { useStickyChatDate } from '@/hooks/useStickyChatDate';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import type { Message, GlobeMessage, MessageAttachment } from '@/types';
+import type { Message, GlobeMessage, MessageAttachment, PendingAttachment } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -174,6 +175,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [editingMessage, setEditingMessage] = useState<GlobeMessage | null>(null);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [replyTo, setReplyTo] = useState<{ id: number; senderHandle: string; content: string } | null>(null);
+  // Quick task 260830-kkb: staged media/GIF/PDF attachment, cleared on send or
+  // dismissal. D-02: choosing a new one silently replaces this via plain assignment.
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
@@ -847,20 +851,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       const keys = successfulUploads.map((u) => u.key);
       await confirmMediaUpload(keys);
       const mediaUrls = successfulUploads.map((u) => u.cdnUrl);
-      const text = input.trim();
-      const replyToId = replyTo?.id ?? undefined;
-      sendGlobeMessage(roomSlug, text, replyToId, mediaUrls);
-      setInput('');
-      setReplyTo(null);
-      setIsAtBottom(true);
-      resetNewMessageCount();
-      // Inverted list: bottom = offset 0.
-      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-      sendGlobeTyping(roomSlug, false);
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
-      }
+      // Quick task 260830-kkb: stage instead of sending — handleSend is now the
+      // single place that combines this with typed text (STAGE-02). D-06: every
+      // failure path above returns before reaching this line, so nothing partial
+      // is ever staged.
+      setPendingAttachment({ kind: 'images', urls: mediaUrls });
       if (successfulUploads.length < uris.length) {
         Alert.alert('Partial Upload', `${successfulUploads.length} of ${uris.length} images uploaded.`);
       }
@@ -870,26 +865,21 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     } finally {
       setIsUploading(false);
     }
-  }, [input, roomSlug, isAgeGated, replyTo]);
-
-  // GIF tap-to-send: a Giphy selection sends IMMEDIATELY as its own media-only
-  // message (empty content + the Giphy CDN URL in mediaUrls). Mirrors the photo
-  // send shape (sendGlobeMessage with mediaUrls) — relies on server broadcast,
-  // no optimistic insert, like photos here. Respects the same age-gate guard.
-  const handleGifSelected = useCallback((gifUrl: string) => {
-    if (!roomSlug || isAgeGated) return;
-    const replyToId = replyTo?.id ?? undefined;
-    sendGlobeMessage(roomSlug, '', replyToId, [gifUrl]);
-    setReplyTo(null);
-    setIsAtBottom(true);
-    resetNewMessageCount();
-    setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
   }, [roomSlug, isAgeGated, replyTo]);
 
-  // Document send mirrors the GIF standalone-send shape (D-01a): a PDF is
-  // sent as its own message — empty content, no mediaUrls, [attachment] only.
-  // No optimistic insert; the bubble appears on the server echo. Respects the
-  // same age-gate guard as the photo/GIF flows.
+  // GIF staging (260830-kkb): synchronous — the Giphy CDN url is already final,
+  // so there is no upload flag. Stages instead of sending; handleSend combines
+  // it with typed text (STAGE-03). Respects the same age-gate guard as before.
+  const handleGifSelected = useCallback((gifUrl: string) => {
+    if (!roomSlug || isAgeGated) return;
+    setPendingAttachment({ kind: 'gif', url: gifUrl });
+  }, [roomSlug, isAgeGated, replyTo]);
+
+  // Document staging (260830-kkb): keeps the presign/upload/confirm + Alert +
+  // isUploading + age-gate guard exactly as before; only the emit-and-clear
+  // tail changes — it now stages instead of sending, and handleSend combines
+  // it with typed text (STAGE-04). D-06: the catch block returns nothing
+  // partially staged.
   const handleDocumentPicked = useCallback(async (doc: { uri: string; name: string; size: number }) => {
     if (!roomSlug || isAgeGated) return;
     setIsUploading(true);
@@ -897,13 +887,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       const { uploadUrl, key, cdnUrl } = await requestDocUploadUrl(doc.name);
       await uploadDocToSpaces(uploadUrl, doc.uri);
       await confirmDocUpload(key);
-      const attachment: MessageAttachment = { url: cdnUrl, name: doc.name, size: doc.size, type: 'pdf' };
-      const replyToId = replyTo?.id ?? undefined;
-      sendGlobeMessage(roomSlug, '', replyToId, undefined, [attachment]);
-      setReplyTo(null);
-      setIsAtBottom(true);
-      resetNewMessageCount();
-      setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
+      setPendingAttachment({ kind: 'document', url: cdnUrl, name: doc.name, size: doc.size });
     } catch (err) {
       console.error('[document] Upload failed:', err);
       Alert.alert('Upload Error', 'Failed to upload document. Please try again.');
@@ -913,25 +897,48 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   }, [roomSlug, isAgeGated, replyTo]);
 
   // ── Send message ────────────────────────────────────────────────────────
+  // Quick task 260830-kkb: handleSend is the single reader of text + staged
+  // media (STAGE-07). Bail when there is neither trimmed text nor a staged
+  // attachment, or when age-gated/rate-limited/uploading (full guard set
+  // carried into canSend below too). This file has no optimistic insert for
+  // any message kind (relies on the server echo), so D-08 needs no special
+  // branch here.
   const handleSend = useCallback(() => {
     const content = input.trim();
-    if (!content || !roomSlug || isAgeGated || isRateLimited) return;
+    if ((!content && !pendingAttachment) || !roomSlug || isAgeGated || isRateLimited || isUploading) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
-    sendGlobeMessage(roomSlug, content, replyToId);
+
+    let mediaUrls: string[] | undefined;
+    let attachments: MessageAttachment[] | undefined;
+    if (pendingAttachment) {
+      if (pendingAttachment.kind === 'images') {
+        mediaUrls = pendingAttachment.urls;
+      } else if (pendingAttachment.kind === 'gif') {
+        mediaUrls = [pendingAttachment.url];
+      } else {
+        attachments = [{ url: pendingAttachment.url, name: pendingAttachment.name, size: pendingAttachment.size, type: 'pdf' }];
+      }
+    }
+
+    sendGlobeMessage(roomSlug, content, replyToId, mediaUrls, attachments);
     setInput('');
     setReplyTo(null);
+    setPendingAttachment(null);
     // Auto-scroll to bottom after sending (inverted: bottom = offset 0).
     setIsAtBottom(true);
     resetNewMessageCount();
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-    // Stop typing
+    // Stop typing. Note: GIF/document staging previously skipped this emit
+    // (they were separate immediate sends); routing everything through
+    // handleSend now means all sends stop typing consistently — correct,
+    // not an asymmetry to preserve.
     sendGlobeTyping(roomSlug, false);
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-  }, [input, roomSlug, isAgeGated, isRateLimited, replyTo]);
+  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, replyTo, pendingAttachment]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the globe:message echo. Passes the route/curated slug (NOT the
@@ -1045,6 +1052,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       </SafeAreaView>
     );
   }
+
+  // Quick task 260830-kkb (D-09/STAGE-07): drives the Send Pressable's disabled
+  // + opacity. Carries this screen's full guard set (room slug present, not
+  // age-gated, not rate-limited, not uploading) alongside trimmed-text-or-staged.
+  const canSend = (!!input.trim() || !!pendingAttachment) && !!roomSlug && !isAgeGated && !isRateLimited && !isUploading;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1206,6 +1218,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
 
             {/* Reply composer */}
             <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+            <AttachmentComposer attachment={pendingAttachment} onCancel={() => setPendingAttachment(null)} />
 
             {/* Chat input */}
             <View style={{ position: 'relative' }}>
@@ -1270,15 +1283,16 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                     </View>
                     {/* Send-slot swap (VOICE-01): mic on empty input, send
                         otherwise — never both. Mic is gated behind the same
-                        age/rate guards as text. */}
-                    {!input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (
+                        age/rate guards as text. D-09 (260830-kkb): a staged
+                        attachment also occupies the send slot. */}
+                    {!input.trim() && !isAgeGated && !isRateLimited && !isUploading && !pendingAttachment ? (
                       <MicButton onPress={() => setIsRecording(true)} />
                     ) : (
                       <Pressable
                         onPress={handleSend}
-                        disabled={!input.trim() || isAgeGated || isRateLimited || isUploading}
+                        disabled={!canSend}
                         style={({ pressed }) => [
-                          { opacity: input.trim() && !isAgeGated && !isRateLimited && !isUploading ? (pressed ? 0.8 : 1) : 0.4 },
+                          { opacity: canSend ? (pressed ? 0.8 : 1) : 0.4 },
                         ]}
                       >
                         <LinearGradient
