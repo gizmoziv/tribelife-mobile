@@ -28,8 +28,9 @@ function giphyCdnUrl(media: GiphyMedia): string {
 /**
  * GIF button for the chat composer. Mirrors AttachmentButton's sizing/hitSlop
  * so it sits naturally next to the paperclip. Opens Giphy's prebuilt picker
- * (pg-rated, search + trending) and, on selection, emits the GIF's CDN URL —
- * the selection IS the send (tap-to-send, no accompanying-text step).
+ * (pg-rated, search + trending) and, on selection, emits the chosen GIF's CDN
+ * URL to `onGifSelected` — the owning screen decides what to do with it (as of
+ * quick task 260830-kkb: stage it in the composer, not send it immediately).
  *
  * Renders nothing when Giphy is not configured (missing env key) so the app
  * never exposes a non-functional button or crashes opening the picker.

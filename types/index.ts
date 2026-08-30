@@ -75,6 +75,17 @@ export interface MessageAttachment {
   type: 'pdf';
 }
 
+// ── Quick task 260830-kkb: Staged (not-yet-sent) composer attachment ───────
+// One attachment session at a time, per composer (D-01/D-02). Discriminated on
+// `kind` so AttachmentComposer.tsx and each screen's handleSend can render/derive
+// per-kind without reshaping. The `document` member is modeled directly on
+// MessageAttachment so it converts to one (kind:'document' → {type:'pdf', ...})
+// without a reshape step.
+export type PendingAttachment =
+  | { kind: 'images'; urls: string[] }
+  | { kind: 'gif'; url: string }
+  | { kind: 'document'; url: string; name: string; size: number };
+
 export interface Message {
   id: number;
   content: string;
