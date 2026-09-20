@@ -18,7 +18,7 @@ import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, accessApi } from '@/services/api';
+import { auth, accessApi, isReferralReviewRequiredError } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -298,6 +298,26 @@ export default function OnboardingScreen() {
       await persistOnboarding();
       await enterApp();
     } catch (err) {
+      // Phase 36 (D-05, D-08): the server is the source of truth for which
+      // referrers need review. Share-link and group-invite users skip
+      // /validate on purpose (calling it would burn a referral attempt on
+      // their behalf — Phase 35 D-01), so the server's refusal is their
+      // signal. This catch is the client honoring that refusal, not a second
+      // place where the rule is decided; with the feature off server-side the
+      // branch is simply never reached (D-02, D-10).
+      //
+      // No AsyncStorage clear here: persistOnboarding clears the attribution
+      // keys only after a successful auth.onboarding call, and the refusal
+      // throws before that, so a backgrounded app keeps its captured ref.
+      if (isReferralReviewRequiredError(err)) {
+        const typedCode = typedReferrer.trim().toLowerCase();
+        const code = recognizedRef ?? (typedCode || null);
+        const source = recognizedRef
+          ? (recognizedSource ?? 'handle_code')
+          : ('manual_entry' as const);
+        goToApplyForAccess('replace', code ? { code, source } : undefined);
+        return;
+      }
       Alert.alert(
         'Setup Failed',
         err instanceof Error ? err.message : 'Please try again',
