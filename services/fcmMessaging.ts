@@ -34,6 +34,7 @@ import {
 import notifee, {
   AndroidStyle,
   AndroidImportance,
+  AndroidGroupAlertBehavior,
   EventType,
   type Notification,
   type Event,
@@ -49,6 +50,15 @@ const IS_ANDROID = Platform.OS === 'android';
 // expo-notifications 'default'/'news' channels so message notifications get
 // their own importance + sound settings). Created lazily on first display.
 const CHANNEL_ID = 'messages';
+
+// All message-type notifications (DM/group/globe/room) share one Android
+// notification group so they stack together in the shade and can be cleared
+// in a single swipe, instead of requiring one-by-one dismissal. A companion
+// summary notification (id below) is what makes the group itself dismissable —
+// without an explicit summary, Android/OEM shades (Samsung One UI in
+// particular) do not reliably offer a single "clear all" for a 3rd-party app.
+const MESSAGES_GROUP_ID = 'tribelife-messages';
+const GROUP_SUMMARY_ID = 'tribelife-messages-summary';
 
 // Native conversation-shortcut module (Phase C LOCKED DECISION 5). Undefined if
 // the native module failed to link — the notification then falls back to the
@@ -117,6 +127,7 @@ async function presentMessagingNotification(
     channelId: CHANNEL_ID,
     smallIcon: 'notification_icon',
     largeIcon: avatar, // collapsed-view avatar fallback (no badge composite without a shortcut)
+    groupId: MESSAGES_GROUP_ID,
     style: {
       type: AndroidStyle.MESSAGING,
       person: { name: sender.name, icon: avatar },
@@ -145,6 +156,49 @@ async function presentMessagingNotification(
     data: d as { [key: string]: string },
     android: androidOptions,
   });
+
+  await updateMessagesGroupSummary();
+}
+
+/**
+ * Creates/updates the group-summary notification that lets the shade clear
+ * every TribeLife message notification in one swipe, or removes it once no
+ * real message notifications remain (e.g. the user dismissed them one by one
+ * rather than swiping the group as a whole — dismissing the group itself
+ * already auto-cancels its children at the OS level, no action needed here).
+ * `groupAlertBehavior: CHILDREN` keeps the summary silent — each message still
+ * alerts individually exactly as before; only the summary is new.
+ */
+async function updateMessagesGroupSummary(): Promise<void> {
+  try {
+    const displayed = await notifee.getDisplayedNotifications();
+    const memberCount = displayed.filter(
+      (n) =>
+        n.notification.android?.groupId === MESSAGES_GROUP_ID &&
+        !n.notification.android?.groupSummary,
+    ).length;
+
+    if (memberCount === 0) {
+      await notifee.cancelNotification(GROUP_SUMMARY_ID);
+      return;
+    }
+
+    await notifee.displayNotification({
+      id: GROUP_SUMMARY_ID,
+      title: 'TribeLife',
+      body: memberCount === 1 ? '1 new message' : `${memberCount} new messages`,
+      android: {
+        channelId: CHANNEL_ID,
+        smallIcon: 'notification_icon',
+        groupId: MESSAGES_GROUP_ID,
+        groupSummary: true,
+        groupAlertBehavior: AndroidGroupAlertBehavior.CHILDREN,
+        pressAction: { id: 'default' },
+      },
+    });
+  } catch (err) {
+    console.log('[fcm] updateMessagesGroupSummary error', err);
+  }
 }
 
 // ── Tap routing ───────────────────────────────────────────────────────────
@@ -241,10 +295,17 @@ if (IS_ANDROID) {
   // notify-kit requires a background-event handler to be registered; route taps
   // that occur while the app is backgrounded via the persisted initial
   // notification on next resume (getInitialNotification / consumeInitialFcmTap).
-  notifee.onBackgroundEvent(async ({ type }: Event) => {
+  notifee.onBackgroundEvent(async ({ type, detail }: Event) => {
     if (type === EventType.PRESS) {
       // Navigation isn't possible from the headless background context; the
       // press is consumed on resume via consumeInitialFcmTap().
+    }
+    // Swiping an individual message (not the whole group) leaves the summary's
+    // count stale, or orphaned if it was the last one — recompute either way.
+    // Dismissing the group's summary itself already auto-cancels its children
+    // at the OS level, so this is a no-op recount in that case (memberCount 0).
+    if (type === EventType.DISMISSED && !detail.notification?.android?.groupSummary) {
+      await updateMessagesGroupSummary();
     }
   });
 
@@ -252,6 +313,9 @@ if (IS_ANDROID) {
   notifee.onForegroundEvent(({ type, detail }: Event) => {
     if (type === EventType.PRESS && detail.notification?.data) {
       routeFcmTap(detail.notification.data as Record<string, unknown>);
+    }
+    if (type === EventType.DISMISSED && !detail.notification?.android?.groupSummary) {
+      void updateMessagesGroupSummary();
     }
   });
 }
