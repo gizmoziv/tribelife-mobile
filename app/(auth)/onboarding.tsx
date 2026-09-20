@@ -18,7 +18,7 @@ import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
-import { auth, accessApi } from '@/services/api';
+import { auth, accessApi, isReferralReviewRequiredError } from '@/services/api';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -182,6 +182,18 @@ export default function OnboardingScreen() {
     setIsValidatingReferral(true);
     try {
       const result = await accessApi.validateReferral(trimmed);
+      if (result.valid && result.requiresReview) {
+        // Phase 36 (D-08): a valid code that must not ungate the joiner goes
+        // to the apply form with the code carried along. `replace`, not
+        // `push` — returning here to a code they can't use is a dead end.
+        // Do not set referralValidated or persist anything: the apply screen
+        // persists after the request succeeds.
+        goToApplyForAccess('replace', {
+          code: trimmed.toLowerCase(),
+          source: 'manual_entry',
+        });
+        return;
+      }
       if (result.valid) {
         setReferralValidated(true);
         setStep('profile');
@@ -286,6 +298,26 @@ export default function OnboardingScreen() {
       await persistOnboarding();
       await enterApp();
     } catch (err) {
+      // Phase 36 (D-05, D-08): the server is the source of truth for which
+      // referrers need review. Share-link and group-invite users skip
+      // /validate on purpose (calling it would burn a referral attempt on
+      // their behalf — Phase 35 D-01), so the server's refusal is their
+      // signal. This catch is the client honoring that refusal, not a second
+      // place where the rule is decided; with the feature off server-side the
+      // branch is simply never reached (D-02, D-10).
+      //
+      // No AsyncStorage clear here: persistOnboarding clears the attribution
+      // keys only after a successful auth.onboarding call, and the refusal
+      // throws before that, so a backgrounded app keeps its captured ref.
+      if (isReferralReviewRequiredError(err)) {
+        const typedCode = typedReferrer.trim().toLowerCase();
+        const code = recognizedRef ?? (typedCode || null);
+        const source = recognizedRef
+          ? (recognizedSource ?? 'handle_code')
+          : ('manual_entry' as const);
+        goToApplyForAccess('replace', code ? { code, source } : undefined);
+        return;
+      }
       Alert.alert(
         'Setup Failed',
         err instanceof Error ? err.message : 'Please try again',
@@ -302,10 +334,27 @@ export default function OnboardingScreen() {
   // flip in the same beat — persisting here instead would flip needsOnboarding
   // while access_status is still NULL (its column default), and
   // (auth)/_layout.tsx would push the user straight into the app past the gate.
-  const goToApplyForAccess = (mode: 'push' | 'replace') => {
+  //
+  // Phase 36 (D-08): an optional referral payload rides along as
+  // referralCode/referralSource params — only when supplied — so the apply
+  // screen can submit it with the access request. It is the only route the
+  // code travels; no store or storage key is involved.
+  const goToApplyForAccess = (
+    mode: 'push' | 'replace',
+    referral?: {
+      code: string;
+      source: 'handle_code' | 'profile_share' | 'group_invite' | 'manual_entry';
+    },
+  ) => {
     const target = {
       pathname: '/(auth)/apply-for-access',
-      params: { handle: handle.trim(), timezone: detectedTimezone },
+      params: {
+        handle: handle.trim(),
+        timezone: detectedTimezone,
+        ...(referral
+          ? { referralCode: referral.code, referralSource: referral.source }
+          : {}),
+      },
     } as any;
     if (mode === 'replace') {
       router.replace(target);
@@ -356,6 +405,16 @@ export default function OnboardingScreen() {
         result = await accessApi.validateReferral(trimmed);
       } finally {
         setIsValidatingReferral(false);
+      }
+
+      if (result.valid && result.requiresReview) {
+        // Phase 36 (D-08): same funnel as handleReferralContinue — carry the
+        // code to the apply form instead of completing onboarding.
+        goToApplyForAccess('replace', {
+          code: trimmed.toLowerCase(),
+          source: 'manual_entry',
+        });
+        return;
       }
 
       if (result.valid) {

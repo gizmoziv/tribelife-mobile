@@ -204,8 +204,30 @@ export const auth = {
 // shape lives ONLY in this file; no screen/component/store may hardcode
 // either path or repeat a response field name.
 export type ReferralValidationResult =
-  | { valid: true }
+  // Phase 36 (D-03): requiresReview is true only for a valid code belonging to
+  // a listed review-required referrer. Read defensively below — an old backend
+  // that predates Phase 36 omits it, which must degrade to false, not throw.
+  | { valid: true; requiresReview: boolean }
   | { valid: false; attemptsRemaining: number | null; exhausted: boolean };
+
+// Phase 36 (D-05): the machine-readable code the server returns (HTTP 409) from
+// POST /api/auth/onboarding when the submitted referral code belongs to a
+// review-required referrer. The literal lives ONLY here (Phase 35 D-19).
+export const REFERRAL_REVIEW_REQUIRED_CODE = 'referral_review_required';
+
+// True only for the server's review-required refusal. Narrows err.data through
+// an object type and returns a boolean — err.message / err.data are never
+// surfaced to a screen, continuing the Phase 35 D-04 anti-enumeration
+// discipline.
+export function isReferralReviewRequiredError(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 409) return false;
+  const body = err.data as { code?: unknown } | null | undefined;
+  return (
+    !!body &&
+    typeof body === 'object' &&
+    body.code === REFERRAL_REVIEW_REQUIRED_CODE
+  );
+}
 
 export const accessApi = {
   // POST /api/referrals/validate — normalizes BOTH candidate Phase 34
@@ -221,12 +243,15 @@ export const accessApi = {
         exhausted?: boolean;
         attemptsRemaining?: number;
         blank?: boolean;
+        requiresReview?: unknown;
       }>('/api/referrals/validate', {
         method: 'POST',
         body: JSON.stringify({ handle }),
       });
 
-      if (data.valid) return { valid: true };
+      if (data.valid) {
+        return { valid: true, requiresReview: data.requiresReview === true };
+      }
 
       const attemptsRemaining =
         typeof data.attemptsRemaining === 'number' && Number.isFinite(data.attemptsRemaining)
@@ -254,11 +279,23 @@ export const accessApi = {
   // requireApprovedAccess). Does not depend on the success-response body
   // (which is a superset, `{ ok: true, accessRequest: {...} }`); lets
   // ApiError propagate so the caller can show a generic failure alert. Never
-  // log reason/socials — user-submitted personal data.
-  submitAccessRequest: (reason: string, socials: SocialEntry[]) =>
+  // log reason/socials — user-submitted personal data. Phase 36 (D-04): the
+  // optional referralCode/referralSource ride along as a hint only; the server
+  // re-validates and silently ignores anything that doesn't qualify.
+  submitAccessRequest: (
+    reason: string,
+    socials: SocialEntry[],
+    referralCode?: string,
+    referralSource?: 'handle_code' | 'profile_share' | 'group_invite' | 'manual_entry',
+  ) =>
     request<{ ok: true }>('/api/access-requests', {
       method: 'POST',
-      body: JSON.stringify({ reason, socials }),
+      body: JSON.stringify({
+        reason,
+        socials,
+        ...(referralCode ? { referralCode } : {}),
+        ...(referralSource ? { referralSource } : {}),
+      }),
     }),
 };
 
