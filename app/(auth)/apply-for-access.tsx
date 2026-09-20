@@ -14,6 +14,17 @@ import { SocialsRepeater, isSocialEntryComplete } from '@/components/ui/SocialsR
 
 const REASON_MAX_LENGTH = 1000;
 
+type ReferralSource = 'handle_code' | 'profile_share' | 'group_invite' | 'manual_entry';
+
+function isReferralSource(value: unknown): value is ReferralSource {
+  return (
+    value === 'handle_code' ||
+    value === 'profile_share' ||
+    value === 'group_invite' ||
+    value === 'manual_entry'
+  );
+}
+
 export default function ApplyForAccessScreen() {
   const user = useAuthStore((s) => s.user);
   const setAccessStatus = useAuthStore((s) => s.setAccessStatus);
@@ -21,8 +32,23 @@ export default function ApplyForAccessScreen() {
   const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
 
   // Handed over by onboarding.tsx, which unmounts when it routes here.
-  const { handle: pendingHandle, timezone: pendingTimezone } =
-    useLocalSearchParams<{ handle?: string; timezone?: string }>();
+  // Phase 36 (D-08): referralCode/referralSource ride along when the user's
+  // referral needs the review path; params arrive as strings.
+  const {
+    handle: pendingHandle,
+    timezone: pendingTimezone,
+    referralCode: pendingReferralCode,
+    referralSource: pendingReferralSourceRaw,
+  } = useLocalSearchParams<{
+    handle?: string;
+    timezone?: string;
+    referralCode?: string;
+    referralSource?: string;
+  }>();
+
+  const pendingReferralSource = isReferralSource(pendingReferralSourceRaw)
+    ? pendingReferralSourceRaw
+    : undefined;
 
   const [reason, setReason] = useState('');
   const [socials, setSocials] = useState<SocialEntry[]>([{ platform: 'linkedin', handle: '' }]);
@@ -48,7 +74,12 @@ export default function ApplyForAccessScreen() {
       // is still NULL (the column has no default, and NULL means ungated
       // everywhere), and (auth)/_layout.tsx would replace the route with
       // /(app)/beacon, skipping the referral gate entirely.
-      await accessApi.submitAccessRequest(reason.trim(), socials);
+      await accessApi.submitAccessRequest(
+        reason.trim(),
+        socials,
+        pendingReferralCode || undefined,
+        pendingReferralSource,
+      );
       setAccessStatus('pending');
 
       // Persist the profile-form values carried over from onboarding.tsx, which
@@ -90,7 +121,9 @@ export default function ApplyForAccessScreen() {
           <AnimatedEntry style={styles.header}>
             <Text style={styles.title}>Apply for access</Text>
             <Text style={styles.subtitle}>
-              TribeLife is invite-based. Tell us a bit about yourself and our team will review your request by hand.
+              {pendingReferralCode
+                ? 'One more step. Tell us a bit about yourself and our team will review your request by hand.'
+                : 'TribeLife is invite-based. Tell us a bit about yourself and our team will review your request by hand.'}
             </Text>
           </AnimatedEntry>
 
