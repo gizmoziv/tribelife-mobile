@@ -59,6 +59,7 @@ import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { voicePreviewLabel } from '@/constants/voice';
 import type { ChatsRow, PillFilter } from '@/types';
 import { timezoneToZoneName } from '@/utils/timezoneLabel';
+import { getZoneForTimezone } from '@/utils/timezoneZones';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { RegionTile } from '@/components/ui/RegionTile';
 import { LocalRoomTile } from '@/components/ui/LocalRoomTile';
@@ -963,10 +964,13 @@ function chatsRowKey(row: ChatsRow): string {
 // / roomDraftKey) — never hand-built here.
 function chatsRowDraftKey(row: ChatsRow): string | null {
   switch (row.type) {
+    case 'local_chat': return roomDraftKey(`timezone:${row.timezoneZone ?? getZoneForTimezone(row.timezoneIana)}`);
+    case 'town_square': return roomDraftKey('town-square');
+    case 'globe_room': return roomDraftKey(row.roomSlug);
+    case 'timezone_room': return roomDraftKey(row.zoneSlug);
     case 'dm': return conversationDraftKey(row.conversationId);
     case 'group': return conversationDraftKey(row.conversationId);
   }
-  return null;
 }
 
 function ChatsListRow({
