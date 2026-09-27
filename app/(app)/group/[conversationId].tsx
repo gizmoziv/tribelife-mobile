@@ -233,11 +233,14 @@ export default function GroupInfoScreen() {
       const handle = user?.handle ?? '';
       const refParam = handle ? `?ref=${handle}` : '';
       const url = `https://tribelife.app/g/${resolvedSlug}${refParam}`;
+      const shareDescription = groupDescription.trim();
       await Share.share({
-        message: `Join our group on TribeLife!\n${url}`,
+        message: shareDescription
+          ? `Join our group on TribeLife!\n${shareDescription}\n${url}`
+          : `Join our group on TribeLife!\n${url}`,
       });
     } catch { /* user cancelled */ }
-  }, [resolvedSlug, user?.handle]);
+  }, [resolvedSlug, user?.handle, groupDescription]);
 
   const handleKick = useCallback((memberId: number, memberHandle: string) => {
     Alert.alert(
