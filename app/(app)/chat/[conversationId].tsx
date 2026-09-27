@@ -19,6 +19,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
+import { useDraftMessage, conversationDraftKey } from '@/hooks/useDraftMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -182,7 +183,7 @@ export default function DMThreadScreen() {
   }, [conversationId]);
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput, clearDraft] = useDraftMessage(conversationDraftKey(conversationId));
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
   // Typing handles collection (mirrors chat/local.tsx typingUsers + globe's
@@ -1098,13 +1099,13 @@ export default function DMThreadScreen() {
     }
 
     sendDirectMessage(conversationId, content, replyToId, mediaUrls, attachments);
-    setInput('');
+    clearDraft();
     setReplyTo(null);
     setPendingAttachment(null);
     stopTyping({ conversationId });
     // Inverted list: visual bottom = offset 0.
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-  }, [input, conversationId, replyTo, user, pendingAttachment, isUploading]);
+  }, [input, conversationId, replyTo, user, pendingAttachment, isUploading, clearDraft]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the dm:message echo. The same emitter serves 1:1 DMs and groups
