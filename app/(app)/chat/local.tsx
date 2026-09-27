@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
+import { useDraftMessage, roomDraftKey } from '@/hooks/useDraftMessage';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect, useNavigation, useLocalSearchParams } from 'expo-router';
@@ -161,7 +162,6 @@ export default function LocalChatScreen() {
   }, [navigation]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
@@ -211,6 +211,7 @@ export default function LocalChatScreen() {
   // getZoneForTimezone for old API responses that predate Phase 17.
   const zoneSlug = user?.timezoneZone ?? getZoneForTimezone(user?.timezone ?? 'UTC');
   const roomId = `timezone:${zoneSlug}`;
+  const [input, setInput, clearDraft] = useDraftMessage(user ? roomDraftKey(roomId) : null);
   const zoneName = timezoneToZoneName(user?.timezone ?? 'UTC');
 
   useEffect(() => {
@@ -788,10 +789,10 @@ export default function LocalChatScreen() {
     }
 
     sendRoomMessage(content, replyToId, mediaUrls, attachments);
-    setInput('');
+    clearDraft();
     setReplyTo(null);
     setPendingAttachment(null);
-  }, [input, replyTo, pendingAttachment, isUploading]);
+  }, [input, replyTo, pendingAttachment, isUploading, clearDraft]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // appears when the server echoes on room:message (handled by onRoomMessage).

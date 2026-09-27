@@ -26,6 +26,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
+import { useDraftMessage, roomDraftKey } from '@/hooks/useDraftMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { useChatsStore } from '@/store/chatsStore';
@@ -162,7 +163,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     markRoomRead,
   } = useGlobeStore();
 
-  const [input, setInput] = useState('');
+  const [input, setInput, clearDraft] = useDraftMessage(roomDraftKey(roomSlug));
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -922,7 +923,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     }
 
     sendGlobeMessage(roomSlug, content, replyToId, mediaUrls, attachments);
-    setInput('');
+    clearDraft();
     setReplyTo(null);
     setPendingAttachment(null);
     // Auto-scroll to bottom after sending (inverted: bottom = offset 0).
@@ -938,7 +939,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, replyTo, pendingAttachment]);
+  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, replyTo, pendingAttachment, clearDraft]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the globe:message echo. Passes the route/curated slug (NOT the
