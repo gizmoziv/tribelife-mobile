@@ -59,6 +59,11 @@ export default function GroupInfoScreen() {
   const [renameVisible, setRenameVisible] = useState(false);
   const [renameInput, setRenameInput] = useState('');
   const [isSavingRename, setIsSavingRename] = useState(false);
+  // Description modal (260927-bi0) — same cross-platform Modal pattern as rename.
+  const [groupDescription, setGroupDescription] = useState('');
+  const [descriptionVisible, setDescriptionVisible] = useState(false);
+  const [descriptionInput, setDescriptionInput] = useState('');
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
   // Public group info (memberCount, isMember) — available even for non-members
   // via the inviteSlug-keyed getInfo endpoint. Source of truth for the header
   // count + Join/Leave button render; `members[]` is the authoritative list
@@ -111,6 +116,8 @@ export default function GroupInfoScreen() {
         const { group } = await groupsApi.getInfo(slug);
         if (cancelled) return;
         setGroupIconUrl(group.groupIconUrl ?? null);
+        // `?? ''` keeps an old backend (field absent) harmless.
+        setGroupDescription(group.groupDescription ?? '');
         setResolvedSlug(group.inviteSlug);
         setPublicMemberCount(group.memberCount);
         setPublicIsMember(group.isMember);
@@ -191,6 +198,31 @@ export default function GroupInfoScreen() {
       setIsSavingRename(false);
     }
   }, [conversationId, groupName, renameInput]);
+
+  const handleEditDescription = useCallback(() => {
+    setDescriptionInput(groupDescription);
+    setDescriptionVisible(true);
+  }, [groupDescription]);
+
+  const handleSaveDescription = useCallback(async () => {
+    const trimmed = descriptionInput.trim();
+    if (trimmed === groupDescription) {
+      setDescriptionVisible(false);
+      return;
+    }
+    setIsSavingDescription(true);
+    try {
+      const { group } = await groupsApi.update(conversationId, {
+        groupDescription: trimmed === '' ? null : trimmed,
+      });
+      setGroupDescription(group.groupDescription ?? '');
+      setDescriptionVisible(false);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Could not update the description.');
+    } finally {
+      setIsSavingDescription(false);
+    }
+  }, [conversationId, groupDescription, descriptionInput]);
 
   const handleShare = useCallback(async () => {
     if (!resolvedSlug) {
@@ -418,10 +450,22 @@ export default function GroupInfoScreen() {
               <Text style={[styles.memberCountText, { color: colors.textMuted }]}>
                 {effectiveMemberCount} {effectiveMemberCount === 1 ? 'member' : 'members'}
               </Text>
+              {!!groupDescription && (
+                <Text style={[styles.descriptionText, { color: colors.textMuted }]}>
+                  {groupDescription}
+                </Text>
+              )}
               {isAdmin && (
                 <TouchableOpacity onPress={handleRename} style={{ marginTop: 6 }}>
                   <Text style={{ fontSize: 14, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
                     Rename Group
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {isAdmin && (
+                <TouchableOpacity onPress={handleEditDescription} style={{ marginTop: 6 }}>
+                  <Text style={{ fontSize: 14, fontFamily: FONTS.semiBold, color: COLORS.primary }}>
+                    {groupDescription ? 'Edit Description' : 'Add Description'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -683,6 +727,73 @@ export default function GroupInfoScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Description modal — same cross-platform Modal pattern as rename */}
+      <Modal
+        visible={descriptionVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDescriptionVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={renameStyles.backdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setDescriptionVisible(false)}
+          />
+          <View
+            style={[
+              renameStyles.card,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[renameStyles.title, { color: colors.text }]}>Group Description</Text>
+            <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
+              Shown in Group Info. For public groups it also appears when the invite link is shared.
+            </Text>
+            <TextInput
+              value={descriptionInput}
+              onChangeText={setDescriptionInput}
+              placeholder="Group description"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              maxLength={500}
+              multiline
+              textAlignVertical="top"
+              style={[
+                renameStyles.input,
+                { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceGlass, minHeight: 100 },
+              ]}
+            />
+            <Text style={[renameStyles.subtitle, { color: colors.textMuted, textAlign: 'right' }]}>
+              {descriptionInput.length}/500
+            </Text>
+            <View style={renameStyles.actions}>
+              <TouchableOpacity
+                onPress={() => setDescriptionVisible(false)}
+                style={[renameStyles.button, { borderColor: colors.border }]}
+                disabled={isSavingDescription}
+              >
+                <Text style={[renameStyles.buttonText, { color: colors.text }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveDescription}
+                style={[renameStyles.button, { backgroundColor: COLORS.primary, borderColor: COLORS.primary }]}
+                disabled={isSavingDescription}
+              >
+                {isSavingDescription ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[renameStyles.buttonText, { color: '#fff' }]}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -737,6 +848,12 @@ const styles = StyleSheet.create({
   memberCountText: {
     fontSize: 14,
     fontFamily: FONTS.regular,
+  },
+  descriptionText: {
+    fontSize: 14,
+    fontFamily: FONTS.regular,
+    textAlign: 'center',
+    marginTop: 2,
   },
   inviteSection: {
     gap: 10,

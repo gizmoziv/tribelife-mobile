@@ -49,9 +49,12 @@ export default function GroupInviteScreen() {
         // Leave the dead /g/:slug route before prompting so the back stack is clean
         router.replace('/(app)/chat');
 
+        const descriptionSuffix = group.groupDescription
+          ? `\n\n${group.groupDescription}`
+          : '';
         Alert.alert(
           'Join Group',
-          `Join "${group.groupName}" (${group.memberCount} members)?`,
+          `Join "${group.groupName}" (${group.memberCount} members)?${descriptionSuffix}`,
           [
             { text: 'Cancel', style: 'cancel' },
             {

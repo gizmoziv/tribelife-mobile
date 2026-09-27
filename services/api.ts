@@ -592,15 +592,15 @@ export const groupsApi = {
       '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug, isPublic }) }),
 
   getInfo: (slug: string) =>
-    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; isPublic: boolean; memberCount: number; isMember: boolean; createdAt: string; admin: { id: number; handle: string; name: string; avatarUrl: string | null } | null } }>(
+    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; groupDescription: string | null; inviteSlug: string; isPublic: boolean; memberCount: number; isMember: boolean; createdAt: string; admin: { id: number; handle: string; name: string; avatarUrl: string | null } | null } }>(
       `/api/chat/groups/${slug}`),
 
   join: (slug: string) =>
     request<{ conversation: { id: number; groupName: string } }>(
       `/api/chat/groups/${slug}/join`, { method: 'POST' }),
 
-  update: (id: number, data: { name?: string; slug?: string; groupIconUrl?: string; isPublic?: boolean }) =>
-    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; isPublic: boolean } }>(
+  update: (id: number, data: { name?: string; slug?: string; groupIconUrl?: string; isPublic?: boolean; groupDescription?: string | null }) =>
+    request<{ group: { id: number; groupName: string; groupIconUrl: string | null; groupDescription: string | null; inviteSlug: string; isPublic: boolean } }>(
       `/api/chat/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   members: (id: number) =>
