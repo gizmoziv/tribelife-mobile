@@ -36,6 +36,7 @@ import { useChatsStore } from '@/store/chatsStore';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { conversationDraftKey, roomDraftKey, listDraftTexts } from '@/utils/chatDraft';
 import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   connectSocket,
@@ -99,6 +100,11 @@ function BellOffIcon({ size = 16, color = '#7A8BA8' }: { size?: number; color?: 
   );
 }
 
+// A second, delayed re-read catches text still inside the composer's 350ms
+// save debounce, or written by its unmount flush, which lands after the
+// native pop animation — i.e. after this screen's own focus event.
+const DRAFT_LIST_REREAD_MS = 800;
+
 export default function ChatsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -114,6 +120,7 @@ export default function ChatsScreen() {
   const unarchiveRow = useChatsStore((s) => s.unarchiveRow);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [draftTexts, setDraftTexts] = useState<Record<string, string>>({});
   const flatListRef = useRef<FlatList<ChatsRow>>(null);
 
   // Filter pills: All | Unread | Groups | DMs | Archive (single-select, default 'all').
@@ -150,6 +157,26 @@ export default function ChatsScreen() {
       // so reloads land on All naturally without needing this flag.
       return () => {
         revertOnEmptyRef.current = true;
+      };
+    }, []),
+  );
+
+  // DRAFTLIST-03: refresh the Chats-list draft indicator on every focus, and
+  // once more DRAFT_LIST_REREAD_MS later to catch a draft still inside the
+  // just-left composer's debounce or written by its unmount flush.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const read = () => {
+        listDraftTexts(AsyncStorage).then((map) => {
+          if (!cancelled) setDraftTexts(map);
+        });
+      };
+      read();
+      const timer = setTimeout(read, DRAFT_LIST_REREAD_MS);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
       };
     }, []),
   );
@@ -450,7 +477,7 @@ export default function ChatsScreen() {
                   Chats
                 </Text>
                 {filteredRows.map((row) => (
-                  <ChatsListRow key={chatsRowKey(row)} row={row} colors={colors} router={router} />
+                  <ChatsListRow key={chatsRowKey(row)} row={row} colors={colors} router={router} draftTexts={draftTexts} />
                 ))}
               </>
             )}
@@ -463,7 +490,7 @@ export default function ChatsScreen() {
                   Archived Chats
                 </Text>
                 {archivedMatchRows.map((row) => (
-                  <ChatsListRow key={'archived-' + chatsRowKey(row)} row={row} colors={colors} router={router} showArchivedTag />
+                  <ChatsListRow key={'archived-' + chatsRowKey(row)} row={row} colors={colors} router={router} showArchivedTag draftTexts={draftTexts} />
                 ))}
               </>
             )}
@@ -644,6 +671,7 @@ export default function ChatsScreen() {
         pillFilter={pillFilter}
         archiveRow={archiveRow}
         unarchiveRow={unarchiveRow}
+        draftTexts={draftTexts}
       />
     </SafeAreaView>
   );
@@ -835,6 +863,7 @@ function ChatsList({
   pillFilter,
   archiveRow,
   unarchiveRow,
+  draftTexts,
 }: {
   data: ChatsRow[];
   flatListRef: React.RefObject<FlatList<ChatsRow> | null>;
@@ -842,6 +871,7 @@ function ChatsList({
   pillFilter?: PillFilter;
   archiveRow?: (conversationId: number) => Promise<void>;
   unarchiveRow?: (conversationId: number) => Promise<void>;
+  draftTexts: Record<string, string>;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -885,10 +915,10 @@ function ChatsList({
         onMuteAction={handleMuteAction}
         backgroundColor={colors.background}
       >
-        <ChatsListRow row={item} colors={colors} router={router} />
+        <ChatsListRow row={item} colors={colors} router={router} draftTexts={draftTexts} />
       </SwipeableChatRow>
     );
-  }, [colors, router, isArchiveView, archiveRow, unarchiveRow]);
+  }, [colors, router, isArchiveView, archiveRow, unarchiveRow, draftTexts]);
 
   return (
     <FlatList
@@ -898,6 +928,7 @@ function ChatsList({
       renderItem={renderRow}
       contentContainerStyle={{ paddingVertical: SPACING.sm }}
       keyboardDismissMode="on-drag"
+      extraData={draftTexts}
       ListEmptyComponent={
         emptyText ? (
           <View style={styles.emptyMatches}>
@@ -927,17 +958,30 @@ function chatsRowKey(row: ChatsRow): string {
   }
 }
 
+// DRAFTLIST-04: must return exactly the key the row's composer screen
+// writes. Keys come only from the engine's key builders (conversationDraftKey
+// / roomDraftKey) — never hand-built here.
+function chatsRowDraftKey(row: ChatsRow): string | null {
+  switch (row.type) {
+    case 'dm': return conversationDraftKey(row.conversationId);
+    case 'group': return conversationDraftKey(row.conversationId);
+  }
+  return null;
+}
+
 function ChatsListRow({
   row,
   colors,
   router,
   showArchivedTag = false,
+  draftTexts,
 }: {
   row: ChatsRow;
   colors: ReturnType<typeof useTheme>['colors'];
   router: ReturnType<typeof useRouter>;
   /** When true, renders an Archived pill inline next to the row title (used in cross-pill search results). */
   showArchivedTag?: boolean;
+  draftTexts: Record<string, string>;
 }) {
   const onPress = useCallback(() => {
     Keyboard.dismiss();
@@ -1045,6 +1089,13 @@ function ChatsListRow({
   // Voice previews arrive as the old-client fallback string; show a clean label.
   subtitle = voicePreviewLabel(subtitle);
 
+  // DRAFTLIST-05: a saved draft overrides the preview line with a green
+  // "Draft: " label. Whitespace (including newlines) is collapsed to one
+  // space for display; the stored value itself is untouched.
+  const draftKey = chatsRowDraftKey(row);
+  const rawDraft = draftKey ? draftTexts[draftKey] : undefined;
+  const draftPreview = rawDraft ? rawDraft.replace(/\s+/g, ' ').trim() : '';
+
   return (
     <TouchableOpacity
       style={[styles.chatsRow, { backgroundColor: colors.surfaceGlass }]}
@@ -1097,7 +1148,14 @@ function ChatsListRow({
           </View>
         </View>
         <Text style={[styles.chatsRowPreview, { color: colors.textMuted }]} numberOfLines={1}>
-          {subtitle}
+          {draftPreview ? (
+            <>
+              <Text style={{ color: COLORS.success, fontFamily: FONTS.semiBold }}>{'Draft: '}</Text>
+              {draftPreview}
+            </>
+          ) : (
+            subtitle
+          )}
         </Text>
       </View>
     </TouchableOpacity>

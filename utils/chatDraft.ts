@@ -198,3 +198,35 @@ export async function purgeAllChatDrafts(storage: DraftStorage): Promise<void> {
     // Swallow — purge is best-effort and must never break logout.
   }
 }
+
+// ── Chats-list draft lookup ──────────────────────────────────────────────
+// Bulk-reads every persisted draft for the Chats list's indicator. Reads
+// only draft-prefixed keys, skips entries removed mid-read (a key can
+// disappear between getAllKeys and multiGet) or left whitespace-only, and
+// never rejects — a storage failure just hides indicators.
+
+// Narrow structural subset of AsyncStorage 2.2.0 (DraftStorage above has no
+// multiGet, so this is a new additive interface rather than a widened one).
+export interface DraftListStorage {
+  getAllKeys(): Promise<readonly string[]>;
+  multiGet(keys: readonly string[]): Promise<readonly (readonly [string, string | null])[]>;
+}
+
+export async function listDraftTexts(storage: DraftListStorage): Promise<Record<string, string>> {
+  try {
+    const allKeys = await storage.getAllKeys();
+    const draftKeys = allKeys.filter((k) => k.startsWith(CHAT_DRAFT_KEY_PREFIX));
+    if (draftKeys.length === 0) return {};
+
+    const pairs = await storage.multiGet(draftKeys);
+    const result: Record<string, string> = {};
+    for (const [key, value] of pairs) {
+      if (typeof value === 'string' && value.trim() !== '') {
+        result[key] = value;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}

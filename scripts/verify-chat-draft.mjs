@@ -27,6 +27,7 @@ import {
   roomDraftKey,
   createDraftController,
   purgeAllChatDrafts,
+  listDraftTexts,
 } from '../utils/chatDraft.ts';
 
 // ── Fake storage ─────────────────────────────────────────────────────────
@@ -76,6 +77,10 @@ function createFakeStorage() {
     async multiRemove(keys) {
       for (const k of keys) map.delete(k);
       calls.push({ op: 'multiRemove', keys: [...keys] });
+    },
+    async multiGet(keys) {
+      calls.push({ op: 'multiGet', keys: [...keys] });
+      return keys.map((k) => [k, map.has(k) ? map.get(k) : null]);
     },
   };
 }
@@ -339,6 +344,75 @@ async function T14_neverRejects() {
   await purgeAllChatDrafts(storage);
 }
 
+async function T15_listEmpty() {
+  const storage = createFakeStorage();
+  const result = await listDraftTexts(storage);
+  assert.deepEqual(result, {});
+  assert.equal(storage.calls.filter((c) => c.op === 'multiGet').length, 0);
+
+  const storage2 = createFakeStorage();
+  storage2.map.set('preferredTranslateLanguage', 'en');
+  storage2.map.set('chevra:welcome_dismissed:town-square', 'true');
+  const result2 = await listDraftTexts(storage2);
+  assert.deepEqual(result2, {});
+  assert.equal(storage2.calls.filter((c) => c.op === 'multiGet').length, 0);
+}
+
+async function T16_listFiltersPrefix() {
+  const storage = createFakeStorage();
+  storage.map.set('chatDraft:conversation:1', 'hi');
+  storage.map.set('chatDraft:room:town-square', 'yo');
+  storage.map.set('chatDraft:room:timezone:eastern-time', 'local draft');
+  storage.map.set('preferredTranslateLanguage', 'en');
+
+  const result = await listDraftTexts(storage);
+  assert.deepEqual(result, {
+    'chatDraft:conversation:1': 'hi',
+    'chatDraft:room:town-square': 'yo',
+    'chatDraft:room:timezone:eastern-time': 'local draft',
+  });
+
+  const multiGetCalls = storage.calls.filter((c) => c.op === 'multiGet');
+  assert.equal(multiGetCalls.length, 1);
+  assert.deepEqual(
+    [...multiGetCalls[0].keys].sort(),
+    ['chatDraft:conversation:1', 'chatDraft:room:timezone:eastern-time', 'chatDraft:room:town-square'].sort(),
+  );
+}
+
+async function T17_listSkipsNullRace() {
+  const storage = {
+    async getAllKeys() {
+      return ['chatDraft:conversation:1', 'chatDraft:conversation:2', 'chatDraft:conversation:3'];
+    },
+    async multiGet() {
+      return [
+        ['chatDraft:conversation:1', 'kept'],
+        ['chatDraft:conversation:2', null],
+        ['chatDraft:conversation:3', '  \n '],
+      ];
+    },
+  };
+  const result = await listDraftTexts(storage);
+  assert.deepEqual(result, { 'chatDraft:conversation:1': 'kept' });
+}
+
+async function T18_listNeverRejects() {
+  const result = await listDraftTexts(createFakeRejectingStorage());
+  assert.deepEqual(result, {});
+
+  const storage2 = {
+    async getAllKeys() {
+      return ['chatDraft:conversation:1'];
+    },
+    async multiGet() {
+      throw new Error('boom');
+    },
+  };
+  const result2 = await listDraftTexts(storage2);
+  assert.deepEqual(result2, {});
+}
+
 // ── Runner ──────────────────────────────────────────────────────────────
 
 const cases = [
@@ -356,6 +430,10 @@ const cases = [
   ['T12_noKey', T12_noKey],
   ['T13_purge', T13_purge],
   ['T14_neverRejects', T14_neverRejects],
+  ['T15_listEmpty', T15_listEmpty],
+  ['T16_listFiltersPrefix', T16_listFiltersPrefix],
+  ['T17_listSkipsNullRace', T17_listSkipsNullRace],
+  ['T18_listNeverRejects', T18_listNeverRejects],
 ];
 
 for (const [name, fn] of cases) {
