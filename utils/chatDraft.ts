@@ -54,9 +54,16 @@ export interface DraftController {
   flush(): void;
 }
 
+// Module-level generation counter. Bumped synchronously (before any await) by
+// purgeAllChatDrafts on logout, so any controller created before the purge can
+// never write a draft back to storage again — even from a pending debounce
+// timer or an unmount flush that fires after the bump.
+let draftGeneration = 0;
+
 export function createDraftController(options: DraftControllerOptions): DraftController {
   const { storage, onTextChange } = options;
   const debounceMs = options.debounceMs ?? DRAFT_SAVE_DEBOUNCE_MS;
+  const createdGeneration = draftGeneration;
 
   let text = '';
   let activeKey: string | null = null;
@@ -64,7 +71,14 @@ export function createDraftController(options: DraftControllerOptions): DraftCon
   let editSeq = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
+  // Gate every storage write behind the generation check. A controller
+  // created before a purge is permanently disabled once the purge runs.
+  function isCurrentGeneration(): boolean {
+    return createdGeneration === draftGeneration;
+  }
+
   function persist(key: string, value: string): void {
+    if (!isCurrentGeneration()) return;
     try {
       const trimmed = value.trim();
       if (trimmed === '') {
@@ -108,7 +122,7 @@ export function createDraftController(options: DraftControllerOptions): DraftCon
     text = '';
     editSeq += 1;
     onTextChange('');
-    if (activeKey !== null) {
+    if (activeKey !== null && isCurrentGeneration()) {
       try {
         void storage.removeItem(activeKey).catch(() => {});
       } catch {
@@ -166,4 +180,21 @@ export function createDraftController(options: DraftControllerOptions): DraftCon
   }
 
   return { getText, setKey, setText, clear, flush };
+}
+
+// Removes every chatDraft:* key from storage (logout on a shared device).
+// Bumps the generation counter synchronously, before any await, so screens
+// still mounted during the logout redirect cannot write a draft back on
+// unmount. Never rejects — logout must never fail because of drafts.
+export async function purgeAllChatDrafts(storage: DraftStorage): Promise<void> {
+  draftGeneration += 1;
+  try {
+    const allKeys = await storage.getAllKeys();
+    const draftKeys = allKeys.filter((k) => k.startsWith(CHAT_DRAFT_KEY_PREFIX));
+    if (draftKeys.length > 0) {
+      await storage.multiRemove(draftKeys);
+    }
+  } catch {
+    // Swallow — purge is best-effort and must never break logout.
+  }
 }

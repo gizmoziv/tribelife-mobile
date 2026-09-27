@@ -1,6 +1,8 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User, Capabilities, AccessStatus } from '@/types';
 import { setToken, clearToken, auth, extractAccessStatus } from '@/services/api';
+import { purgeAllChatDrafts } from '@/utils/chatDraft';
 
 interface AuthState {
   user: User | null;
@@ -90,6 +92,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await clearToken();
+    // Shared devices; the next account must not see or accidentally send the
+    // previous account's unsent text. The generation bump inside
+    // purgeAllChatDrafts blocks the unmount flush of chat screens that are
+    // still mounted during the logout redirect.
+    await purgeAllChatDrafts(AsyncStorage);
     set({ user: null, token: null, capabilities: null, isAuthenticated: false, needsOnboarding: false, accessStatus: null });
   },
 

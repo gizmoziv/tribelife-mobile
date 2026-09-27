@@ -26,6 +26,7 @@ import {
   conversationDraftKey,
   roomDraftKey,
   createDraftController,
+  purgeAllChatDrafts,
 } from '../utils/chatDraft.ts';
 
 // ── Fake storage ─────────────────────────────────────────────────────────
@@ -76,6 +77,20 @@ function createFakeStorage() {
       for (const k of keys) map.delete(k);
       calls.push({ op: 'multiRemove', keys: [...keys] });
     },
+  };
+}
+
+function createFakeRejectingStorage() {
+  return {
+    async getItem() {
+      return null;
+    },
+    async setItem() {},
+    async removeItem() {},
+    async getAllKeys() {
+      throw new Error('boom');
+    },
+    async multiRemove() {},
   };
 }
 
@@ -283,6 +298,47 @@ async function T12_noKey() {
   assert.equal(removeItemCalls.length, 0);
 }
 
+async function T13_purge() {
+  const storage = createFakeStorage();
+  storage.map.set('chatDraft:conversation:1', 'old');
+  storage.map.set('chatDraft:room:eastern-time', 'old room');
+  storage.map.set('preferredTranslateLanguage', 'en');
+  storage.map.set('chevra:welcome_dismissed:town-square', 'true');
+
+  const { controller: a } = createRecordedController(storage);
+  a.setKey('chatDraft:conversation:1');
+  a.setText('secret');
+  // deliberately not flushed before the purge
+
+  await purgeAllChatDrafts(storage);
+
+  const remainingChatDraftKeys = Array.from(storage.map.keys()).filter((k) => k.startsWith('chatDraft:'));
+  assert.equal(remainingChatDraftKeys.length, 0);
+  assert.equal(storage.map.get('preferredTranslateLanguage'), 'en');
+  assert.equal(storage.map.get('chevra:welcome_dismissed:town-square'), 'true');
+
+  a.flush();
+  await settle();
+  assert.ok(!storage.map.has('chatDraft:conversation:1'));
+
+  a.setText('more');
+  await sleep(80);
+  assert.ok(!storage.map.has('chatDraft:conversation:1'));
+
+  const { controller: b } = createRecordedController(storage);
+  const K = 'chatDraft:conversation:99';
+  b.setKey(K);
+  b.setText('fresh');
+  b.flush();
+  await settle();
+  assert.equal(storage.map.get(K), 'fresh');
+}
+
+async function T14_neverRejects() {
+  const storage = createFakeRejectingStorage();
+  await purgeAllChatDrafts(storage);
+}
+
 // ── Runner ──────────────────────────────────────────────────────────────
 
 const cases = [
@@ -298,6 +354,8 @@ const cases = [
   ['T10_clear', T10_clear],
   ['T11_keySwitch', T11_keySwitch],
   ['T12_noKey', T12_noKey],
+  ['T13_purge', T13_purge],
+  ['T14_neverRejects', T14_neverRejects],
 ];
 
 for (const [name, fn] of cases) {
