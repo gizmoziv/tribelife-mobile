@@ -587,9 +587,9 @@ export const groupsApi = {
     request<{ groups: { id: number; groupName: string; groupIconUrl: string | null; inviteSlug: string; createdAt: string; role: string; memberCount: number }[] }>(
       opts?.role ? `/api/chat/groups?role=${opts.role}` : '/api/chat/groups'),
 
-  create: (name: string, slug?: string, isPublic = false) =>
-    request<{ conversation: { id: number; groupName: string; inviteSlug: string; createdAt: string } }>(
-      '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug, isPublic }) }),
+  create: (name: string, slug?: string, isPublic = false, groupDescription?: string | null) =>
+    request<{ conversation: { id: number; groupName: string; inviteSlug: string; createdAt: string; groupDescription: string | null } }>(
+      '/api/chat/groups', { method: 'POST', body: JSON.stringify({ name, slug, isPublic, groupDescription }) }),
 
   getInfo: (slug: string) =>
     request<{ group: { id: number; groupName: string; groupIconUrl: string | null; groupDescription: string | null; inviteSlug: string; isPublic: boolean; memberCount: number; isMember: boolean; createdAt: string; admin: { id: number; handle: string; name: string; avatarUrl: string | null } | null } }>(

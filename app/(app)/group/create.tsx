@@ -270,6 +270,7 @@ export default function CreateGroupScreen() {
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
   // The invite slug is derived from the name on the server (canonical + unique),
@@ -278,6 +279,10 @@ export default function CreateGroupScreen() {
 
   const handleNameChange = (text: string) => {
     setName(text.slice(0, 50));
+  };
+
+  const handleDescriptionChange = (text: string) => {
+    setDescription(text.slice(0, 500));
   };
 
   const handleCreate = async () => {
@@ -289,7 +294,8 @@ export default function CreateGroupScreen() {
     setIsCreating(true);
     try {
       // Slug is derived server-side from the name — don't send a custom one.
-      const { conversation } = await groupsApi.create(trimmedName, undefined, isPublic);
+      const trimmedDescription = description.trim();
+      const { conversation } = await groupsApi.create(trimmedName, undefined, isPublic, trimmedDescription || undefined);
       router.replace({
         pathname: '/(app)/chat/[conversationId]',
         params: {
@@ -558,6 +564,28 @@ export default function CreateGroupScreen() {
                 </View>
                 <Text style={[styles.charCount, { color: colors.textMuted }]}>
                   {name.length}/50
+                </Text>
+
+                <Text style={[styles.label, { color: colors.text, marginTop: SPACING.md }]}>
+                  Description <Text style={{ color: colors.textMuted }}>(optional)</Text>
+                </Text>
+                <View style={[styles.inputWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <TextInput
+                    style={[styles.input, { color: colors.text, minHeight: 100 }]}
+                    placeholder="What is this group about?"
+                    placeholderTextColor={colors.textMuted}
+                    value={description}
+                    onChangeText={handleDescriptionChange}
+                    maxLength={500}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+                <Text style={[styles.charCount, { color: colors.textMuted }]}>
+                  {description.length}/500
+                </Text>
+                <Text style={[styles.charCount, { color: colors.textMuted }]}>
+                  Shown in Group Info and when your invite link is shared.
                 </Text>
 
                 <Text style={[styles.label, { color: colors.text, marginTop: SPACING.md }]}>Invite Link</Text>
