@@ -755,7 +755,7 @@ export default function GroupInfoScreen() {
           >
             <Text style={[renameStyles.title, { color: colors.text }]}>Group Description</Text>
             <Text style={[renameStyles.subtitle, { color: colors.textMuted }]}>
-              Shown in Group Info. For public groups it also appears when the invite link is shared.
+              Shown in Group Info, and in the link preview when your invite link is shared.
             </Text>
             <TextInput
               value={descriptionInput}
