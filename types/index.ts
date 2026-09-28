@@ -75,6 +75,15 @@ export interface MessageAttachment {
   type: 'pdf';
 }
 
+// ── Phase 38.1: ordered mentions (D-00b) ────────────────────────────────────
+// Mirrors the backend's OrderedMention type verbatim (tribelife-backend/src/db/schema.ts).
+// One entry per @handle occurrence in text order, 1:1 with the client's own
+// parseContent()/parseMentions() mention-kind parts (duplicates preserved).
+export interface OrderedMention {
+  handle: string;
+  userId: number | null;
+}
+
 // ── Quick task 260830-kkb: Staged (not-yet-sent) composer attachment ───────
 // One attachment session at a time, per composer (D-01/D-02). Discriminated on
 // `kind` so AttachmentComposer.tsx and each screen's handleSend can render/derive
@@ -99,6 +108,8 @@ export interface Message {
   editedAt?: string | null;
   deletedAt?: string | null; // set → render a "message deleted" tombstone
   mentions?: number[];
+  // Phase 38.1 (D-00b): absent/null on pre-phase messages (D-01 legacy fallback).
+  orderedMentions?: OrderedMention[] | null;
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;
   replyToId?: number | null;
@@ -264,6 +275,10 @@ export interface GlobeMessage {
   createdAt: string;
   editedAt?: string | null;
   slug: string;
+  // Phase 38.1: was missing despite globeHandler.ts sending it in the runtime
+  // broadcast payload (RESEARCH Pitfall 5) — added fresh, alongside orderedMentions.
+  mentions?: number[];
+  orderedMentions?: OrderedMention[] | null;
   reactions?: ReactionGroup[];
   replyTo?: ReplyTo | null;
   replyToId?: number | null;

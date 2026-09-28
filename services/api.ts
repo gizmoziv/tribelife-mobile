@@ -553,6 +553,11 @@ export const usersApi = {
     request<{ users: Array<{ userId: number; handle: string; name: string; avatarUrl: string | null }> }>(
       `/api/users/suggest?q=${encodeURIComponent(q)}&scope=${scope}&contextId=${encodeURIComponent(contextId)}`,
     ),
+
+  // Phase 38.1 (D-00e/D-04): resolves a mention's stored userId to the
+  // mentioned user's CURRENT handle, lazily on tap.
+  resolveHandle: (userId: number) =>
+    request<{ handle: string }>(`/api/users/by-id/${userId}/handle`),
 };
 
 // ── Reactions ─────────────────────────────────────────────────────────────

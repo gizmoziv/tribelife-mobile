@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -21,6 +21,8 @@ import { VoicePlayerBubble } from '@/components/ui/chat/VoicePlayerBubble';
 import { DocumentCard } from '@/components/ui/chat/DocumentCard';
 import { extractYouTubeIds } from '@/utils/youtube';
 import { VOICE_FALLBACK_STRING, formatDuration } from '@/constants/voice';
+import { usersApi, ApiError } from '@/services/api';
+import { zipMentions, type MentionResolution } from '@/utils/mentionZip';
 import type { Message, GlobeMessage, ReplyTo } from '@/types';
 
 // Parse message content into plain text, @mention, and URL fragments.
@@ -302,8 +304,44 @@ export function MessageBubble({
     ? deriveTick(message.id, message.createdAt, conversationReceipts, receiptOtherUserIds ?? [])
     : 'none';
 
-  const handleMentionPress = useCallback((handle: string) => {
-    router.push(`/user/${handle}`);
+  // Phase 38.1 (D-00f/D-04/D-05): resolve the stored ordered-mention userId to
+  // the mentioned user's CURRENT handle before navigating, instead of trusting
+  // the raw parsed @handle text (which may be stale after a rename).
+  // resolvingMentionRef guards against a second tap firing another request
+  // while the first resolve is still in flight (D-04's disabled-press behavior
+  // — no prefetch, one request per tap).
+  const resolvingMentionRef = useRef(false);
+  const handleMentionPress = useCallback(async (resolution: MentionResolution) => {
+    if (resolvingMentionRef.current) return;
+
+    if (resolution.kind === 'legacy') {
+      // D-01: pre-phase message with no stored orderedMentions data (or a
+      // mention the client couldn't match) — fall back to today's behavior.
+      router.push(`/user/${resolution.handle}`);
+      return;
+    }
+
+    if (resolution.kind === 'unresolved') {
+      // D-05: stored userId is null (handle never resolved to a real user at
+      // send time, e.g. a typo) — surface without navigating.
+      Alert.alert('User not found', 'This account is no longer available.');
+      return;
+    }
+
+    resolvingMentionRef.current = true;
+    try {
+      const res = await usersApi.resolveHandle(resolution.userId);
+      router.push(`/user/${res.handle}`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        // D-05: account since deleted/banned.
+        Alert.alert('User not found', 'This account is no longer available.');
+      } else {
+        Alert.alert('Could not open profile', 'Please try again.');
+      }
+    } finally {
+      resolvingMentionRef.current = false;
+    }
   }, [router]);
 
   const handleUrlPress = useCallback((url: string) => {
@@ -339,15 +377,23 @@ export function MessageBubble({
   const renderContent = (baseColor: string, mentionColor: string, linkColor: string) => {
     if (!displayContent) return null;
     const parts = parseContent(displayContent);
+    // Phase 38.1 (Pattern 3): zip against only the mention-kind parts, in
+    // order — NOT the raw parts[i] index, since text/url parts interleave.
+    const mentionResolutions = zipMentions(
+      parts.flatMap((p) => (p.kind === 'mention' ? [p.handle] : [])),
+      message.orderedMentions,
+    );
+    let mentionIndex = 0;
     return (
       <Text style={[styles.bubbleText, { color: baseColor, writingDirection: textDirection }]}>
         {parts.map((p, i) => {
           if (p.kind === 'mention') {
+            const resolution = mentionResolutions[mentionIndex++];
             return (
               <Text
                 key={i}
                 style={{ color: mentionColor, fontFamily: FONTS.semiBold }}
-                onPress={() => handleMentionPress(p.handle)}
+                onPress={() => handleMentionPress(resolution)}
               >
                 {p.text}
               </Text>
@@ -454,16 +500,23 @@ export function MessageBubble({
   // mention parser so users can still open the new member's profile.
   if (message.kind === 'system') {
     const parts = parseContent(message.content);
+    // Phase 38.1 (Pattern 3): same running mention-index zip as renderContent.
+    const mentionResolutions = zipMentions(
+      parts.flatMap((p) => (p.kind === 'mention' ? [p.handle] : [])),
+      message.orderedMentions,
+    );
+    let mentionIndex = 0;
     return (
       <View style={styles.systemRow}>
         <Text style={[styles.systemText, { color: colors.textMuted }]}>
           {parts.map((p, i) => {
             if (p.kind === 'mention') {
+              const resolution = mentionResolutions[mentionIndex++];
               return (
                 <Text
                   key={i}
                   style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}
-                  onPress={() => handleMentionPress(p.handle)}
+                  onPress={() => handleMentionPress(resolution)}
                 >
                   {p.text}
                 </Text>
