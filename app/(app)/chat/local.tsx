@@ -451,7 +451,7 @@ export default function LocalChatScreen() {
       });
 
       const offEdited = onMessageEdited((p) => {
-        setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
+        setMessages((prev) => prev.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt, orderedMentions: p.orderedMentions !== undefined ? p.orderedMentions : m.orderedMentions } : m));
       });
 
       const offDeleted = onMessageDeleted((p) => {

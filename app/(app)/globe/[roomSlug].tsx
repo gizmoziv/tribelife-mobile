@@ -556,7 +556,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
 
     const offEdited = onMessageEdited((p) => {
       const current = useGlobeStore.getState().messages;
-      setMessages(current.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt } : m));
+      setMessages(current.map((m) => m.id === p.messageId ? { ...m, content: p.content, editedAt: p.editedAt, orderedMentions: p.orderedMentions !== undefined ? p.orderedMentions : m.orderedMentions } : m));
     });
 
     const offDeleted = onMessageDeleted((p) => {

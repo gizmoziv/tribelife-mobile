@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '@/constants';
 import { getToken } from './api';
-import type { Message, MessageAttachment } from '@/types';
+import type { Message, MessageAttachment, OrderedMention } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useChatsStore } from '@/store/chatsStore';
 
@@ -380,6 +380,7 @@ export function onMessageEdited(cb: (data: {
   editedAt: string;
   roomId: string | null;
   conversationId: number | null;
+  orderedMentions?: OrderedMention[] | null;
 }) => void): () => void {
   socket?.on('message:edited', cb);
   return () => socket?.off('message:edited', cb);
