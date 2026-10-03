@@ -32,6 +32,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   AppState,
+  LayoutAnimation,
+  AccessibilityInfo,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
@@ -41,7 +43,7 @@ import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
 import { useTribeHubStore } from '@/store/tribeHubStore';
-import { buildCandleViewModel } from '@/utils/candleViewModel';
+import { buildCandleViewModel, CANDLE_SWAP_MS } from '@/utils/candleViewModel';
 import { CandleStrip } from './CandleStrip';
 import { CandleSheet } from './CandleSheet';
 import { TribeFilterPills, type TribeFilterKey } from './TribeFilterPills';
@@ -62,8 +64,7 @@ export function TribeHubScreen() {
   // a single, vertically-scrolling, lazy-loaded feed of just that type.
   // Candle data + sheet state live in the store (shared with the header chip).
   const filter = useTribeHubStore((s) => s.filter);
-  const setFilter = useTribeHubStore((s) => s.setFilter);
-  const today = useTribeHubStore((s) => s.today);
+    const today = useTribeHubStore((s) => s.today);
   const todayLoading = useTribeHubStore((s) => s.todayLoading);
   const todayError = useTribeHubStore((s) => s.todayError);
   const todayFetchedAt = useTribeHubStore((s) => s.todayFetchedAt);
@@ -141,6 +142,34 @@ export function TribeHubScreen() {
     return () => useTribeHubStore.getState().reset();
   }, []);
 
+  // Reduce Motion: seeded once, kept current by the change event.
+  const reduceMotionRef = useRef(false);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => { reduceMotionRef.current = on; })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => {
+      reduceMotionRef.current = on;
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Crossing the All boundary swaps the strip for the header chip (or back):
+  // a short fade/collapse, skipped with Reduce Motion. Both changes land in
+  // the same commit, so they share the one animation tick.
+  const handleFilterChange = useCallback((next: TribeFilterKey) => {
+    const current = useTribeHubStore.getState().filter;
+    const crossesAll = (current === 'all') !== (next === 'all');
+    if (crossesAll && !reduceMotionRef.current) {
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(CANDLE_SWAP_MS,
+          LayoutAnimation.Types.easeInEaseOut,
+          LayoutAnimation.Properties.opacity),
+      );
+    }
+    useTribeHubStore.getState().setFilter(next);
+  }, []);
+
   const handleStripPress = useCallback(() => {
     if (vm.state === 'error') {
       void useTribeHubStore.getState().fetchToday();
@@ -177,7 +206,7 @@ export function TribeHubScreen() {
           fixed, only the list scrolls). */}
       <View style={styles.topSection}>
         {filter === 'all' && <CandleStrip vm={vm} onPress={handleStripPress} />}
-        <TribeFilterPills value={filter} onChange={setFilter} />
+        <TribeFilterPills value={filter} onChange={handleFilterChange} />
       </View>
 
       {filter === 'all' ? (

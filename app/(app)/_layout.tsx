@@ -24,6 +24,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi, globeApi } from '@/services/api';
 import { getSocket, connectSocket, onChatRemoved } from '@/services/socket';
 import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
+import { CandleHeaderChip } from '@/components/ui/tribe/CandleHeaderChip';
 import { COLORS, FONTS, SHADOWS, RADIUS, SPACING } from '@/constants';
 import Svg, { Path } from 'react-native-svg';
 
@@ -416,6 +417,10 @@ export default function AppLayout() {
             <GradientTabIcon icon="chai" color={color} focused={focused} />
           ),
           headerTitle: 'tribelife',
+          // Android defaults to a left-aligned title, which a left element would
+          // shift; centered keeps 'tribelife' fixed while the chip comes and goes.
+          headerTitleAlign: 'center',
+          headerLeft: () => <CandleHeaderChip />,
         }}
       />
       <Tabs.Screen
