@@ -4,8 +4,37 @@ import { getToken } from './api';
 import type { Message, MessageAttachment, OrderedMention } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { useChatsStore } from '@/store/chatsStore';
+import type { ChunkSendAck } from '@/utils/splitMessage';
 
 let socket: Socket | null = null;
+
+// Max wait for a send acknowledgement from the server (split sends, quick 261002-w9b).
+const SEND_ACK_TIMEOUT_MS = 15000;
+
+/**
+ * Emit with a Socket.IO acknowledgement, normalized to ChunkSendAck. Resolves
+ * immediately as 'offline' when disconnected (a split send never lets socket.io
+ * buffer its parts) and as 'timeout' when the server doesn't ack in time.
+ */
+async function emitWithSendAck(event: string, payload: Record<string, unknown>): Promise<ChunkSendAck> {
+  if (!socket || !socket.connected) return { ok: false, reason: 'offline' };
+  try {
+    const res: unknown = await socket.timeout(SEND_ACK_TIMEOUT_MS).emitWithAck(event, payload);
+    if (!res || typeof res !== 'object') return { ok: false, reason: 'error' };
+    const r = res as { ok?: unknown; id?: unknown; reason?: unknown; retryAfterMs?: unknown };
+    if (r.ok === true) return { ok: true, id: typeof r.id === 'number' ? r.id : undefined };
+    if (r.ok === false) {
+      return {
+        ok: false,
+        reason: typeof r.reason === 'string' ? r.reason : undefined,
+        retryAfterMs: typeof r.retryAfterMs === 'number' ? r.retryAfterMs : undefined,
+      };
+    }
+    return { ok: false, reason: 'error' };
+  } catch {
+    return { ok: false, reason: 'timeout' };
+  }
+}
 let connecting: Promise<Socket | null> | null = null;
 
 // ── Active-viewing re-assertion state (in-room push / read-receipt leak fix) ──
@@ -174,6 +203,22 @@ export function sendRoomMessage(
   });
 }
 
+// Acked variant for split sends: resolves once the server has persisted + broadcast
+// the message (or refused it), so the next part can be emitted in order.
+export function sendRoomMessageAcked(
+  content: string,
+  replyToId?: number,
+  mediaUrls?: string[],
+  attachments?: MessageAttachment[],
+): Promise<ChunkSendAck> {
+  return emitWithSendAck('room:message', {
+    content,
+    replyToId,
+    ...(mediaUrls?.length ? { mediaUrls } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+  });
+}
+
 // Voice in the user's timezone room. The room is derived server-side from the
 // socket session (no slug). Voice broadcasts back on the existing room:message
 // event with additive voice fields — no new listener needed.
@@ -208,6 +253,23 @@ export function sendDirectMessage(
   attachments?: MessageAttachment[],
 ): void {
   socket?.emit('dm:message', {
+    conversationId,
+    content,
+    replyToId,
+    ...(mediaUrls?.length ? { mediaUrls } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+  });
+}
+
+// Acked variant for split sends (see sendRoomMessageAcked).
+export function sendDirectMessageAcked(
+  conversationId: number,
+  content: string,
+  replyToId?: number,
+  mediaUrls?: string[],
+  attachments?: MessageAttachment[],
+): Promise<ChunkSendAck> {
+  return emitWithSendAck('dm:message', {
     conversationId,
     content,
     replyToId,
@@ -453,6 +515,23 @@ export function sendGlobeMessage(
   attachments?: MessageAttachment[],
 ): void {
   socket?.emit('globe:message', {
+    slug,
+    content,
+    replyToId,
+    ...(mediaUrls?.length ? { mediaUrls } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+  });
+}
+
+// Acked variant for split sends (see sendRoomMessageAcked).
+export function sendGlobeMessageAcked(
+  slug: string,
+  content: string,
+  replyToId?: number,
+  mediaUrls?: string[],
+  attachments?: MessageAttachment[],
+): Promise<ChunkSendAck> {
+  return emitWithSendAck('globe:message', {
     slug,
     content,
     replyToId,

@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useDraftMessage, conversationDraftKey } from '@/hooks/useDraftMessage';
+import { useChunkedSend } from '@/hooks/useChunkedSend';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -39,6 +40,7 @@ import {
   joinConversation,
   leaveConversation,
   sendDirectMessage,
+  sendDirectMessageAcked,
   sendDmVoice,
   onDirectMessage,
   startTyping,
@@ -184,6 +186,7 @@ export default function DMThreadScreen() {
   const { user } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput, clearDraft] = useDraftMessage(conversationDraftKey(conversationId));
+  const { sendingChunks, prepareChunks, startChunkedSend } = useChunkedSend(input, setInput);
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isLoading, setIsLoading] = useState(true);
   // Typing handles collection (mirrors chat/local.tsx typingUsers + globe's
@@ -1063,10 +1066,17 @@ export default function DMThreadScreen() {
   // insert runs ONLY when nothing is staged — an optimistic bubble carrying
   // text but no image would flash wrong (this file already skips the optimistic
   // insert for media/GIF/PDF/voice sends today).
+  // Quick 261002-w9b: text over the per-message cap is split into ordered parts
+  // (useChunkedSend). Parts go out one at a time, each after the previous part's
+  // server ack. The reply quote and any staged attachment ride on part 1 only; with
+  // something staged no part gets an optimistic bubble (D-08 extended to all parts).
+  // A failure removes that part's bubble and restores the unsent text.
   const handleSend = useCallback(() => {
     const content = input.trim();
     if (!content && !pendingAttachment) return;
-    if (isUploading) return;
+    if (isUploading || sendingChunks) return;
+    const chunks = prepareChunks(content);
+    if (!chunks) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
 
@@ -1082,30 +1092,69 @@ export default function DMThreadScreen() {
       }
     }
 
-    if (!pendingAttachment) {
-      // Optimistic insert — show message immediately
-      const optimisticMsg: Message = {
-        id: -(Date.now()),
+    if (chunks.length > 1) {
+      const staged = pendingAttachment;
+      const replySnapshot = replyTo;
+      const base = Date.now();
+      const started = startChunkedSend({
         content,
-        senderId: user?.id ?? 0,
-        senderHandle: user?.handle ?? '',
-        conversationId,
-        createdAt: new Date().toISOString(),
-        editedAt: null,
-        replyToId: replyToId ?? null,
-        replyTo: replyTo ?? null,
-      };
-      setMessages((prev) => [...prev, optimisticMsg]);
-    }
+        chunks,
+        emitChunk: (chunk, i) => {
+          if (!staged) {
+            const optimisticPart: Message = {
+              id: -(base + i),
+              content: chunk,
+              senderId: user?.id ?? 0,
+              senderHandle: user?.handle ?? '',
+              conversationId,
+              createdAt: new Date().toISOString(),
+              editedAt: null,
+              replyToId: i === 0 ? (replyToId ?? null) : null,
+              replyTo: i === 0 ? (replySnapshot ?? null) : null,
+            };
+            setMessages((prev) => [...prev, optimisticPart]);
+          }
+          return sendDirectMessageAcked(conversationId, chunk,
+            i === 0 ? replyToId : undefined,
+            i === 0 ? mediaUrls : undefined,
+            i === 0 ? attachments : undefined,
+          );
+        },
+        onChunkFailed: (index) => {
+          if (!staged) setMessages((prev) => prev.filter((m) => m.id !== -(base + index)));
+        },
+        restoreFirstChunkExtras: () => {
+          setReplyTo((cur) => cur ?? replySnapshot);
+          setPendingAttachment((cur) => cur ?? staged);
+        },
+      });
+      if (!started) return;
+    } else {
+      if (!pendingAttachment) {
+        // Optimistic insert — show message immediately
+        const optimisticMsg: Message = {
+          id: -(Date.now()),
+          content,
+          senderId: user?.id ?? 0,
+          senderHandle: user?.handle ?? '',
+          conversationId,
+          createdAt: new Date().toISOString(),
+          editedAt: null,
+          replyToId: replyToId ?? null,
+          replyTo: replyTo ?? null,
+        };
+        setMessages((prev) => [...prev, optimisticMsg]);
+      }
 
-    sendDirectMessage(conversationId, content, replyToId, mediaUrls, attachments);
+      sendDirectMessage(conversationId, content, replyToId, mediaUrls, attachments);
+    }
     clearDraft();
     setReplyTo(null);
     setPendingAttachment(null);
     stopTyping({ conversationId });
     // Inverted list: visual bottom = offset 0.
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-  }, [input, conversationId, replyTo, user, pendingAttachment, isUploading, clearDraft]);
+  }, [input, conversationId, replyTo, user, pendingAttachment, isUploading, sendingChunks, prepareChunks, startChunkedSend, clearDraft]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the dm:message echo. The same emitter serves 1:1 DMs and groups
@@ -1229,7 +1278,7 @@ export default function DMThreadScreen() {
   // Quick task 260830-kkb (D-09/STAGE-07): drives the Send Pressable's disabled
   // + opacity. True when there is trimmed text OR a staged attachment, and not
   // uploading — attachment-only sends must remain legal (D-04).
-  const canSend = (!!input.trim() || !!pendingAttachment) && !isUploading;
+  const canSend = (!!input.trim() || !!pendingAttachment) && !isUploading && !sendingChunks;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1444,7 +1493,7 @@ export default function DMThreadScreen() {
                       disabled={isUploading}
                     />
                     <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
-                    {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+                    {(isUploading || sendingChunks) && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                     <View style={[styles.inputWrap, { backgroundColor: colors.surfaceGlass, borderColor: colors.border }]}>
                       <MentionTextInput
                         style={[styles.chatInput, { color: colors.text, fontFamily: FONTS.regular }]}
@@ -1455,7 +1504,6 @@ export default function DMThreadScreen() {
                         selection={selection}
                         onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
                         multiline
-                        maxLength={2000}
                       />
                     </View>
                     {/* Send-slot swap (VOICE-01): mic on empty input, send
