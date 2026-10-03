@@ -299,6 +299,11 @@ export const accessApi = {
     }),
 };
 
+// ── Link-click analytics (quick 261003-nfu) ────────────────────────────────
+export type LinkClickSource = 'text' | 'preview' | 'youtube';
+export type LinkClickPlatform = 'ios' | 'android';
+export interface LinkClickStat { url: string; clicks: number; uniqueClickers: number; }
+
 // ── Chat ───────────────────────────────────────────────────────────────────
 export const chat = {
   getConversations: () =>
@@ -384,6 +389,20 @@ export const chat = {
     request<{ ok: true }>(`/api/chat/messages/${messageId}`, {
       method: 'DELETE',
     }),
+
+  // Records one in-app tap on a link in a group message. Fire-and-forget:
+  // callers must `.catch(() => {})`.
+  trackLinkClick: (messageId: number, body: { url: string; source: LinkClickSource; platform: LinkClickPlatform }) =>
+    request<{ ok: true }>(`/api/chat/messages/${messageId}/link-clicks`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  // Per-link click counts for the sender's own group message. Premium sender
+  // only; free callers get capabilityViolation, which request() turns into a
+  // capabilities refresh plus one retry.
+  getLinkAnalytics: (messageId: number) =>
+    request<{ links: LinkClickStat[] }>(`/api/chat/messages/${messageId}/link-analytics`),
 
   // Phase 14 SRCH-01/02: full-text search across all chats the caller has access to.
   // Abortable via AbortController — signal is forwarded to fetch via RequestInit spread.

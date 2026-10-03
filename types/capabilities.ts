@@ -31,6 +31,8 @@ export interface CapabilityFeatures {
   canSendDM: boolean;
   canPostBeacon: boolean;
   canTranslateMessages: boolean;
+  // quick 261003-nfu — premium senders see per-link click counts on their own group messages; clicks are recorded for every sender (D1).
+  canViewLinkAnalytics: boolean;
 }
 
 export interface Capabilities {
