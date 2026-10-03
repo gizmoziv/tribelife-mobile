@@ -1072,16 +1072,12 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     return `${typingArray.length} people typing...`;
   }, [typingArray]);
 
-  // ── Participant count from room ─────────────────────────────────────────
-  const participantCount = room?.participantCount ?? 0;
-
   if (isLoadingMessages && messages.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <CustomHeader
           title={effectiveDisplayName}
-          participantCount={0}
           onBack={() => router.back()}
           colors={colors}
           insetsTop={insets.top}
@@ -1104,7 +1100,6 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       <Stack.Screen options={{ headerShown: false }} />
       <CustomHeader
         title={effectiveDisplayName}
-        participantCount={participantCount}
         onBack={() => router.back()}
         colors={colors}
         insetsTop={insets.top}
@@ -1416,14 +1411,13 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
 // ── Custom header ────────────────────────────────────────────────────────────
 interface CustomHeaderProps {
   title: string;
-  participantCount: number;
   onBack: () => void;
   colors: { background: string; surfaceGlass: string; text: string; textMuted: string };
   insetsTop: number;
   backLabel?: string;
 }
 
-function CustomHeader({ title, participantCount, onBack, colors, insetsTop, backLabel = 'Chevra' }: CustomHeaderProps) {
+function CustomHeader({ title, onBack, colors, insetsTop, backLabel = 'Chevra' }: CustomHeaderProps) {
   return (
     <View
       style={[
@@ -1450,10 +1444,6 @@ function CustomHeader({ title, participantCount, onBack, colors, insetsTop, back
       </Pressable>
       <View style={styles.headerTitleWrap} pointerEvents="none">
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
-      </View>
-      <View style={[styles.headerParticipants, { backgroundColor: colors.surfaceGlass }, SHADOWS.sm]}>
-        <View style={[styles.participantDot, { backgroundColor: COLORS.secondary }]} />
-        <Text style={[styles.participantText, { color: colors.textMuted }]}>{participantCount}</Text>
       </View>
     </View>
   );
@@ -1497,23 +1487,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontFamily: FONTS.semiBold,
-  },
-  headerParticipants: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: RADIUS.pill,
-  },
-  participantDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  participantText: {
-    fontSize: 13,
-    fontFamily: FONTS.medium,
   },
   // Welcome banner
   welcomeBanner: {

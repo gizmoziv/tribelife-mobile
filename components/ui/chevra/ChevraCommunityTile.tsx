@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import {
   FONTS,
   RADIUS,
@@ -60,8 +60,8 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
   //    accent / paywalled are all derived here.
   let avatar: React.ReactNode;
   let displayName: string;
-  let metaCount: number;
-  let metaLabel: string;
+  let metaCount: number | null = null;
+  let metaLabel = '';
   let eyebrow: string;
   let accent: string;
   let paywalled = false;
@@ -81,8 +81,7 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
     // abbreviation for any slug that isn't (e.g. town-square).
     avatar = <RegionGlobe slug={item.slug} size={56} />;
     displayName = item.displayName;
-    metaCount = item.participantCount;
-    metaLabel = 'online';
+    // The live online count is intentionally not shown, so no meta row.
     eyebrow = 'REGION';
     accent = GLOBE_ROOM_VISUALS[item.slug]?.accent ?? COLORS.primary;
   } else {
@@ -146,16 +145,13 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
             {displayName}
           </Text>
 
-          <View style={styles.metaRow}>
-            {item.kind === 'globe_room' && (
-              <Svg width={8} height={8} viewBox="0 0 8 8" style={{ marginRight: 6 }}>
-                <Circle cx={4} cy={4} r={4} fill={COLORS.secondary} />
-              </Svg>
-            )}
-            <Text style={[styles.metaText, { color: mutedColor }]} numberOfLines={1}>
-              {metaCount} {metaLabel}
-            </Text>
-          </View>
+          {metaCount !== null && (
+            <View style={styles.metaRow}>
+              <Text style={[styles.metaText, { color: mutedColor }]} numberOfLines={1}>
+                {metaCount} {metaLabel}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={[styles.accentStripe, { backgroundColor: accent }]} pointerEvents="none" />
