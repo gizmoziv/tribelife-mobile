@@ -120,7 +120,11 @@ export function TribeHubScreen() {
           body renders below — mirrors the Chats tab (search + pills fixed,
           only the list scrolls). */}
       <View style={styles.topSection}>
-        <TribeTodaySection />
+        {/* Hidden (not unmounted) outside 'all' so the filtered lists get the
+            full height without refetching /api/tribe/today when All returns. */}
+        <View style={filter !== 'all' ? styles.todayHidden : undefined}>
+          <TribeTodaySection />
+        </View>
         <TribeFilterPills value={filter} onChange={setFilter} />
       </View>
 
@@ -158,6 +162,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   topSection: {
     paddingTop: SPACING.md,
+  },
+  todayHidden: {
+    display: 'none',
   },
   filteredBody: {
     flex: 1,
