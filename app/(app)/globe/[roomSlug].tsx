@@ -31,6 +31,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { TIMEZONE_ZONES } from '@/utils/timezoneZones';
+import { GLOBE_CHUNK_GAP_MS } from '@/utils/splitMessage';
+import { useChunkedSend } from '@/hooks/useChunkedSend';
 import { chat, globeApi, notificationsApi, reactionsApi, pins, type PinSystemMessage } from '@/services/api';
 import { PinnedBar } from '@/components/ui/chat/PinnedBar';
 import { usePinnedMessage } from '@/hooks/usePinnedMessage';
@@ -43,6 +45,7 @@ import {
   joinGlobeRoom,
   leaveGlobeRoom,
   sendGlobeMessage,
+  sendGlobeMessageAcked,
   sendGlobeVoice,
   sendGlobeTyping,
   onGlobeMessage,
@@ -164,6 +167,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   } = useGlobeStore();
 
   const [input, setInput, clearDraft] = useDraftMessage(roomDraftKey(roomSlug));
+  const { sendingChunks, prepareChunks, startChunkedSend } = useChunkedSend(input, setInput);
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -904,9 +908,15 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   // carried into canSend below too). This file has no optimistic insert for
   // any message kind (relies on the server echo), so D-08 needs no special
   // branch here.
+  // Quick 261002-w9b: text over the per-message cap is split into ordered parts
+  // (useChunkedSend), each sent after the previous part's server ack and paced
+  // GLOBE_CHUNK_GAP_MS apart to stay under the room's 1 msg/sec limiter. The reply
+  // quote and any staged attachment go with part 1 only.
   const handleSend = useCallback(() => {
     const content = input.trim();
-    if ((!content && !pendingAttachment) || !roomSlug || isAgeGated || isRateLimited || isUploading) return;
+    if ((!content && !pendingAttachment) || !roomSlug || isAgeGated || isRateLimited || isUploading || sendingChunks) return;
+    const chunks = prepareChunks(content);
+    if (!chunks) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
 
@@ -922,7 +932,28 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       }
     }
 
-    sendGlobeMessage(roomSlug, content, replyToId, mediaUrls, attachments);
+    if (chunks.length > 1) {
+      const slug = roomSlug;
+      const staged = pendingAttachment;
+      const replySnapshot = replyTo;
+      const started = startChunkedSend({
+        content,
+        chunks,
+        minGapMs: GLOBE_CHUNK_GAP_MS,
+        emitChunk: (chunk, i) => sendGlobeMessageAcked(slug, chunk,
+          i === 0 ? replyToId : undefined,
+          i === 0 ? mediaUrls : undefined,
+          i === 0 ? attachments : undefined,
+        ),
+        restoreFirstChunkExtras: () => {
+          setReplyTo((cur) => cur ?? replySnapshot);
+          setPendingAttachment((cur) => cur ?? staged);
+        },
+      });
+      if (!started) return;
+    } else {
+      sendGlobeMessage(roomSlug, content, replyToId, mediaUrls, attachments);
+    }
     clearDraft();
     setReplyTo(null);
     setPendingAttachment(null);
@@ -939,7 +970,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, replyTo, pendingAttachment, clearDraft]);
+  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, sendingChunks, prepareChunks, startChunkedSend, replyTo, pendingAttachment, clearDraft]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the globe:message echo. Passes the route/curated slug (NOT the
@@ -1057,7 +1088,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   // Quick task 260830-kkb (D-09/STAGE-07): drives the Send Pressable's disabled
   // + opacity. Carries this screen's full guard set (room slug present, not
   // age-gated, not rate-limited, not uploading) alongside trimmed-text-or-staged.
-  const canSend = (!!input.trim() || !!pendingAttachment) && !!roomSlug && !isAgeGated && !isRateLimited && !isUploading;
+  const canSend = (!!input.trim() || !!pendingAttachment) && !!roomSlug && !isAgeGated && !isRateLimited && !isUploading && !sendingChunks;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1253,7 +1284,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                     {!isAgeGated && (
                       <GifButton onGifSelected={handleGifSelected} disabled={isUploading} />
                     )}
-                    {isUploading && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
+                    {(isUploading || sendingChunks) && <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 4 }} />}
                     <View
                       style={[
                         styles.inputWrap,
@@ -1278,7 +1309,6 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                         onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
                         editable={!isAgeGated}
                         multiline
-                        maxLength={2000}
                         onSubmitEditing={handleSend}
                       />
                     </View>

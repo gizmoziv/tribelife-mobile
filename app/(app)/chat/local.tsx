@@ -20,6 +20,7 @@ import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
 import { useDraftMessage, roomDraftKey } from '@/hooks/useDraftMessage';
+import { useChunkedSend } from '@/hooks/useChunkedSend';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useFocusEffect, useNavigation, useLocalSearchParams } from 'expo-router';
@@ -36,6 +37,7 @@ import { LanguagePicker } from '@/components/ui/chat/LanguagePicker';
 import {
   connectSocket,
   sendRoomMessage,
+  sendRoomMessageAcked,
   sendRoomVoice,
   onRoomMessage,
   startTyping,
@@ -212,6 +214,7 @@ export default function LocalChatScreen() {
   const zoneSlug = user?.timezoneZone ?? getZoneForTimezone(user?.timezone ?? 'UTC');
   const roomId = `timezone:${zoneSlug}`;
   const [input, setInput, clearDraft] = useDraftMessage(user ? roomDraftKey(roomId) : null);
+  const { sendingChunks, prepareChunks, startChunkedSend } = useChunkedSend(input, setInput);
   const zoneName = timezoneToZoneName(user?.timezone ?? 'UTC');
 
   useEffect(() => {
@@ -770,9 +773,14 @@ export default function LocalChatScreen() {
   // media (STAGE-07). Deliberately minimal (per this file's existing
   // convention) — no scroll timeout, no explicit typing-stop (typing is
   // handled by the input-change timeout in handleInputChange).
+  // Quick 261002-w9b: text over the per-message cap is split into ordered parts
+  // (useChunkedSend), each sent after the previous part's server ack. The reply
+  // quote and any staged attachment go with part 1 only; there is no optimistic insert.
   const handleSend = useCallback(() => {
     const content = input.trim();
-    if ((!content && !pendingAttachment) || isUploading) return;
+    if ((!content && !pendingAttachment) || isUploading || sendingChunks) return;
+    const chunks = prepareChunks(content);
+    if (!chunks) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const replyToId = replyTo?.id ?? undefined;
 
@@ -788,11 +796,30 @@ export default function LocalChatScreen() {
       }
     }
 
-    sendRoomMessage(content, replyToId, mediaUrls, attachments);
+    if (chunks.length > 1) {
+      const staged = pendingAttachment;
+      const replySnapshot = replyTo;
+      const started = startChunkedSend({
+        content,
+        chunks,
+        emitChunk: (chunk, i) => sendRoomMessageAcked(chunk,
+          i === 0 ? replyToId : undefined,
+          i === 0 ? mediaUrls : undefined,
+          i === 0 ? attachments : undefined,
+        ),
+        restoreFirstChunkExtras: () => {
+          setReplyTo((cur) => cur ?? replySnapshot);
+          setPendingAttachment((cur) => cur ?? staged);
+        },
+      });
+      if (!started) return;
+    } else {
+      sendRoomMessage(content, replyToId, mediaUrls, attachments);
+    }
     clearDraft();
     setReplyTo(null);
     setPendingAttachment(null);
-  }, [input, replyTo, pendingAttachment, isUploading, clearDraft]);
+  }, [input, replyTo, pendingAttachment, isUploading, sendingChunks, prepareChunks, startChunkedSend, clearDraft]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // appears when the server echoes on room:message (handled by onRoomMessage).
@@ -1007,7 +1034,7 @@ export default function LocalChatScreen() {
             value={input}
             onChangeText={handleInputChange}
             onSend={handleSend}
-            isUploading={isUploading}
+            isUploading={isUploading || sendingChunks}
             hasPendingAttachment={!!pendingAttachment}
             isRecording={isRecording}
             onStartRecording={() => setIsRecording(true)}
@@ -1212,7 +1239,6 @@ function ChatInput({
                 selection={selection}
                 onSelectionChange={onSelectionChange ? (e) => onSelectionChange(e.nativeEvent.selection) : undefined}
                 multiline
-                maxLength={2000}
                 onSubmitEditing={onSend}
               />
             </View>

@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { FONTS, COLORS } from '@/constants';
+import { MESSAGE_MAX_LENGTH } from '@/utils/splitMessage';
 
 interface EditComposerProps {
   initialContent: string;
@@ -25,9 +26,15 @@ export function EditComposer({
   const { colors } = useTheme();
   const [text, setText] = useState(initialContent);
 
+  // Edits are never split: past the per-message cap Save is disabled and the
+  // counter explains why (never a silent cut).
+  const length = text.trim().length;
+  const overLimit = length > MESSAGE_MAX_LENGTH;
+
   const canSave =
     !saving &&
-    text.trim().length > 0 &&
+    length > 0 &&
+    !overLimit &&
     text.trim() !== initialContent.trim();
 
   return (
@@ -52,10 +59,21 @@ export function EditComposer({
           placeholder="Edit message…"
           placeholderTextColor={colors.textMuted}
           multiline
-          maxLength={2000}
           editable={!saving}
           autoFocus
         />
+        {length > MESSAGE_MAX_LENGTH - 200 && (
+          <Text
+            style={[
+              styles.counter,
+              { color: overLimit ? colors.error : colors.textMuted },
+            ]}
+          >
+            {overLimit
+              ? `${length}/${MESSAGE_MAX_LENGTH} - too long to save. Edits can't be split; remove ${length - MESSAGE_MAX_LENGTH} characters.`
+              : `${length}/${MESSAGE_MAX_LENGTH}`}
+          </Text>
+        )}
         <View style={styles.actions}>
           <TouchableOpacity
             onPress={onCancel}
@@ -125,6 +143,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     maxHeight: 120,
     lineHeight: 20,
+  },
+  counter: {
+    fontSize: 12,
+    marginTop: 4,
+    fontFamily: FONTS.regular,
   },
   actions: {
     flexDirection: 'row',
