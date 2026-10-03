@@ -21,6 +21,7 @@ import { VoicePlayerBubble } from '@/components/ui/chat/VoicePlayerBubble';
 import { DocumentCard } from '@/components/ui/chat/DocumentCard';
 import { extractYouTubeIds } from '@/utils/youtube';
 import { VOICE_FALLBACK_STRING, formatDuration } from '@/constants/voice';
+import { isDocFallbackContent } from '@/constants/document';
 import { usersApi, ApiError } from '@/services/api';
 import { zipMentions, type MentionResolution } from '@/utils/mentionZip';
 import type { Message, GlobeMessage, ReplyTo } from '@/types';
@@ -228,12 +229,14 @@ export function MessageBubble({
   const mediaUrls = message.mediaUrls;
   const hasMedia = mediaUrls && mediaUrls.length > 0;
   // Document attachment (Phase 31, D-03/D-06/DOC-11/DOC-14): a document
-  // message is standalone (Phase 30 sends it with only the fallback content,
-  // never mediaUrls) so hasAttachment and hasMedia are mutually exclusive in
-  // practice — checked FIRST below to be defensive and match the backend's
-  // own precedence.
+  // message is standalone (never mediaUrls) so hasAttachment and hasMedia are
+  // mutually exclusive in practice — checked FIRST below to be defensive and
+  // match the backend's own precedence. A document message may carry a user
+  // caption (quick 261002-vk5 D-1), rendered under the card; when there is no
+  // caption the backend stores a fallback line, which is detected and suppressed.
   const attachment = message.attachments?.[0] ?? null;
   const hasAttachment = !!attachment;
+  const hasDocCaption = hasAttachment && !!message.content && !isDocFallbackContent(message.content);
   const isEmpty = !message.content && !hasMedia && !message.voiceUrl && !hasAttachment;
   const BUBBLE_WIDTH = 260;
 
@@ -618,7 +621,14 @@ export function MessageBubble({
                 </Pressable>
               )}
               {attachment ? (
-                <DocumentCard attachment={attachment} isMe />
+                <>
+                  <View style={hasDocCaption ? styles.mediaWithText : undefined}>
+                    <DocumentCard attachment={attachment} isMe />
+                  </View>
+                  {hasDocCaption && renderContent('#FFF', '#FFE9A8', '#E0F0FF')}
+                  {hasDocCaption && renderYouTubeCards()}
+                  {hasDocCaption && renderLinkPreviewCard()}
+                </>
               ) : isVoice ? (
                 <VoicePlayerBubble
                   voiceUrl={message.voiceUrl as string}
@@ -702,7 +712,14 @@ export function MessageBubble({
                 </Pressable>
               )}
               {attachment ? (
-                <DocumentCard attachment={attachment} isMe={false} />
+                <>
+                  <View style={hasDocCaption ? styles.mediaWithText : undefined}>
+                    <DocumentCard attachment={attachment} isMe={false} />
+                  </View>
+                  {hasDocCaption && renderContent(colors.text, COLORS.primary, COLORS.primary)}
+                  {hasDocCaption && renderYouTubeCards()}
+                  {hasDocCaption && renderLinkPreviewCard()}
+                </>
               ) : isVoice ? (
                 <VoicePlayerBubble
                   voiceUrl={message.voiceUrl as string}

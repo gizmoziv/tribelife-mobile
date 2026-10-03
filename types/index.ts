@@ -122,8 +122,9 @@ export interface Message {
   voiceTranscript?: string | null;
   kind?: 'user' | 'system';
   // Document attachment fields (additive, nullable — Phase 30/31). Present when
-  // the message carries a PDF; server sets a readable fallback `content` line
-  // for old clients when this is set (Phase 30 D-06/D-07).
+  // the message carries a PDF. `content` is the user's caption when one was typed;
+  // otherwise it is the server fallback line (Phase 30 D-06/D-07), which
+  // `isDocFallbackContent` (constants/document.ts) detects.
   attachments?: MessageAttachment[] | null;
 }
 
