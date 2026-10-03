@@ -6,11 +6,18 @@
 //   - foreground-context set/clear effect ({ type: 'tribe' })
 //   - news_breaking in-app banner state (OS banner suppressed when on tribe tab)
 //
-// Composes a vertical ScrollView with sections in order:
-//   1. TribeTodaySection (18-03 wires real data)
-//   2. TribeNewsSection  (18-04 builds horizontal carousel)
+// Layout: a fixed header (candle strip on the All pill only, then the filter
+// pills) and a body below it. On All the body is a vertical ScrollView of
+// carousels (news, jobs, marketplace, survey); on a specific pill it is a
+// single lazy-loaded list of that type. On the other pills the candle times
+// live in the Tribe header chip (CandleHeaderChip) instead of the strip.
 //
-// The outer ScrollView is vertical; 18-04's inner FlatList is horizontal
+// Candle data, the filter and the details sheet state live in
+// store/tribeHubStore.ts so the strip, the header chip and the sheet (mounted
+// once, here) all read the same source. All candle strings come from
+// utils/candleViewModel.ts.
+//
+// The outer ScrollView is vertical; the inner carousel FlatLists are horizontal
 // (no nested same-axis VirtualizedList warning).
 //
 // Phase 18-04: banner tap now triggers a real carousel refresh via
@@ -24,14 +31,19 @@ import {
   SafeAreaView,
   TouchableOpacity,
   StyleSheet,
+  AppState,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useTheme } from '@/contexts/ThemeContext';
 import { onNewsAvailable } from '@/services/socket';
 import { useForegroundContextStore } from '@/store/foregroundContextStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { COLORS, FONTS, RADIUS, SPACING } from '@/constants';
-import { TribeTodaySection } from './TribeTodaySection';
+import { useTribeHubStore } from '@/store/tribeHubStore';
+import { buildCandleViewModel } from '@/utils/candleViewModel';
+import { CandleStrip } from './CandleStrip';
+import { CandleSheet } from './CandleSheet';
 import { TribeFilterPills, type TribeFilterKey } from './TribeFilterPills';
 import { TribeNewsSection } from './TribeNewsSection';
 import { TribeJobsSection } from './TribeJobsSection';
@@ -48,7 +60,22 @@ export function TribeHubScreen() {
   // Single-select filter pill, default 'all'. 'all' renders today's page
   // unchanged (3 horizontal carousels + survey); a specific type switches to
   // a single, vertically-scrolling, lazy-loaded feed of just that type.
-  const [filter, setFilter] = useState<TribeFilterKey>('all');
+  // Candle data + sheet state live in the store (shared with the header chip).
+  const filter = useTribeHubStore((s) => s.filter);
+  const setFilter = useTribeHubStore((s) => s.setFilter);
+  const today = useTribeHubStore((s) => s.today);
+  const todayLoading = useTribeHubStore((s) => s.todayLoading);
+  const todayError = useTribeHubStore((s) => s.todayError);
+  const todayFetchedAt = useTribeHubStore((s) => s.todayFetchedAt);
+  const openSheet = useTribeHubStore((s) => s.openSheet);
+
+  const vm = buildCandleViewModel({
+    today,
+    loading: todayLoading,
+    error: todayError,
+    fetchedAt: todayFetchedAt,
+    now: Date.now(),
+  });
 
   // Owned here (not in TribeJobsList) because that child unmounts whenever
   // the filter pill moves off Jobs. `false` (all jobs) is the intended
@@ -94,6 +121,35 @@ export function TribeHubScreen() {
     return off;
   }, []);
 
+  // Candle data: first focus does the initial fetch (fetchedAt starts null);
+  // later focus / foreground refetches only when the data is over 10 min old.
+  useFocusEffect(
+    useCallback(() => {
+      useTribeHubStore.getState().refreshTodayIfStale();
+    }, []),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') useTribeHubStore.getState().refreshTodayIfStale();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Logout / unmount: drop candle data (a location label) and any in-flight fetch.
+  useEffect(() => {
+    return () => useTribeHubStore.getState().reset();
+  }, []);
+
+  const handleStripPress = useCallback(() => {
+    if (vm.state === 'error') {
+      void useTribeHubStore.getState().fetchToday();
+      return;
+    }
+    if (vm.state === 'loading') return;
+    openSheet(vm.state === 'no-location' ? 'location' : 'details');
+  }, [vm.state, openSheet]);
+
   const handleBannerTap = useCallback(() => {
     setHasNewArticles(false);
     // Trigger a real carousel refresh (18-04 wired via newsSectionRefreshRef).
@@ -116,15 +172,11 @@ export function TribeHubScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Candle Lighting + filter pills are a fixed header, above whichever
-          body renders below — mirrors the Chats tab (search + pills fixed,
-          only the list scrolls). */}
+      {/* Candle strip (All only) + filter pills are a fixed header, above
+          whichever body renders below — mirrors the Chats tab (search + pills
+          fixed, only the list scrolls). */}
       <View style={styles.topSection}>
-        {/* Hidden (not unmounted) outside 'all' so the filtered lists get the
-            full height without refetching /api/tribe/today when All returns. */}
-        <View style={filter !== 'all' ? styles.todayHidden : undefined}>
-          <TribeTodaySection />
-        </View>
+        {filter === 'all' && <CandleStrip vm={vm} onPress={handleStripPress} />}
         <TribeFilterPills value={filter} onChange={setFilter} />
       </View>
 
@@ -152,6 +204,8 @@ export function TribeHubScreen() {
           {filter === 'marketplace' && <TribeEsekList />}
         </View>
       )}
+
+      <CandleSheet vm={vm} />
     </SafeAreaView>
   );
 }
@@ -162,9 +216,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   topSection: {
     paddingTop: SPACING.md,
-  },
-  todayHidden: {
-    display: 'none',
   },
   filteredBody: {
     flex: 1,
