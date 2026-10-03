@@ -313,9 +313,7 @@ export function MessageBubble({
   // so opening the link is never delayed; failures are silent.
   const reportLinkClick = useCallback((url: string, source: LinkClickSource) => {
     if (!shouldTrackLinkClick({ enabled: trackLinkClicks === true, isMe, messageId: message.id, kind: message.kind })) return;
-    void chatApi
-      .trackLinkClick(message.id, { url, source, platform: Platform.OS === 'android' ? 'android' : 'ios' })
-      .catch(() => {});
+    void chatApi.trackLinkClick(message.id, { url, source, platform: Platform.OS === 'android' ? 'android' : 'ios' }).catch(() => {});
   }, [trackLinkClicks, isMe, message.id, message.kind]);
 
   const handleUrlPress = useCallback((url: string, source: 'text' | 'preview' = 'text') => {
