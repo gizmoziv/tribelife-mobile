@@ -317,7 +317,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       for (const m of msgs) byId.set(m.id, m);
       const merged = Array.from(byId.values()).sort((a, b) => a.id - b.id);
       setMessages(merged);
-      if (!hasMore) prependMessages([], hasMore);
+      // The around-window response carries no hasMore; only an explicit false ends pagination.
+      if (hasMore === false) prependMessages([], false);
     } catch {
       // silent — bar stays visible, user can retry
     } finally {
@@ -454,8 +455,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       .messages(roomSlug, undefined, 50, aroundMessageId)
       .then(({ messages: msgs, hasMore }) => {
         setMessages(msgs);
-        if (!hasMore) {
-          prependMessages([], hasMore);
+        // The around-window response carries no hasMore; only an explicit false ends pagination.
+        if (hasMore === false) {
+          prependMessages([], false);
         }
         if (aroundMessageId != null) {
           // Scroll to target message and flash it. FlatList needs a layout
@@ -842,7 +844,11 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     globeApi
       .messages(roomSlug!, oldestMessage.createdAt)
       .then(({ messages: older, hasMore }) => {
-        prependMessages(older.reverse(), hasMore);
+        // The API returns the previous page ASCENDING (oldest first) and the
+        // store is chronological, so prepend it as received. Do NOT reverse:
+        // that makes messages[0] the newest row of the page, so the next
+        // cursor re-fetches rows already loaded (duplicate keys + scroll jump).
+        prependMessages(older, hasMore);
       })
       .catch(() => {})
       .finally(() => setLoadingMessages(false));
