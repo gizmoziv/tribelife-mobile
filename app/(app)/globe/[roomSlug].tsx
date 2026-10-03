@@ -53,6 +53,7 @@ import {
   onGlobeTyping,
   onGlobeAgeGated,
   onGlobeRateLimited,
+  onMessageRejected,
   onMessageEdited,
   onMessageDeleted,
   onReactionUpdate,
@@ -544,6 +545,13 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       setTimeout(() => setIsRateLimited(false), retryAfterMs);
     });
 
+    const offRejected = onMessageRejected(({ reason }) => {
+      Alert.alert(
+        'Message Not Sent',
+        reason ?? 'Your message was rejected. It may violate community guidelines.',
+      );
+    });
+
     const offMediaRemoved = onMediaRemoved((data) => {
       const current = useGlobeStore.getState().messages;
       setMessages(current.map((msg) => {
@@ -593,6 +601,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       offTyping();
       offAgeGated();
       offRateLimited();
+      offRejected();
       offMediaRemoved();
       offMediaRejected();
       offEdited();
