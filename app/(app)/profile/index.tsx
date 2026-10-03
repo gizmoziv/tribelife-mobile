@@ -50,6 +50,7 @@ import {
   RADIUS,
   SHADOWS,
   PREMIUM_PRICE,
+  PREMIUM_BEACON_LIMIT,
   REGION_TILE_GRADIENT_DARK,
   REGION_TILE_GRADIENT_LIGHT,
 } from '@/constants';
@@ -97,7 +98,6 @@ export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, logout, updateUser, refreshSession } = useAuthStore();
   const isPremium = useIsPremium();
-  const limits = useAuthStore((s) => s.capabilities?.limits);
   const orgs = useAuthStore((s) => s.capabilities?.orgs ?? []);
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
@@ -1071,7 +1071,7 @@ export default function ProfileScreen() {
                   <Text
                     style={[styles.premiumDesc, { color: colors.textMuted }]}
                   >
-                    {`\u2022 Run up to ${limits?.maxBeacons ?? 'more'} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
+                    {`\u2022 Run up to ${PREMIUM_BEACON_LIMIT} beacons simultaneously\n\u2022 Priority matching in your area\n\u2022 Create private group chats\n\u2022 Support the TribeLife community`}
                   </Text>
                   <Text
                     style={[
