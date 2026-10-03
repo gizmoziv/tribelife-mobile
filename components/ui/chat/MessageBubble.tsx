@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
+import { View, Text, Pressable, TouchableOpacity, StyleSheet, Linking, Alert, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -22,7 +22,10 @@ import { DocumentCard } from '@/components/ui/chat/DocumentCard';
 import { extractYouTubeIds } from '@/utils/youtube';
 import { VOICE_FALLBACK_STRING, formatDuration } from '@/constants/voice';
 import { isDocFallbackContent } from '@/constants/document';
-import { usersApi, ApiError } from '@/services/api';
+import { usersApi, ApiError, chat as chatApi } from '@/services/api';
+import type { LinkClickSource } from '@/services/api';
+import { findLinkSpans, firstNonYouTubeUrl, youTubeCardUrl } from '@/utils/messageLinks';
+import { shouldTrackLinkClick } from '@/utils/linkClicksViewModel';
 import { zipMentions, type MentionResolution } from '@/utils/mentionZip';
 import type { Message, GlobeMessage, ReplyTo } from '@/types';
 
@@ -34,44 +37,7 @@ type ContentPart =
   | { kind: 'mention'; text: string; handle: string }
   | { kind: 'url'; text: string; url: string };
 
-// Matches: full URLs (http/https), www-prefixed URLs, and bare domains with a
-// recognised TLD (e.g. tribelife.app, example.com/path). The TLD list is
-// curated to keep false positives ("Dr.Smith", "version2.0") low while
-// covering the common cases users actually paste.
-const URL_REGEX = /\b(?:https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:[a-zA-Z0-9][a-zA-Z0-9-]*\.)+(?:com|net|org|edu|gov|mil|io|app|co|ai|dev|me|tv|info|biz|us|uk|de|fr|jp|au|nz|il|eu|ca|in|br|cn|ru|tech|online|store|site|xyz|ly|so|fm|to|cc|gg|club|news|blog)(?:\/[^\s<>]*)?)/gi;
 const MENTION_REGEX = /@([a-zA-Z0-9_]+)/g;
-
-// Hosts whose links unfurl as a YouTube card (handled by renderYouTubeCards),
-// so they are excluded from the generic link-preview card.
-function isYouTubeHost(host: string): boolean {
-  const h = host.toLowerCase().replace(/^www\./, '');
-  return h === 'youtube.com' || h === 'm.youtube.com' || h === 'youtu.be';
-}
-
-// The first http(s) URL in `content` that is NOT a YouTube link. Mirrors
-// parseContent's linkify (same URL_REGEX, same trailing-punctuation trim, same
-// email-host skip, same scheme-less → https:// normalization). Returns the
-// normalized https target, or null when there is no non-YouTube link.
-function firstNonYouTubeUrl(content: string): string | null {
-  if (!content) return null;
-  URL_REGEX.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = URL_REGEX.exec(content)) !== null) {
-    // Skip bare domains that are actually an email's host part.
-    if (match.index > 0 && content[match.index - 1] === '@') continue;
-    let raw = match[0];
-    const trailingMatch = raw.match(/[.,;:!?)\]}'"]+$/);
-    if (trailingMatch) raw = raw.slice(0, -trailingMatch[0].length);
-    const target = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-    try {
-      if (isYouTubeHost(new URL(target).hostname)) continue;
-    } catch {
-      continue;
-    }
-    return target;
-  }
-  return null;
-}
 
 function parseMentions(text: string): ContentPart[] {
   const parts: ContentPart[] = [];
@@ -91,28 +57,18 @@ function parseMentions(text: string): ContentPart[] {
   return parts;
 }
 
+// Link detection (regex, email-host skip, trailing-punctuation trim, https://
+// normalization) lives in the shared utils/messageLinks module, so the server
+// counts link clicks against exactly what is rendered here.
 function parseContent(content: string): ContentPart[] {
   const parts: ContentPart[] = [];
   let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  URL_REGEX.lastIndex = 0;
-  while ((match = URL_REGEX.exec(content)) !== null) {
-    // Skip bare domains that are actually the host part of an email address.
-    if (match.index > 0 && content[match.index - 1] === '@') {
-      continue;
+  for (const span of findLinkSpans(content)) {
+    if (span.index > lastIndex) {
+      parts.push(...parseMentions(content.slice(lastIndex, span.index)));
     }
-    if (match.index > lastIndex) {
-      parts.push(...parseMentions(content.slice(lastIndex, match.index)));
-    }
-    // Trim trailing punctuation that's almost never part of the URL.
-    let url = match[0];
-    const trailingMatch = url.match(/[.,;:!?)\]}'"]+$/);
-    if (trailingMatch) {
-      url = url.slice(0, -trailingMatch[0].length);
-    }
-    const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-    parts.push({ kind: 'url', text: url, url: target });
-    lastIndex = match.index + url.length;
+    parts.push({ kind: 'url', text: span.text, url: span.url });
+    lastIndex = span.index + span.text.length;
   }
   if (lastIndex < content.length) {
     parts.push(...parseMentions(content.slice(lastIndex)));
@@ -168,6 +124,11 @@ interface MessageBubbleProps {
   // Participants minus me (1 for DM, N for group) — the watermarks the tick
   // derivation must clear. Passed by the chat screen alongside the gate.
   receiptOtherUserIds?: number[];
+  // ── quick 261003-nfu: link-click analytics gate ──────────────────────────
+  // Only the DM/group screen passes this, and only true for groups the viewer
+  // is a member of. Room screens (chat/local.tsx, globe/[roomSlug].tsx) NEVER
+  // pass it, so rooms and DMs never track taps. Defaults to off.
+  trackLinkClicks?: boolean;
 }
 
 // ── Phase 29: tick derivation (D-02, Pitfall 3/5) ───────────────────────────
@@ -215,6 +176,7 @@ export function MessageBubble({
   onToggleTranslation,
   receiptConversationId,
   receiptOtherUserIds,
+  trackLinkClicks,
 }: MessageBubbleProps) {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -347,7 +309,17 @@ export function MessageBubble({
     }
   }, [router]);
 
-  const handleUrlPress = useCallback((url: string) => {
+  // Fire-and-forget tap report for link analytics (DF-2, DF-5). Never awaited,
+  // so opening the link is never delayed; failures are silent.
+  const reportLinkClick = useCallback((url: string, source: LinkClickSource) => {
+    if (!shouldTrackLinkClick({ enabled: trackLinkClicks === true, isMe, messageId: message.id, kind: message.kind })) return;
+    void chatApi
+      .trackLinkClick(message.id, { url, source, platform: Platform.OS === 'android' ? 'android' : 'ios' })
+      .catch(() => {});
+  }, [trackLinkClicks, isMe, message.id, message.kind]);
+
+  const handleUrlPress = useCallback((url: string, source: 'text' | 'preview' = 'text') => {
+    reportLinkClick(url, source);
     try {
       const parsed = new URL(url);
       const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
@@ -375,7 +347,7 @@ export function MessageBubble({
       // Malformed URL — fall through to the external opener below.
     }
     Linking.openURL(url).catch(() => {});
-  }, [router]);
+  }, [router, reportLinkClick]);
 
   const renderContent = (baseColor: string, mentionColor: string, linkColor: string) => {
     if (!displayContent) return null;
@@ -407,7 +379,7 @@ export function MessageBubble({
               <Text
                 key={i}
                 style={{ color: linkColor, textDecorationLine: 'underline' }}
-                onPress={() => handleUrlPress(p.url)}
+                onPress={() => handleUrlPress(p.url, 'text')}
               >
                 {p.text}
               </Text>
@@ -447,8 +419,11 @@ export function MessageBubble({
   );
 
   const handleYouTubePress = useCallback((id: string) => {
+    // Report the original link from the stored content, so it keys to the same
+    // url as the inline text (DF-6); then open the in-app player as before.
+    reportLinkClick(youTubeCardUrl(message.content, id), 'youtube');
     setYtVideoId(id);
-  }, []);
+  }, [reportLinkClick, message.content]);
 
   // Additive YouTube unfurl block: one card per distinct video ID, stacked
   // below the message text. The raw link stays as tappable underlined text
@@ -468,11 +443,13 @@ export function MessageBubble({
   // below the message text. The raw link stays tappable underlined text (via
   // renderContent) — this is purely additional. Reuses the flush youtubeBlock
   // wrapper so the card sits edge-to-edge like the video card (#video-gap UAT).
+  const handlePreviewPress = useCallback((url: string) => handleUrlPress(url, 'preview'), [handleUrlPress]);
+
   const renderLinkPreviewCard = () => {
     if (!linkPreviewUrl) return null;
     return (
       <View style={styles.youtubeBlock}>
-        <LinkPreviewCard url={linkPreviewUrl} onPress={handleUrlPress} />
+        <LinkPreviewCard url={linkPreviewUrl} onPress={handlePreviewPress} />
       </View>
     );
   };

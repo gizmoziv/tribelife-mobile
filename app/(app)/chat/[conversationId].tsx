@@ -1228,6 +1228,7 @@ export default function DMThreadScreen() {
         highlighted={item.id === highlightedId}
         receiptConversationId={conversationId}
         receiptOtherUserIds={otherUserIds}
+        trackLinkClicks={isGroup && !isReadOnlyPreview}
       />
     );
     // Phase 14 D-04: wrap matched bubble in Animated.View for highlight flash
