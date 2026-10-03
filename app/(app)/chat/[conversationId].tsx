@@ -69,6 +69,7 @@ import { requestMediaUploadUrls, uploadToSpaces, confirmMediaUpload, requestDocU
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ReceiptBreakdownSheet } from '@/components/ui/chat/ReceiptBreakdownSheet';
+import { LINK_CLICKS_UPSELL_BODY } from '@/utils/linkClicksViewModel';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { AttachmentComposer } from '@/components/ui/chat/AttachmentComposer';
@@ -221,9 +222,21 @@ export default function DMThreadScreen() {
   // from the cold-open seed fetch. Feeds the per-member breakdown sheet (avatar +
   // handle) opened via long-press "Info". Empty for DMs and until seeded.
   const [groupRoster, setGroupRoster] = useState<GroupMember[]>([]);
-  // Phase 29: the breakdown sheet's open state — the target message's createdAt
-  // threshold (null = closed). Opened via the long-press "Info" action (groups).
-  const [breakdownCreatedAt, setBreakdownCreatedAt] = useState<string | null>(null);
+  // Phase 29: the breakdown sheet's open state — the target message (null =
+  // closed). Its createdAt is the receipt threshold; its id + content feed the
+  // Link clicks section (quick 261003-nfu). Opened via long-press "Info" (groups).
+  const [breakdownMessage, setBreakdownMessage] = useState<Message | null>(null);
+  // quick 261003-nfu (PD-7): the locked Link clicks teaser closes the sheet, then
+  // shows the same upsell alert the group and beacon screens use.
+  const handleLinkClicksUpgrade = useCallback(() => {
+    setBreakdownMessage(null);
+    setTimeout(() => {
+      Alert.alert('Upgrade to Premium', LINK_CLICKS_UPSELL_BODY, [
+        { text: 'Not Now', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => router.push('/(app)/profile') },
+      ]);
+    }, 300);
+  }, [router]);
   const flatListRef = useRef<FlatList>(null);
   const { isAtBottom, handleScroll, scrollToBottom } = useScrollToBottom(flatListRef);
   // Measured height of the composer block below (edit/reply banners + input
@@ -1575,20 +1588,23 @@ export default function DMThreadScreen() {
                 // Open the per-member receipt breakdown for THIS message. Deferred
                 // so the context-menu modal finishes dismissing before the sheet
                 // presents (a Modal presented mid-dismiss can no-op on iOS).
-                const createdAt = selectedMessage?.createdAt;
-                if (createdAt) setTimeout(() => setBreakdownCreatedAt(createdAt), 300);
+                const target = selectedMessage;
+                if (target?.createdAt) setTimeout(() => setBreakdownMessage(target), 300);
               }
             : undefined}
           messageContent={selectedMessage?.content ?? ''}
         />
         {/* Phase 29 (RCPT-05): per-member breakdown for a group message, opened
-            from the long-press "Info" action. Controlled by breakdownCreatedAt. */}
+            from the long-press "Info" action. Controlled by breakdownMessage. */}
         <ReceiptBreakdownSheet
-          visible={breakdownCreatedAt != null}
-          onClose={() => setBreakdownCreatedAt(null)}
+          visible={breakdownMessage != null}
+          onClose={() => setBreakdownMessage(null)}
           roster={groupRoster}
           receipts={conversationReceipts}
-          createdAt={breakdownCreatedAt}
+          createdAt={breakdownMessage?.createdAt ?? null}
+          messageId={breakdownMessage?.id ?? null}
+          messageContent={breakdownMessage?.content ?? null}
+          onUpgradePress={handleLinkClicksUpgrade}
         />
         <LanguagePicker
           visible={langPickerVisible}

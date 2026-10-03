@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
 import { COLORS, FONTS, SPACING, RADIUS } from '@/constants';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
+import { LinkClicksSection } from '@/components/ui/chat/LinkClicksSection';
 import type { GroupMember, MemberReceipt } from '@/types';
 
 // ── Phase 29: ReceiptBreakdownSheet (RCPT-05) ───────────────────────────────
@@ -22,6 +23,10 @@ import type { GroupMember, MemberReceipt } from '@/types';
 // ISO strings compare lexicographically (UTC toISOString), matching the
 // aggregate + deriveTick. Pre-Phase-28-deploy the store is empty → every row
 // reads "Not delivered yet" (constraint 5 — designed, not a crash).
+//
+// The sheet now opens with the Link clicks section (quick 261003-nfu): per-link
+// Clicks / Unique people for premium senders, a locked teaser for free senders,
+// nothing when the message has no links. It sits above the member rows.
 
 type MemberState =
   | { label: 'Seen' }
@@ -50,6 +55,12 @@ interface ReceiptBreakdownSheetProps {
   receipts: Record<number, MemberReceipt> | undefined;
   // The target message's createdAt (the watermark threshold). null when closed.
   createdAt: string | null;
+  // The target message's server id and text, for the Link clicks section.
+  // null when closed (or the message is not yet stored).
+  messageId: number | null;
+  messageContent: string | null;
+  // Tapped on the locked Link clicks teaser (free senders).
+  onUpgradePress: () => void;
 }
 
 export function ReceiptBreakdownSheet({
@@ -58,6 +69,9 @@ export function ReceiptBreakdownSheet({
   roster,
   receipts,
   createdAt,
+  messageId,
+  messageContent,
+  onUpgradePress,
 }: ReceiptBreakdownSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -89,6 +103,7 @@ export function ReceiptBreakdownSheet({
         <View style={[styles.separator, { backgroundColor: colors.border }]} />
 
         <ScrollView style={styles.scroll} bounces={false}>
+          <LinkClicksSection visible={visible} messageId={messageId} content={messageContent} onUpgradePress={onUpgradePress} />
           {roster.map((m, index) => {
             const state = createdAt
               ? memberState(receipts?.[m.userId], createdAt)
