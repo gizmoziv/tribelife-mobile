@@ -31,6 +31,7 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { VisibilityCard, GlobeRadioIcon, LockRadioIcon } from '@/components/ui/VisibilityChoice';
 import { useCapability } from '@/hooks/useCapability';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
+import { leaveDialogVariant, leaveDialogCopy, leaveOutcomeNotice } from '@/utils/groupLeaveCopy';
 import type { GroupMember } from '@/types';
 import Svg, { Path } from 'react-native-svg';
 
@@ -267,57 +268,33 @@ export default function GroupInfoScreen() {
   }, [conversationId]);
 
   const handleLeave = useCallback(() => {
-    // D-10: detect last-admin from already-loaded members list.
-    const adminCount = members?.filter((m) => m.role === 'admin').length ?? 0;
-    const currentMember = members?.find((m) => m.userId === user?.id);
-    const isLastAdmin = currentMember?.role === 'admin' && adminCount === 1;
+    // D-10 (quick 261003-vpp): the variant comes from utils/groupLeaveCopy.ts. The
+    // last admin gets the handoff wording when anyone else is in the members list,
+    // and the archive wording only when alone.
+    const variant = leaveDialogVariant(members, user?.id);
+    const copy = leaveDialogCopy(variant);
 
-    if (isLastAdmin) {
-      Alert.alert(
-        'Archive this group?',
-        "You're the last admin. If you leave, this group will be archived — no one will be able to send new messages.",
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Leave & Archive',
-            style: 'destructive',
-            onPress: async () => {
-              setIsLeaving(true);
-              try {
-                await groupsApi.leave(conversationId);
-                router.replace('/(app)/chat');
-              } catch {
-                Alert.alert('Error', 'Failed to leave group.');
-                setIsLeaving(false);
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      // Non-last-admin path — existing copy unchanged.
-      Alert.alert(
-        'Leave Group',
-        'Are you sure you want to leave this group? You can rejoin with an invite link.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Leave',
-            style: 'destructive',
-            onPress: async () => {
-              setIsLeaving(true);
-              try {
-                await groupsApi.leave(conversationId);
-                router.replace('/(app)/chat');
-              } catch {
-                Alert.alert('Error', 'Failed to leave group.');
-                setIsLeaving(false);
-              }
-            },
-          },
-        ]
-      );
-    }
+    Alert.alert(copy.title, copy.message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: copy.confirmLabel,
+        style: 'destructive',
+        onPress: async () => {
+          setIsLeaving(true);
+          try {
+            const { archived } = await groupsApi.leave(conversationId);
+            router.replace('/(app)/chat');
+            // An archive the dialog did not promise (e.g. every other member is
+            // banned, or an older backend) is reported instead of staying silent.
+            const notice = leaveOutcomeNotice(variant, archived);
+            if (notice) Alert.alert(notice.title, notice.message);
+          } catch {
+            Alert.alert('Error', 'Failed to leave group.');
+            setIsLeaving(false);
+          }
+        },
+      },
+    ]);
   }, [conversationId, members, user?.id]);
 
   const handleJoin = useCallback(async () => {
