@@ -10,8 +10,9 @@
 //      byte-for-byte what TestFlight ships (no Firebase pods, no static
 //      frameworks). Pod autolinking exclusion is handled in react-native.config.js.
 //
-// When both app.json and app.config.js are present, Expo CLI uses app.config.js
-// and ignores app.json. All static config from app.json is spread here.
+// When both app.json and app.config.js are present, Expo CLI reads app.json and
+// passes its values into this function as `config`. We extend that incoming
+// config (rather than re-requiring app.json) so expo-doctor sees it being used.
 //
 // ⚠ CAVEAT: `expo prebuild` evaluates this config ONCE — a combined prebuild
 // (both platforms in one run) CANNOT emit different plugin sets per platform.
@@ -21,7 +22,7 @@
 // (iOS local prebuild: `npx expo prebuild -p ios` — no flag → no Firebase plugins.)
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const appJson = require('./app.json');
+const { withAndroidManifest } = require('expo/config-plugins');
 
 /**
  * Config plugin: adds a <queries> → <intent> block for the market:// scheme.
@@ -29,8 +30,6 @@ const appJson = require('./app.json');
  * @returns {import('expo/config').ExpoConfig}
  */
 function withMarketSchemeQuery(cfg) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { withAndroidManifest } = require('@expo/config-plugins');
   return withAndroidManifest(cfg, (config) => {
     const manifest = config.modResults;
     if (!manifest.manifest.queries) {
@@ -58,12 +57,12 @@ function withMarketSchemeQuery(cfg) {
   });
 }
 
-module.exports = () => {
+module.exports = ({ config }) => {
   // EAS sets EAS_BUILD_PLATFORM per build; RNFB_ANDROID=1 is the local-prebuild opt-in.
   const isAndroid =
     process.env.EAS_BUILD_PLATFORM === 'android' || process.env.RNFB_ANDROID === '1';
 
-  const plugins = [...(appJson.expo.plugins || []), withMarketSchemeQuery];
+  const plugins = [...(config.plugins || []), withMarketSchemeQuery];
 
   if (isAndroid) {
     plugins.push(
@@ -76,7 +75,7 @@ module.exports = () => {
   }
 
   return {
-    ...appJson.expo,
+    ...config,
     plugins,
   };
 };
