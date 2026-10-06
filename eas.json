@@ -6,7 +6,13 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "image": "macos-tahoe-26.4-xcode-26.4"
+      },
+      "android": {
+        "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
+      }
     },
     "development-simulator": {
       "extends": "development",
@@ -15,11 +21,23 @@
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "image": "macos-tahoe-26.4-xcode-26.4"
+      },
+      "android": {
+        "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "ios": {
+        "image": "macos-tahoe-26.4-xcode-26.4"
+      },
+      "android": {
+        "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
+      }
     }
   },
   "submit": {
