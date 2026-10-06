@@ -135,7 +135,8 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "TribeLife needs access to your microphone to send voice messages."
+          "microphonePermission": "TribeLife needs access to your microphone to send voice messages.",
+          "enableBackgroundPlayback": false
         }
       ],
       "@config-plugins/react-native-pdf",

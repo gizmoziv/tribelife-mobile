@@ -25,7 +25,7 @@
  *
  * Added for ANDROID BUILDS ONLY via the app.config.js plugin gate.
  */
-const { withAndroidManifest, AndroidConfig } = require('@expo/config-plugins');
+const { withAndroidManifest, AndroidConfig } = require('expo/config-plugins');
 
 const EXPO_FCM_SERVICE = 'expo.modules.notifications.service.ExpoFirebaseMessagingService';
 // Both expo-notifications (value="default") and @react-native-firebase/messaging

@@ -17,7 +17,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { withDangerousMod, withMainApplication } = require('@expo/config-plugins');
+const { withDangerousMod, withMainApplication } = require('expo/config-plugins');
 
 const PACKAGE = 'com.tribelife.app.shortcuts';
 const SOURCE_DIR = path.join('native', 'conversation-shortcut');
@@ -55,10 +55,10 @@ function withRegisterPackage(config) {
   return withMainApplication(config, (cfg) => {
     let contents = cfg.modResults.contents;
 
-    // SDK 54 / RN 0.81 ships a Kotlin MainApplication.
+    // Expo SDK 54+ ships a Kotlin MainApplication.
     if (cfg.modResults.language !== 'kt') {
       throw new Error(
-        '[withConversationShortcut] expected a Kotlin MainApplication (SDK 54). ' +
+        '[withConversationShortcut] expected a Kotlin MainApplication (Expo SDK 54+ Kotlin MainApplication template). ' +
           'Java MainApplication is not supported by this plugin.',
       );
     }
@@ -68,7 +68,7 @@ function withRegisterPackage(config) {
       contents = contents.replace(/(^package .*$)/m, `$1\n\n${IMPORT_LINE}`);
     }
 
-    // (2) register the package in getPackages(). SDK 54 emits
+    // (2) register the package in getPackages(). The Expo SDK 54+ template emits
     //     `PackageList(this).packages.apply { ... }` — add() inside the apply
     //     block (the receiver is the mutable package list). Also support the
     //     older `val packages = PackageList(this).packages` shape.
