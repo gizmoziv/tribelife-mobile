@@ -118,7 +118,8 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "TribeLife uses your location to show accurate Shabbat candle-lighting times."
+          "locationWhenInUsePermission": "TribeLife uses your location to show accurate Shabbat candle-lighting times.",
+          "motionUsagePermission": false
         }
       ],
       "@giphy/react-native-sdk",
