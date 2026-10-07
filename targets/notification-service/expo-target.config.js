@@ -4,8 +4,8 @@ module.exports = {
   name: "NotificationService",
   // Dot-prefix → auto-appends to the main bundle id: com.tribelife.app.notificationservice
   bundleIdentifier: ".notificationservice",
-  // Matches the Podfile deployment target; Communication Notifications need iOS 15+.
-  deploymentTarget: "15.1",
+  // Matches the SDK 56 Podfile deployment target (16.4); Communication Notifications need iOS 15+.
+  deploymentTarget: "16.4",
   // Pin the Swift version for reproducible codegen across Xcode versions.
   swiftVersion: "5.0",
   // Intents is required for INSendMessageIntent / INPerson / INImage.
