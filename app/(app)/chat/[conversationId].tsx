@@ -1716,7 +1716,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill,
   },
   headerTitleWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

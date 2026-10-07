@@ -119,7 +119,7 @@ export function ChevraCommunityTile({ item, width, onPress }: ChevraCommunityTil
           ]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 0.55 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
 

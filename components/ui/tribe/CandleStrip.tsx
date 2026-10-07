@@ -62,7 +62,7 @@ export function CandleStrip({ vm, onPress }: CandleStripProps) {
         colors={[gradient[0], gradient[1]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
       <LinearGradient
         colors={[
@@ -71,7 +71,7 @@ export function CandleStrip({ vm, onPress }: CandleStripProps) {
         ]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.7 }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
 

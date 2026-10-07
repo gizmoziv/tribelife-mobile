@@ -59,7 +59,7 @@ export function ChevraWideTile({
           ]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 0.5 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
 

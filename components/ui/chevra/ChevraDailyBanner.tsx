@@ -43,7 +43,7 @@ export function ChevraDailyBanner({ banner }: ChevraDailyBannerProps) {
           ]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 0.6 }}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
 

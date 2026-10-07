@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     borderRadius: 48,
   },
   iconOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',

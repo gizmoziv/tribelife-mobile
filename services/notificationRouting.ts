@@ -1,4 +1,4 @@
-import type { Router } from 'expo-router';
+import type { ImperativeRouter } from 'expo-router';
 import type { ChatNotification } from '@/types';
 import { notificationsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
@@ -37,7 +37,7 @@ export async function getPostLoginLandingRoute(): Promise<
 
 export function routeChatNotificationTap(
   data: ChatNotification,
-  router: Pick<Router, 'navigate' | 'push'>,
+  router: Pick<ImperativeRouter, 'navigate' | 'push'>,
 ): void {
   // Phase 14 D-04: when the payload carries a messageId, pass it as
   // `aroundMessageId` so the destination chat screen scrolls to and flashes

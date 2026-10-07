@@ -1486,7 +1486,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.semiBold,
   },
   headerTitleWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

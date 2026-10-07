@@ -39,7 +39,7 @@ export function LocalRoomTile({ size = 44, showRing = true }: LocalRoomTileProps
         ]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.55 }}
-        style={[StyleSheet.absoluteFillObject, { borderRadius: size / 2 }]}
+        style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
         pointerEvents="none"
       />
 

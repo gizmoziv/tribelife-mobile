@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter, usePathname } from 'expo-router';
-import { CommonActions } from '@react-navigation/native';
+import { CommonActions } from 'expo-router/react-navigation';
 import {
   View,
   Text,
@@ -332,7 +332,7 @@ export default function AppLayout() {
         options={{
           title: 'Chats',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="chat" color={color} focused={focused} />
+            <GradientTabIcon icon="chat" color={color as string} focused={focused} />
           ),
           tabBarBadge: chatsHasUnread ? '' : undefined,
           tabBarBadgeStyle: dotBadgeStyle,
@@ -391,7 +391,7 @@ export default function AppLayout() {
         options={{
           title: 'Chevra',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="community" color={color} focused={focused} />
+            <GradientTabIcon icon="community" color={color as string} focused={focused} />
           ),
           // Chevra is a discovery surface — no unread notifications belong on
           // this tab. Joined regional rooms surface unread via the Chats tab
@@ -404,7 +404,7 @@ export default function AppLayout() {
         options={{
           title: 'Beacon',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="beacon" color={color} focused={focused} />
+            <GradientTabIcon icon="beacon" color={color as string} focused={focused} />
           ),
           headerTitle: 'Beacon',
         }}
@@ -414,7 +414,7 @@ export default function AppLayout() {
         options={{
           title: 'Tribe',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="chai" color={color} focused={focused} />
+            <GradientTabIcon icon="chai" color={color as string} focused={focused} />
           ),
           headerTitle: 'tribelife',
           // Android defaults to a left-aligned title, which a left element would
@@ -428,7 +428,7 @@ export default function AppLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <GradientTabIcon icon="profile" color={color} focused={focused} />
+            <GradientTabIcon icon="profile" color={color as string} focused={focused} />
           ),
           headerTitle: 'My Profile',
         }}
