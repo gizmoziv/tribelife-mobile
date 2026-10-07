@@ -21,9 +21,18 @@
 //                              FOREGROUND_SERVICE* permission, an ADDED service that declares
 //                              foregroundServiceType, or more MESSAGING_EVENT actions than shipped
 //
+// SDK 56 splash / photo-usage checks (the legacy expo.splash keys are ignored at SDK 56, so
+// a missing expo-splash-screen plugin entry yields a blank launch screen without failing prebuild):
+//   ios:splash-background  Images.xcassets/SplashScreenBackground.colorset exists
+//   ios:splash-image       Images.xcassets/SplashScreenLegacy.imageset exists
+//   ios:photo-add-usage    Info.plist has NSPhotoLibraryAddUsageDescription (expo-media-library plugin)
+//   android:splash-logo    splashscreen_logo.png in drawable-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
+//   android:splash-background  values/styles.xml sets windowSplashScreenBackground
+//
 // Options
 //   --root <dir>               project root (default: this script's parent, tribelife-mobile/)
-//   --ios-min <version>        expected iOS deployment target (default 15.1; Phase 41 passes 16.4)
+//   --ios-min <version>        expected iOS deployment target (default 16.4, the SDK 56+ floor;
+//                              pass 15.1 only to check an SDK 55 tree)
 //   --allow-missing-lock       skip the Podfile.lock checks (after a `prebuild --no-install`)
 //
 // Usage (from tribelife-mobile/), after the matching prebuild:
@@ -156,7 +165,7 @@ if (platform !== 'ios' && platform !== 'android') {
   process.exit(2);
 }
 const root = path.resolve(value('--root', path.resolve(here, '..')));
-const iosMin = value('--ios-min', '15.1');
+const iosMin = value('--ios-min', '16.4');
 const allowMissingLock = flag('--allow-missing-lock');
 
 const fails = [];
@@ -255,6 +264,12 @@ if (platform === 'ios') {
     ok(!/^\s*- "?(Firebase|RNFB|RNNotifee)/m.test(lock), 'ios:no-firebase-pods');
     ok(lock.includes('React-Fabric'), 'ios:fabric');
   }
+
+  // Splash (expo-splash-screen plugin) + photo-add usage (expo-media-library plugin, needed by ImageViewer save).
+  const assetsDir = path.join(iosDir, appName, 'Images.xcassets');
+  ok(fs.existsSync(path.join(assetsDir, 'SplashScreenBackground.colorset')), 'ios:splash-background');
+  ok(fs.existsSync(path.join(assetsDir, 'SplashScreenLegacy.imageset')), 'ios:splash-image');
+  ok(plist.includes('<key>NSPhotoLibraryAddUsageDescription</key>'), 'ios:photo-add-usage');
   finish();
 }
 
@@ -308,5 +323,10 @@ ok(usesPermissions.filter((p) => p.attrs['android:name'] === FGS_MEDIA_PLAYBACK)
 // New Architecture: the SDK 55 template still writes newArchEnabled=true; only `false` is a failure.
 const gradleProps = read(path.join(androidDir, 'gradle.properties')) || '';
 ok(gradleProps !== '' && !/^\s*newArchEnabled\s*=\s*false\s*$/m.test(gradleProps), 'android:newarch');
+
+// Splash (expo-splash-screen plugin): logo in all five densities + background color in the theme.
+const resDir = path.join(androidDir, 'app', 'src', 'main', 'res');
+ok(['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'].every((d) => fs.existsSync(path.join(resDir, `drawable-${d}`, 'splashscreen_logo.png'))), 'android:splash-logo');
+ok((read(path.join(resDir, 'values', 'styles.xml')) || '').includes('windowSplashScreenBackground'), 'android:splash-background');
 
 finish();
