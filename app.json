@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -38,11 +33,6 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-pre-tllogo-backup.png",
-        "backgroundColor": "#0F172A"
-      },
-      "splash": {
-        "image": "./assets/splash-android.png",
-        "resizeMode": "contain",
         "backgroundColor": "#0F172A"
       },
       "googleServicesFile": "./google-services.json",
@@ -143,7 +133,23 @@
       "@config-plugins/react-native-blob-util",
       "@bacons/apple-targets",
       "./plugins/withoutMediaPlaybackPermission",
-      "./plugins/withCommunicationNotifications"
+      "./plugins/withCommunicationNotifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0F172A",
+          "ios": {
+            "enableFullScreenImage_legacy": true
+          },
+          "android": {
+            "image": "./assets/splash-android.png",
+            "backgroundColor": "#0F172A",
+            "imageWidth": 200
+          }
+        }
+      ]
     ],
     "scheme": "tribelife",
     "extra": {
