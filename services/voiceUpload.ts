@@ -45,6 +45,10 @@ export async function uploadVoiceToSpaces(uploadUrl: string, fileUri: string): P
   // Read the local recording as a blob via fetch (works reliably in RN for
   // local file URIs — same approach as the image upload path).
   const response = await fetch(fileUri);
+  // A stale file URI must not upload an error body (Phase 41 deferred item 15).
+  if (response.status >= 400) {
+    throw new Error(`[voice-upload] could not read the local recording (status ${response.status})`);
+  }
   const blob = await response.blob();
 
   const uploadRes = await fetch(uploadUrl, {

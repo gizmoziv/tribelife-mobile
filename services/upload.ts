@@ -33,6 +33,10 @@ export async function requestAvatarUploadUrl(): Promise<{
 export async function uploadToSpaces(uploadUrl: string, fileUri: string): Promise<void> {
   // Read file as blob via fetch (works reliably in RN for local file URIs)
   const response = await fetch(fileUri);
+  // A stale file URI must not upload an error body (Phase 41 deferred item 15).
+  if (response.status >= 400) {
+    throw new Error(`[upload] could not read the local file (status ${response.status})`);
+  }
   const blob = await response.blob();
 
   const uploadRes = await fetch(uploadUrl, {
@@ -240,6 +244,10 @@ export async function requestDocUploadUrl(filename: string): Promise<{
 export async function uploadDocToSpaces(uploadUrl: string, fileUri: string): Promise<void> {
   // Read file as blob via fetch (works reliably in RN for local file:// URIs).
   const response = await fetch(fileUri);
+  // A stale file URI must not upload an error body (Phase 41 deferred item 15).
+  if (response.status >= 400) {
+    throw new Error(`[upload] could not read the local file (status ${response.status})`);
+  }
   const blob = await response.blob();
 
   const uploadRes = await fetch(uploadUrl, {
