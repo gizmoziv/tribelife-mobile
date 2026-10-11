@@ -45,6 +45,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
   retried: boolean = false,
+  cacheBypassed: boolean = false,
 ): Promise<T> {
   const token = await getToken();
 
@@ -57,7 +58,19 @@ async function request<T>(
     },
   });
 
-  const data = await res.json().catch(() => ({}));
+  // Read the body exactly once. 204/205 and empty or whitespace-only bodies are valid
+  // empty results ({}); error responses keep the {} fallback when the body is not JSON.
+  const raw = await res.text();
+  const emptyBody = res.status === 204 || res.status === 205 || raw.trim() === '';
+  let data: any = {};
+  let parsedOk = true;
+  if (!emptyBody) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      parsedOk = false;
+    }
+  }
 
   if (res.status === 403 && data && data.capabilityViolation === true && !retried) {
     // Stale capabilities — refresh once and retry the original request.
@@ -69,6 +82,28 @@ async function request<T>(
 
   if (!res.ok) {
     throw new ApiError(data.error ?? 'Request failed', res.status, data);
+  }
+
+  // A non-empty 2xx GET body that is not JSON (Phase 41 install -r crash: the Beacon tab
+  // read undefined arrays) may be a stale cached response: retry once, then fail loudly.
+  if (!parsedOk && (options.method ?? 'GET').toUpperCase() === 'GET') {
+    if (!cacheBypassed) {
+      console.warn('[api] unreadable 2xx body, retrying once without cache', path, res.status);
+      return request<T>(
+        path,
+        {
+          ...options,
+          headers: {
+            ...(options.headers ?? {}),
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        },
+        retried,
+        true,
+      );
+    }
+    throw new ApiError('Unreadable response', res.status, null);
   }
 
   return data as T;

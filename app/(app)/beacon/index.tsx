@@ -429,7 +429,7 @@ export default function BeaconScreen() {
     beaconsApi
       .getMatches()
       .then(({ matches: m }) => {
-        setMatches(m);
+        setMatches(Array.isArray(m) ? m : []);
         setMatchesLoading(false);
       })
       .catch(() => setMatchesLoading(false));
@@ -511,8 +511,8 @@ function MyBeaconsPanel() {
   const loadBeacons = async () => {
     try {
       const { beacons, slots } = await beaconsApi.mine();
-      setMyBeacons(beacons);
-      setSlots(slots);
+      setMyBeacons(Array.isArray(beacons) ? beacons : []);
+      setSlots(slots ?? null);
     } catch {}
     setIsLoading(false);
   };
