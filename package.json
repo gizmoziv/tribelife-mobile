@@ -63,7 +63,7 @@
     "react-native-keyboard-controller": "1.21.9",
     "react-native-notify-kit": "10.4.8",
     "react-native-pdf": "^7.0.5",
-    "react-native-purchases": "9.15.2",
+    "react-native-purchases": "10.12.2",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
