@@ -47,6 +47,28 @@
       "android": {
         "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
       }
+    },
+    "ios-scenes-test": {
+      "extends": "preview",
+      "env": {
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "TRIBELIFE_IOS_SCENES": "1"
+      },
+      "distribution": "internal",
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.0"
+      }
+    },
+    "ios-scenes-dev": {
+      "extends": "development",
+      "env": {
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "TRIBELIFE_IOS_SCENES": "1"
+      },
+      "distribution": "internal",
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.0"
+      }
     }
   },
   "submit": {
