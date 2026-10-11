@@ -34,6 +34,17 @@
 //   --ios-min <version>        expected iOS deployment target (default 16.4, the SDK 56+ floor;
 //                              pass 15.1 only to check an SDK 55 tree)
 //   --allow-missing-lock       skip the Podfile.lock checks (after a `prebuild --no-install`)
+//   --ios-scenes on|off        iOS 27 scene lifecycle expectation (default off, the store path). Set `on` only
+//                              for a tree prebuilt with TRIBELIFE_IOS_SCENES=1 (see app.config.js). Any other
+//                              value records ios:bad-scenes-option.
+//
+// iOS scene-lifecycle checks (the only checks that differ by --ios-scenes):
+//   on  : ios:scene-manifest        Info.plist has UIApplicationSceneManifest, UISceneDelegateClassName
+//                                   EXExpoAppSceneDelegate and UIApplicationSupportsMultipleScenes false
+//         ios:appdelegate-scenes    AppDelegate has ExpoReactNativeFactoryProvider, no factory.startReactNative(
+//   off : ios:scene-manifest-absent no UIApplicationSceneManifest in the main Info.plist
+//         ios:appdelegate-stock     AppDelegate has factory.startReactNative( and no ExpoReactNativeFactoryProvider
+//   both: ios:nse-no-scene-manifest the Notification Service Extension Info.plist has no scene manifest
 //
 // Usage (from tribelife-mobile/), after the matching prebuild:
 //   npx expo prebuild -p ios --clean
@@ -160,12 +171,13 @@ if (flag('--compare-manifests')) {
 // ── Platform mode ───────────────────────────────────────────────────────────
 const platform = value('--platform');
 if (platform !== 'ios' && platform !== 'android') {
-  console.error('Usage: node --no-warnings scripts/verify-native-surface.mjs --platform ios|android [--root <dir>] [--ios-min <v>] [--allow-missing-lock]');
+  console.error('Usage: node --no-warnings scripts/verify-native-surface.mjs --platform ios|android [--root <dir>] [--ios-min <v>] [--ios-scenes on|off] [--allow-missing-lock]');
   console.error('       node --no-warnings scripts/verify-native-surface.mjs --compare-manifests <shipped.xml> <new.xml>');
   process.exit(2);
 }
 const root = path.resolve(value('--root', path.resolve(here, '..')));
 const iosMin = value('--ios-min', '16.4');
+const iosScenesRaw = value('--ios-scenes', 'off');
 const allowMissingLock = flag('--allow-missing-lock');
 
 const fails = [];
@@ -270,6 +282,26 @@ if (platform === 'ios') {
   ok(fs.existsSync(path.join(assetsDir, 'SplashScreenBackground.colorset')), 'ios:splash-background');
   ok(fs.existsSync(path.join(assetsDir, 'SplashScreenLegacy.imageset')), 'ios:splash-image');
   ok(plist.includes('<key>NSPhotoLibraryAddUsageDescription</key>'), 'ios:photo-add-usage');
+
+  // iOS 27 scene lifecycle (TRIBELIFE_IOS_SCENES gate in app.config.js): the store path (off) must carry no
+  // UIApplicationSceneManifest and the stock AppDelegate; the flag-ON test path must carry both scene pieces.
+  ok(iosScenesRaw === 'on' || iosScenesRaw === 'off', 'ios:bad-scenes-option');
+  const appDelegate = read(path.join(iosDir, appName, 'AppDelegate.swift')) || '';
+  const nsePlist = read(path.join(root, 'targets', 'notification-service', 'Info.plist')) || '';
+  const hasManifest = plist.includes('<key>UIApplicationSceneManifest</key>');
+  if (iosScenesRaw === 'on') {
+    ok(
+      hasManifest &&
+        /<key>UISceneDelegateClassName<\/key>\s*<string>EXExpoAppSceneDelegate<\/string>/.test(plist) &&
+        /<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\s*\/>/.test(plist),
+      'ios:scene-manifest',
+    );
+    ok(appDelegate.includes('ExpoReactNativeFactoryProvider') && !appDelegate.includes('factory.startReactNative('), 'ios:appdelegate-scenes');
+  } else if (iosScenesRaw === 'off') {
+    ok(!hasManifest, 'ios:scene-manifest-absent');
+    ok(appDelegate.includes('factory.startReactNative(') && !appDelegate.includes('ExpoReactNativeFactoryProvider'), 'ios:appdelegate-stock');
+  }
+  ok(!nsePlist.includes('UIApplicationSceneManifest'), 'ios:nse-no-scene-manifest');
   finish();
 }
 

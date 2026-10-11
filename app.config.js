@@ -1,6 +1,6 @@
 // app.config.js — dynamic Expo config.
 // =========================================================================
-// Two jobs:
+// Three jobs:
 //   1. Inject the Android <queries> block for market:// scheme visibility
 //      (Android 11+/API 30+) so Linking.canOpenURL('market://...') works (WR-01).
 //   2. Phase C LOCKED DECISION 1 — gate the RNFirebase / notify-kit / native
@@ -9,6 +9,9 @@
 //      AppDelegate); appending them only for Android keeps the iOS project
 //      byte-for-byte what TestFlight ships (no Firebase pods, no static
 //      frameworks). Pod autolinking exclusion is handled in react-native.config.js.
+//   3. Gate the iOS 27 scene lifecycle behind the TRIBELIFE_IOS_SCENES env var
+//      (default OFF; "1" = ON). ON sets expo-build-properties ios.enableSceneSupport;
+//      only the ios-scenes-test / ios-scenes-dev EAS profiles set it (see eas.json).
 //
 // When both app.json and app.config.js are present, Expo CLI reads app.json and
 // passes its values into this function as `config`. We extend that incoming
@@ -62,7 +65,31 @@ module.exports = ({ config }) => {
   const isAndroid =
     process.env.EAS_BUILD_PLATFORM === 'android' || process.env.RNFB_ANDROID === '1';
 
-  const plugins = [...(config.plugins || []), withMarketSchemeQuery];
+  // ── iOS 27 scene lifecycle gate (test builds only; default OFF) ──────────
+  // ON  -> expo-build-properties ios.enableSceneSupport = true (needs expo >= 57.0.23).
+  // OFF -> the key is omitted entirely, so the plugin stays a no-op and the store
+  //        path is byte-identical (a literal `false` would still rewrite AppDelegate).
+  // Only the ios-scenes-test / ios-scenes-dev EAS profiles set it. No console.log
+  // in this file: it would corrupt `expo config --json` output.
+  const scenesRaw = process.env.TRIBELIFE_IOS_SCENES;
+  if (scenesRaw !== undefined && scenesRaw !== '' && scenesRaw !== '0' && scenesRaw !== '1') {
+    throw new Error('[app.config] TRIBELIFE_IOS_SCENES must be "1" or unset, got: ' + scenesRaw);
+  }
+  const scenesOn = scenesRaw === '1';
+  const easProfile = process.env.EAS_BUILD_PROFILE;
+  if (scenesOn && easProfile && easProfile !== 'ios-scenes-test' && easProfile !== 'ios-scenes-dev') {
+    throw new Error(
+      '[app.config] TRIBELIFE_IOS_SCENES=1 is only allowed on the ios-scenes-test and ios-scenes-dev EAS profiles, not ' +
+        easProfile,
+    );
+  }
+  const basePlugins = (config.plugins || []).map((p) =>
+    scenesOn && Array.isArray(p) && p[0] === 'expo-build-properties'
+      ? [p[0], { ...p[1], ios: { ...(p[1] && p[1].ios), enableSceneSupport: true } }]
+      : p,
+  );
+
+  const plugins = [...basePlugins, withMarketSchemeQuery];
 
   if (isAndroid) {
     plugins.push(
