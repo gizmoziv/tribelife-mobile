@@ -11,10 +11,10 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "image": "macos-tahoe-26.4-xcode-26.4"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "android": {
-        "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
+        "image": "ubuntu-26.04-jdk-17-ndk-r27b-sdk-57"
       }
     },
     "development-simulator": {
@@ -29,10 +29,10 @@
       },
       "distribution": "internal",
       "ios": {
-        "image": "macos-tahoe-26.4-xcode-26.4"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "android": {
-        "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
+        "image": "ubuntu-26.04-jdk-17-ndk-r27b-sdk-57"
       }
     },
     "production": {
@@ -42,10 +42,10 @@
       "autoIncrement": true,
       "channel": "production",
       "ios": {
-        "image": "macos-tahoe-26.4-xcode-26.4"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "android": {
-        "image": "ubuntu-24.04-jdk-17-ndk-r27b-sdk-55"
+        "image": "ubuntu-26.04-jdk-17-ndk-r27b-sdk-57"
       }
     },
     "ios-scenes-test": {
@@ -72,6 +72,10 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal"
+      }
+    }
   }
 }
