@@ -26,6 +26,9 @@
 //   ios:splash-background  Images.xcassets/SplashScreenBackground.colorset exists
 //   ios:splash-image       Images.xcassets/SplashScreenLegacy.imageset exists
 //   ios:photo-add-usage    Info.plist has NSPhotoLibraryAddUsageDescription (expo-media-library plugin)
+//   ios:motion-usage       Info.plist has a non-empty NSMotionUsageDescription (expo-location compiles
+//                          CMMotionActivityManager; Apple rejects the upload with error 90683 without it,
+//                          so the expo-location plugin option motionUsagePermission must NOT be false)
 //   android:splash-logo    splashscreen_logo.png in drawable-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}
 //   android:splash-background  values/styles.xml sets windowSplashScreenBackground
 //
@@ -282,6 +285,8 @@ if (platform === 'ios') {
   ok(fs.existsSync(path.join(assetsDir, 'SplashScreenBackground.colorset')), 'ios:splash-background');
   ok(fs.existsSync(path.join(assetsDir, 'SplashScreenLegacy.imageset')), 'ios:splash-image');
   ok(plist.includes('<key>NSPhotoLibraryAddUsageDescription</key>'), 'ios:photo-add-usage');
+  const motionUsage = /<key>NSMotionUsageDescription<\/key>\s*<string>([^<]*)<\/string>/.exec(plist);
+  ok(Boolean(motionUsage) && motionUsage[1].trim() !== '', 'ios:motion-usage');
 
   // iOS 27 scene lifecycle (TRIBELIFE_IOS_SCENES gate in app.config.js): the store path (off) must carry no
   // UIApplicationSceneManifest and the stock AppDelegate; the flag-ON test path must carry both scene pieces.

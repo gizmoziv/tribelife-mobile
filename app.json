@@ -119,7 +119,7 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "TribeLife uses your location to show accurate Shabbat candle-lighting times.",
-          "motionUsagePermission": false
+          "motionUsagePermission": "TribeLife does not use motion data. Apple requires this text because a bundled location library includes motion features."
         }
       ],
       "@giphy/react-native-sdk",
