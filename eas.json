@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "node": "22.x",
       "env": {
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
       },
@@ -24,6 +25,7 @@
       }
     },
     "preview": {
+      "node": "22.x",
       "env": {
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
       },
@@ -36,6 +38,7 @@
       }
     },
     "production": {
+      "node": "22.x",
       "env": {
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
       },
