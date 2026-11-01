@@ -8,6 +8,9 @@
 //   - Title below (2 lines max, matches NewsCard headline)
 //   - Price row at the bottom: $price, plus struck-through compareAtPrice on sale
 //   - Tap → open product page in in-app WebBrowser (PAGE_SHEET)
+//   - TribeLife items get a "TribeLife" pill (top-left of the image); sold-out
+//     items get a "Sold out" pill (top-right) and dimmed content, but stay tappable.
+//     Badges are absolute overlays, so card height equals an Esek card's.
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -22,8 +25,14 @@ import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '@/contexts/ThemeContext';
 import { esekApi, marketplaceApi } from '@/services/api';
-import { FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import type { MarketplaceItem } from '@/types';
+
+// ── Badges / sold-out ─────────────────────────────────────────────────────────
+
+const SOLD_OUT_OPACITY = 0.5;
+const TRIBELIFE_BADGE_LABEL = 'TribeLife';
+const SOLD_OUT_BADGE_LABEL = 'Sold out';
 
 // ── Sizing ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +64,10 @@ export function EsekCard({ item, fullWidth }: EsekCardProps) {
     item.compareAtPrice == null ? null : Number(item.compareAtPrice);
   const onSale = compareAtPrice != null && compareAtPrice > price;
 
+  const isTribelife = item.source === 'tribelife';
+  // Dim the inner content (not the Pressable) so the pressed opacity still composes.
+  const contentOpacity = item.soldOut ? SOLD_OUT_OPACITY : 1;
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   /** Open the product page in SFSafariViewController (iOS) / Chrome Custom Tabs (Android). */
@@ -85,7 +98,7 @@ export function EsekCard({ item, fullWidth }: EsekCardProps) {
       onPress={handleOpen}
       style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
       accessibilityRole="button"
-      accessibilityLabel={`Open product: ${item.title}`}
+      accessibilityLabel={`Open product: ${item.title}${isTribelife ? ', TribeLife' : ''}${item.soldOut ? ', sold out' : ''}`}
     >
       <View
         style={[
@@ -99,17 +112,37 @@ export function EsekCard({ item, fullWidth }: EsekCardProps) {
       >
         {/* Product image at the top — ~75% of the tile, square, cover */}
         {imageFailed ? (
-          <View style={[styles.image, { backgroundColor: colors.surface }]} />
+          <View
+            style={[
+              styles.image,
+              { backgroundColor: colors.surface, opacity: contentOpacity },
+            ]}
+          />
         ) : (
           <Image
             source={{ uri: item.imageUrl }}
-            style={[styles.image, { backgroundColor: colors.surface }]}
+            style={[
+              styles.image,
+              { backgroundColor: colors.surface, opacity: contentOpacity },
+            ]}
             resizeMode="cover"
             onError={() => setImageFailed(true)}
           />
         )}
 
-        <View style={styles.body}>
+        {/* Badges — absolute overlays on the image: no layout space, full opacity */}
+        {isTribelife && (
+          <View style={[styles.badge, styles.badgeLeft]}>
+            <Text style={styles.badgeText}>{TRIBELIFE_BADGE_LABEL}</Text>
+          </View>
+        )}
+        {item.soldOut && (
+          <View style={[styles.badge, styles.badgeRight]}>
+            <Text style={styles.badgeText}>{SOLD_OUT_BADGE_LABEL}</Text>
+          </View>
+        )}
+
+        <View style={[styles.body, { opacity: contentOpacity }]}>
           {/* Title — up to 3 lines */}
           <Text
             style={[styles.title, { color: colors.text }]}
@@ -153,6 +186,27 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     aspectRatio: 16 / 9, // match NewsCard so cards share the same image height
+  },
+  badge: {
+    position: 'absolute',
+    top: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: RADIUS.pill,
+  },
+  badgeLeft: {
+    left: SPACING.sm,
+    backgroundColor: COLORS.primary,
+  },
+  badgeRight: {
+    right: SPACING.sm,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  badgeText: {
+    fontFamily: FONTS.semiBold,
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#FFFFFF',
   },
   body: {
     padding: SPACING.md,
