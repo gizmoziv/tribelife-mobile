@@ -1,11 +1,13 @@
-// Phase 33: horizontal Esek marketplace card for the Tribe hub carousel.
+// Phase 33/43: marketplace card for the Tribe hub carousel and Marketplace list.
+// Serves both TribeLife (Etsy) and Esek items from the combined feed; click
+// attribution branches on item.source.
 //
 // A fixed-width (~78% screen width, max 320px) product tile, structural clone of
 // JobCard/NewsCard. Layout — image / title / price ONLY (no vendor/category/meta):
 //   - Product image at the top (16:9, cover) — matches NewsCard for uniform carousel height
 //   - Title below (2 lines max, matches NewsCard headline)
 //   - Price row at the bottom: $price, plus struck-through compareAtPrice on sale
-//   - Tap → open Esek product page in in-app WebBrowser (PAGE_SHEET)
+//   - Tap → open product page in in-app WebBrowser (PAGE_SHEET)
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -19,9 +21,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '@/contexts/ThemeContext';
-import { esekApi } from '@/services/api';
+import { esekApi, marketplaceApi } from '@/services/api';
 import { FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
-import type { EsekProduct } from '@/types';
+import type { MarketplaceItem } from '@/types';
 
 // ── Sizing ────────────────────────────────────────────────────────────────────
 
@@ -32,7 +34,7 @@ export const ESEK_CARD_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.78), 320);
 // ── Props ────────────────────────────────────────────────────────────────────
 
 export interface EsekCardProps {
-  product: EsekProduct;
+  item: MarketplaceItem;
   /** Renders at 100% of the container width instead of ESEK_CARD_WIDTH — for
    * the vertical, single-type feed (TribeEsekList) rather than the carousel. */
   fullWidth?: boolean;
@@ -40,7 +42,7 @@ export interface EsekCardProps {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function EsekCard({ product, fullWidth }: EsekCardProps) {
+export function EsekCard({ item, fullWidth }: EsekCardProps) {
   const { colors } = useTheme();
 
   // Silent degradation when the image request fails (mirror JobCard.logoFailed)
@@ -48,29 +50,33 @@ export function EsekCard({ product, fullWidth }: EsekCardProps) {
 
   // Coerce defensively: Postgres numeric can arrive as a string, on which .toFixed()
   // throws and `>` would compare lexicographically. Number() makes both robust.
-  const price = Number(product.price);
+  const price = Number(item.price);
   const compareAtPrice =
-    product.compareAtPrice == null ? null : Number(product.compareAtPrice);
+    item.compareAtPrice == null ? null : Number(item.compareAtPrice);
   const onSale = compareAtPrice != null && compareAtPrice > price;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  /** Open the Esek product page in SFSafariViewController (iOS) / Chrome Custom Tabs (Android). */
+  /** Open the product page in SFSafariViewController (iOS) / Chrome Custom Tabs (Android). */
   const handleOpen = useCallback(async () => {
     try {
       Haptics.selectionAsync();
       // Fire-and-forget click attribution — must never block or break the open.
-      esekApi.trackClick(product.shopifyId).catch(() => {});
+      if (item.source === 'esek') {
+        esekApi.trackClick(item.shopifyId).catch(() => {});
+      } else {
+        marketplaceApi.trackTribelifeClick(item.id).catch(() => {});
+      }
       // Attribute the outbound click to TribeLife via UTM params.
-      const sep = product.productUrl.includes('?') ? '&' : '?';
-      const url = `${product.productUrl}${sep}utm_source=tribelife_app&utm_medium=marketplace`;
+      const sep = item.productUrl.includes('?') ? '&' : '?';
+      const url = `${item.productUrl}${sep}utm_source=tribelife_app&utm_medium=marketplace`;
       await WebBrowser.openBrowserAsync(url, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
       });
     } catch {
       // user dismissed or browser unavailable — silent
     }
-  }, [product.productUrl, product.shopifyId]);
+  }, [item]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -79,7 +85,7 @@ export function EsekCard({ product, fullWidth }: EsekCardProps) {
       onPress={handleOpen}
       style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
       accessibilityRole="button"
-      accessibilityLabel={`Open product: ${product.title}`}
+      accessibilityLabel={`Open product: ${item.title}`}
     >
       <View
         style={[
@@ -96,7 +102,7 @@ export function EsekCard({ product, fullWidth }: EsekCardProps) {
           <View style={[styles.image, { backgroundColor: colors.surface }]} />
         ) : (
           <Image
-            source={{ uri: product.imageUrl }}
+            source={{ uri: item.imageUrl }}
             style={[styles.image, { backgroundColor: colors.surface }]}
             resizeMode="cover"
             onError={() => setImageFailed(true)}
@@ -109,7 +115,7 @@ export function EsekCard({ product, fullWidth }: EsekCardProps) {
             style={[styles.title, { color: colors.text }]}
             numberOfLines={2}
           >
-            {product.title}
+            {item.title}
           </Text>
 
           {/* Price row — $price, plus struck-through compareAtPrice when on sale */}

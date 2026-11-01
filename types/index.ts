@@ -338,6 +338,35 @@ export interface EsekProduct {
   productUrl: string;
 }
 
+// ── Phase 43: combined Marketplace feed ─────────────────────────────────────
+// Mirrors GET /api/marketplace/feed (tribelife-backend/src/routes/marketplace.ts).
+// Discriminated on `source` so tsc only allows shopifyId on Esek items.
+export interface TribelifeMarketplaceItem {
+  source: 'tribelife';
+  id: number;
+  title: string;
+  price: number;
+  compareAtPrice: number | null;
+  imageUrl: string;
+  productUrl: string;
+  soldOut: boolean;
+}
+
+export interface EsekMarketplaceItem {
+  source: 'esek';
+  id: number;
+  shopifyId: number;
+  title: string;
+  price: number;
+  compareAtPrice: number | null;
+  imageUrl: string;
+  handle: string;
+  productUrl: string;
+  soldOut: boolean;
+}
+
+export type MarketplaceItem = TribelifeMarketplaceItem | EsekMarketplaceItem;
+
 // ── Phase 8: caps:invalidated socket event reason union ────────────────────
 // Loose mirror of `tribelife-backend/src/types/capabilities.ts CapsInvalidatedReason`.
 // No shared types package — keep manually in sync (per CONTEXT.md D-01 canonical_refs).

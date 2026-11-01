@@ -17,11 +17,11 @@ import {
   type ListRenderItem,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { esekApi } from '@/services/api';
+import { marketplaceApi } from '@/services/api';
 import { EsekCard } from '@/components/ui/esek/EsekCard';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { COLORS, FONTS, SPACING } from '@/constants';
-import type { EsekProduct } from '@/types';
+import type { MarketplaceItem } from '@/types';
 
 const CARD_GAP = 12;
 
@@ -33,7 +33,7 @@ export function TribeEsekList() {
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
 
-  const [products, setProducts] = useState<EsekProduct[]>([]);
+  const [products, setProducts] = useState<MarketplaceItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -49,7 +49,7 @@ export function TribeEsekList() {
 
       try {
         const cur = mode === 'more' ? (cursor ?? undefined) : undefined;
-        const res = await esekApi.feed(cur);
+        const res = await marketplaceApi.feed(cur);
         if (mode === 'initial') setProducts(res.products);
         else setProducts((prev) => [...prev, ...res.products]);
         setCursor(res.nextCursor);
@@ -76,12 +76,16 @@ export function TribeEsekList() {
     load('more');
   }, [loadingMore, hasMore, cursor, load]);
 
-  const renderItem = useCallback<ListRenderItem<EsekProduct>>(
-    ({ item }) => <EsekCard product={item} fullWidth />,
+  const renderItem = useCallback<ListRenderItem<MarketplaceItem>>(
+    ({ item }) => <EsekCard item={item} fullWidth />,
     [],
   );
 
-  const keyExtractor = useCallback((item: EsekProduct) => String(item.id), []);
+  // Source-prefixed: serial ids from marketplace_items and esek_products can collide.
+  const keyExtractor = useCallback(
+    (item: MarketplaceItem) => `${item.source}:${item.id}`,
+    [],
+  );
 
   const ListFooter = loadingMore ? (
     <View style={styles.footer}>

@@ -1,9 +1,10 @@
-// Phase 33: Tribe Hub — horizontal infinite Esek marketplace carousel.
+// Phase 33/43: Tribe Hub — horizontal infinite Marketplace carousel.
 //
 // Props-less clone of TribeJobsSection. Owns all cursor-pagination state for the
-// Esek feed:
-//   - Initial load on mount: esekApi.feed() → first page
-//   - Right-edge scroll: onEndReached → esekApi.feed(cursor) → append next page
+// combined Marketplace feed (TribeLife items first, then Esek — server order,
+// rendered as-is with no client-side sorting):
+//   - Initial load on mount: marketplaceApi.feed() → first page
+//   - Right-edge scroll: onEndReached → marketplaceApi.feed(cursor) → append next page
 //   - Repeats until hasMore === false (footer spinner stops; no further fetch)
 //
 // Empty behavior differs from Jobs per Locked Decision: when the feed returns no
@@ -22,10 +23,10 @@ import {
   type ListRenderItem,
 } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { esekApi } from '@/services/api';
+import { marketplaceApi } from '@/services/api';
 import { EsekCard, ESEK_CARD_WIDTH } from '@/components/ui/esek/EsekCard';
 import { COLORS, FONTS, SPACING } from '@/constants';
-import type { EsekProduct } from '@/types';
+import type { MarketplaceItem } from '@/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export function TribeEsekSection() {
   const { colors } = useTheme();
 
   // ── Pagination state ──────────────────────────────────────────────────────
-  const [products, setProducts] = useState<EsekProduct[]>([]);
+  const [products, setProducts] = useState<MarketplaceItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -70,7 +71,7 @@ export function TribeEsekSection() {
 
       try {
         const cur = mode === 'more' ? (cursor ?? undefined) : undefined;
-        const res = await esekApi.feed(cur);
+        const res = await marketplaceApi.feed(cur);
         if (mode === 'initial') {
           setProducts(res.products);
         } else {
@@ -105,15 +106,19 @@ export function TribeEsekSection() {
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
-  const renderItem = useCallback<ListRenderItem<EsekProduct>>(
-    ({ item }) => <EsekCard product={item} />,
+  const renderItem = useCallback<ListRenderItem<MarketplaceItem>>(
+    ({ item }) => <EsekCard item={item} />,
     [],
   );
 
-  const keyExtractor = useCallback((item: EsekProduct) => String(item.id), []);
+  // Source-prefixed: serial ids from marketplace_items and esek_products can collide.
+  const keyExtractor = useCallback(
+    (item: MarketplaceItem) => `${item.source}:${item.id}`,
+    [],
+  );
 
   const getItemLayout = useCallback(
-    (_data: ArrayLike<EsekProduct> | null | undefined, index: number) => ({
+    (_data: ArrayLike<MarketplaceItem> | null | undefined, index: number) => ({
       length: ESEK_CARD_WIDTH + CARD_GAP,
       offset: (ESEK_CARD_WIDTH + CARD_GAP) * index,
       index,

@@ -17,6 +17,7 @@ import type {
   NewsArticle,
   JobPosting,
   EsekProduct,
+  MarketplaceItem,
   ReactionGroup,
   ChatsListResponse,
   SearchResponse,
@@ -891,6 +892,21 @@ export const esekApi = {
     request<{ ok: true }>('/api/marketplace/esek/click', {
       method: 'POST',
       body: JSON.stringify({ shopifyId }),
+    }),
+};
+
+// Phase 43: combined Marketplace feed — TribeLife (Etsy) items first, then Esek.
+// Server owns ordering; the client renders in array order.
+export const marketplaceApi = {
+  feed: (cursor?: string) =>
+    request<{ products: MarketplaceItem[]; hasMore: boolean; nextCursor: string | null }>(
+      `/api/marketplace/feed${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`
+    ),
+  // Fire-and-forget attribution for TribeLife items (server sets marketplace: 'tribelife').
+  trackTribelifeClick: (itemId: number) =>
+    request<{ ok: true }>('/api/marketplace/tribelife/click', {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
     }),
 };
 
