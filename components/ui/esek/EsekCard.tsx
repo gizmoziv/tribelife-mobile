@@ -8,7 +8,7 @@
 //   - Title below (2 lines max, matches NewsCard headline)
 //   - Price row at the bottom: $price, plus struck-through compareAtPrice on sale
 //   - Tap → open product page in in-app WebBrowser (PAGE_SHEET)
-//   - TribeLife items get a "TribeLife" pill (top-left of the image); sold-out
+//   - TribeLife items get a "tribelife" pill (top-left of the image); sold-out
 //     items get a "Sold out" pill (top-right) and dimmed content, but stay tappable.
 //     Badges are absolute overlays, so card height equals an Esek card's.
 import React, { useCallback, useState } from 'react';
@@ -31,7 +31,7 @@ import type { MarketplaceItem } from '@/types';
 // ── Badges / sold-out ─────────────────────────────────────────────────────────
 
 const SOLD_OUT_OPACITY = 0.5;
-const TRIBELIFE_BADGE_LABEL = 'TribeLife';
+const TRIBELIFE_BADGE_LABEL = 'tribelife';
 const SOLD_OUT_BADGE_LABEL = 'Sold out';
 
 // ── Sizing ────────────────────────────────────────────────────────────────────
