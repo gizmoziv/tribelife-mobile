@@ -23,6 +23,7 @@ import { useChatsListRefStore } from '@/store/chatsListRefStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { notificationsApi, globeApi } from '@/services/api';
 import { getSocket, connectSocket, onChatRemoved } from '@/services/socket';
+import { navTrace } from '@/services/navTrace';
 import { GradientTabIcon } from '@/components/ui/GradientTabIcon';
 import { CandleHeaderChip } from '@/components/ui/tribe/CandleHeaderChip';
 import { COLORS, FONTS, SHADOWS, RADIUS, SPACING } from '@/constants';
@@ -94,6 +95,12 @@ export default function AppLayout() {
   const chatsHasUnread = useChatsStore(selectChatsHasUnread);
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+
+  // [nav-trace] temporary: records every pathname change (and the mount's
+  // initial path) so a device log shows exactly which route won, and when.
+  useEffect(() => {
+    navTrace('(app) pathname', { pathname });
+  }, [pathname]);
 
   useEffect(() => {
     if (isLoading) return;

@@ -19,6 +19,11 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   summary: NotificationSummary;
+  // False until setSummary() has run at least once. `summary` starts as
+  // EMPTY_SUMMARY (matches: 0), which is indistinguishable from a real server
+  // zero — consumers that compare against the previous value (the foreground
+  // Beacon > Matches bump) must check this before trusting the baseline.
+  summaryLoaded: boolean;
   setNotifications: (notifications: Notification[], unreadCount: number) => void;
   setSummary: (summary: NotificationSummary) => void;
   addNotification: (notification: Notification) => void;
@@ -50,11 +55,12 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   unreadCount: 0,
   summary: EMPTY_SUMMARY,
+  summaryLoaded: false,
 
   setNotifications: (notifications, unreadCount) =>
     set({ notifications, unreadCount }),
 
-  setSummary: (summary) => set({ summary }),
+  setSummary: (summary) => set({ summary, summaryLoaded: true }),
 
   addNotification: (notification) =>
     set((state) => {

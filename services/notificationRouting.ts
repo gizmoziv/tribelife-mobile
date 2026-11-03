@@ -2,6 +2,7 @@ import type { ImperativeRouter } from 'expo-router';
 import type { ChatNotification } from '@/types';
 import { notificationsApi } from '@/services/api';
 import { useNotificationStore } from '@/store/notificationStore';
+import { markNotificationTap } from '@/services/notificationTapGuard';
 
 // Post-login landing decision. Both cold-start (restoreSession) and re-login
 // (welcome.tsx) call this so unread daily-matcher results are surfaced even
@@ -39,6 +40,9 @@ export function routeChatNotificationTap(
   data: ChatNotification,
   router: Pick<ImperativeRouter, 'navigate' | 'push'>,
 ): void {
+  // A tap is authoritative: stamp it before navigating so passive foreground
+  // navigations (Beacon > Matches bump, post-login landing) stand down.
+  markNotificationTap('routeChatNotificationTap');
   // Phase 14 D-04: when the payload carries a messageId, pass it as
   // `aroundMessageId` so the destination chat screen scrolls to and flashes
   // the triggering message instead of opening at the newest message.

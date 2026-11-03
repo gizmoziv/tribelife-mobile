@@ -43,6 +43,7 @@ import { router } from 'expo-router';
 import { auth } from './api';
 import { adaptChatNotification } from './chatNotificationAdapter';
 import { routeChatNotificationTap } from './notificationRouting';
+import { markNotificationTap } from './notificationTapGuard';
 
 const IS_ANDROID = Platform.OS === 'android';
 
@@ -223,6 +224,9 @@ export async function consumeInitialFcmTap(): Promise<void> {
   try {
     const initial = await notifee.getInitialNotification();
     if (initial?.notification?.data) {
+      // Stamp the tap before routing so the passive foreground Beacon bump /
+      // post-login landing replace stand down (see notificationTapGuard.ts).
+      markNotificationTap('fcm-initial');
       routeFcmTap(initial.notification.data as Record<string, unknown>);
     }
   } catch (err) {

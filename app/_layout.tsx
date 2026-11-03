@@ -30,6 +30,8 @@ import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDi
 import { useChatsStore } from '@/store/chatsStore';
 import { adaptChatNotification } from '@/services/chatNotificationAdapter';
 import { routeChatNotificationTap, getPostLoginLandingRoute } from '@/services/notificationRouting';
+import { markNotificationTap, wasNotificationTapRecent } from '@/services/notificationTapGuard';
+import { navTrace } from '@/services/navTrace';
 import {
   registerForPushNotifications,
   sendPushTokenToServer,
@@ -41,6 +43,10 @@ import { ForceUpdateModal } from '@/components/ui/ForceUpdateModal';
 import { AccessBlockScreen } from '@/components/ui/AccessBlockScreen';
 
 SplashScreen.preventAutoHideAsync();
+
+// [nav-trace] temporary: proves WHEN the JS bundle is evaluated relative to
+// AppState / notification events on a cold launch.
+navTrace('module-load app/_layout');
 
 function extractAndStoreAttribution(url: string) {
   try {
@@ -177,11 +183,65 @@ function refreshBellSummarySoon(): void {
   }, 800);
 }
 
+// ── Cold-start navigation gate ───────────────────────────────────────────────
+// restoreSession() used to fire its cold-start navigations (tapped chat,
+// beacon_match, news_breaking, org_invite, pending group invite, Android FCM
+// consume) from a fixed setTimeout(…, 500). If the first version check was
+// slower than that, no navigator was mounted yet and router.push/navigate threw
+// ("Attempted to navigate before mounting the Root Layout component") from a
+// timer callback — an uncaught JS exception.
+//
+// Now: navigations are queued until the root <Stack> is mounted AND the auth
+// restore finished (see the readiness effect in RootLayoutInner), then run
+// after a short settle window inside try/catch. The settle window lets Index's
+// <Redirect> REPLACE reach the FIFO routing queue first so the tap destination
+// is always applied LAST (and so wins), exactly as the old 500ms delay did on
+// the happy path.
+const COLD_START_NAV_SETTLE_MS = 500;
+const COLD_START_NAV_RETRY_MS = 300;
+const COLD_START_NAV_MAX_ATTEMPTS = 3;
+
+function runColdStartNav(
+  label: string,
+  nav: () => void,
+  attemptsLeft: number = COLD_START_NAV_MAX_ATTEMPTS,
+): void {
+  try {
+    nav();
+    navTrace('coldStartNav ran', { label });
+  } catch (err) {
+    // A not-ready router throws before enqueuing anything, so retrying cannot
+    // double-navigate. Give up quietly after the last attempt — never crash.
+    navTrace('coldStartNav threw', { label, attemptsLeft, error: String(err) });
+    if (attemptsLeft > 1) {
+      setTimeout(() => runColdStartNav(label, nav, attemptsLeft - 1), COLD_START_NAV_RETRY_MS);
+    }
+  }
+}
+
 function RootLayoutInner() {
   const { isDark } = useTheme();
-  const { token, user, setAuth, setLoading, isAuthenticated, accessStatus } = useAuthStore();
+  const { token, user, setAuth, setLoading, isAuthenticated, isLoading, accessStatus } = useAuthStore();
   const { incrementUnread, addNotification, markOneRead } = useNotificationStore();
   const router = useRouter();
+
+  // Cold-start navigations waiting for the navigator (see gate above). Each
+  // entry arms the settle timer when flushed. Refs, not state: restoreSession
+  // runs once from a mount-only effect and must see live values.
+  const pendingNav = useRef<Array<() => void>>([]);
+  const navReady = useRef(false);
+
+  function scheduleColdStartNav(label: string, nav: () => void): void {
+    const arm = () => {
+      setTimeout(() => runColdStartNav(label, nav), COLD_START_NAV_SETTLE_MS);
+    };
+    if (navReady.current) {
+      arm();
+      return;
+    }
+    navTrace('coldStartNav queued (navigator not ready)', { label });
+    pendingNav.current.push(arm);
+  }
 
   const [fontsLoaded] = useFonts({
     PlusJakartaSans_300Light,
@@ -241,6 +301,7 @@ function RootLayoutInner() {
           const { user, needsOnboarding, capabilities } = meResponse;
           const resolvedStatus = extractAccessStatus(meResponse);
           await setAuth(token, user, capabilities, needsOnboarding, resolvedStatus);
+          navTrace('restoreSession after setAuth', { needsOnboarding, accessStatus: resolvedStatus });
 
           // Tracks whether a deep link (pending group invite or cold-start push
           // tap) consumed the initial nav slot. If still false after both
@@ -252,7 +313,7 @@ function RootLayoutInner() {
           const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
           if (pendingGroupSlug) {
             await AsyncStorage.removeItem('pendingGroupSlug');
-            setTimeout(() => router.push(`/g/${pendingGroupSlug}`), 500);
+            scheduleColdStartNav('pendingGroupInvite', () => router.push(`/g/${pendingGroupSlug}`));
             deepLinkHandled = true;
           }
 
@@ -303,7 +364,15 @@ function RootLayoutInner() {
 
           // Handle cold-start notification (app was killed, user tapped notification)
           const lastResponse = await Notifications.getLastNotificationResponseAsync();
+          navTrace('restoreSession after getLastNotificationResponseAsync', {
+            hasResponse: !!lastResponse,
+            type: lastResponse?.notification.request.content.data?.type ?? null,
+            source: lastResponse?.notification.request.content.data?.source ?? null,
+          });
           if (lastResponse) {
+            // A tap is authoritative: stamp it FIRST so the passive foreground
+            // Beacon bump / post-login landing replace stand down.
+            markNotificationTap('restoreSession cold-start');
             const nData = lastResponse.notification.request.content.data;
             // Auto-mark-as-read the tapped notification (industry standard: WhatsApp/iMessage)
             const notifId = typeof nData?.notificationId === 'number'
@@ -318,22 +387,22 @@ function RootLayoutInner() {
             // chat shapes. Non-chat types fall through to their existing branches.
             const adapted = adaptChatNotification(nData);
             if (adapted) {
-              setTimeout(() => routeChatNotificationTap(adapted, router), 500);
+              scheduleColdStartNav('chatTap', () => routeChatNotificationTap(adapted, router));
               deepLinkHandled = true;
             } else if (nData?.type === 'beacon_match') {
-              setTimeout(() => router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } }), 500);
+              scheduleColdStartNav('beaconMatchTap', () => router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } }));
               deepLinkHandled = true;
             } else if (nData?.type === 'news_breaking') {
-              setTimeout(() => router.push({
+              scheduleColdStartNav('newsBreakingTap', () => router.push({
                 pathname: '/(app)/tribe',
                 params: nData?.articleId ? { highlightArticleId: String(nData.articleId) } : {},
-              }), 500);
+              }));
               deepLinkHandled = true;
             } else if (nData?.type === 'org_invite' && nData?.token) {
-              setTimeout(() => router.push({
+              scheduleColdStartNav('orgInviteTap', () => router.push({
                 pathname: '/org/invite/[token]',
                 params: { token: String(nData.token) },
-              }), 500);
+              }));
               deepLinkHandled = true;
             }
           }
@@ -343,9 +412,9 @@ function RootLayoutInner() {
           // up in getLastNotificationResponseAsync above. Consume notify-kit's
           // persisted initial notification and deep-link into the conversation.
           if (Platform.OS === 'android') {
-            setTimeout(() => {
-              consumeAndroidInitialFcmTap();
-            }, 500);
+            scheduleColdStartNav('androidInitialFcmTap', () => {
+              consumeAndroidInitialFcmTap().catch(() => {});
+            });
           }
 
           // No deep link took the user somewhere specific — if there's an
@@ -354,8 +423,17 @@ function RootLayoutInner() {
           // re-login flow so both entry paths behave the same.
           if (!deepLinkHandled) {
             getPostLoginLandingRoute().then((landing) => {
-              if (landing.params?.tab === 'matches') {
+              if (landing.params?.tab !== 'matches') return;
+              // A notification tap (e.g. the Android FCM consume, which this
+              // branch cannot see) is the user's explicit intent — never
+              // override it with the passive Matches landing.
+              const tapRecent = wasNotificationTapRecent();
+              navTrace('restoreSession landing-replace decision', { tapRecent, replaced: !tapRecent });
+              if (tapRecent) return;
+              try {
                 router.replace(landing);
+              } catch {
+                // navigator not mounted yet — same outcome as before (landing skipped), minus the unhandled rejection
               }
             });
           }
@@ -440,6 +518,13 @@ function RootLayoutInner() {
   useEffect(() => {
     function handleNotificationResponse(response: Notifications.NotificationResponse) {
       const data = response.notification.request.content.data;
+      navTrace('handleNotificationResponse', {
+        type: data?.type ?? null,
+        source: data?.source ?? null,
+      });
+      // A tap is authoritative: stamp it FIRST so the passive foreground
+      // Beacon bump / post-login landing replace stand down (all branches).
+      markNotificationTap('handleNotificationResponse');
       // Auto-mark-as-read the tapped notification
       const notifId = typeof data?.notificationId === 'number'
         ? data.notificationId
@@ -483,6 +568,30 @@ function RootLayoutInner() {
     }
   }, [fontsLoaded, versionResult]);
 
+  // ── Cold-start navigation gate: readiness ──────────────────────────────────
+  // True exactly when the render path below reaches the root <Stack> (fonts
+  // loaded, first version check resolved and not force_update, access gate not
+  // blocking) — the navigator mounts in this same commit, and child effects run
+  // before this parent effect. Plus the auth restore must have finished
+  // (isLoading false) so Index has resolved its redirect. Re-evaluated on every
+  // change so a later force_update / access block (Stack unmounts) closes the
+  // gate again. Queued navigations flush the moment the gate opens.
+  const stackMounted =
+    fontsLoaded &&
+    versionResult !== null &&
+    versionResult.status !== 'force_update' &&
+    !(isAuthenticated && (accessStatus === 'pending' || accessStatus === 'rejected'));
+
+  useEffect(() => {
+    const ready = stackMounted && !isLoading;
+    navReady.current = ready;
+    navTrace('coldStartNav readiness', { ready, queued: pendingNav.current.length });
+    if (!ready) return;
+    const jobs = pendingNav.current;
+    pendingNav.current = [];
+    jobs.forEach((arm) => arm());
+  }, [stackMounted, isLoading]);
+
   useEffect(() => {
     // Background → foreground: refresh the full session (user + capabilities)
     // so tier rule changes made server-side (RevenueCat upgrade, admin role
@@ -492,6 +601,7 @@ function RootLayoutInner() {
     // Note: AppState.addEventListener('change') does NOT fire a synthetic
     // 'active' on registration — only on real transitions.
     const handleChange = async (next: AppStateStatus) => {
+      navTrace('appState change', { next });
       // 260621-un7: single AppState listener also drives the backend
       // active-viewing foreground state. Backgrounding ('background' or
       // 'inactive') immediately resumes push for the room on screen (backend
@@ -517,10 +627,31 @@ function RootLayoutInner() {
         // daily matcher ran while the user was away), bump them to the
         // Matches tab. Only-on-growth gate avoids yanking users who already
         // saw the count and just toggled away briefly.
-        const prevBeaconMatches = useNotificationStore.getState().summary.matches;
+        //
+        // Two guards keep this passive bump from hijacking the user:
+        //  - baseline: the in-memory summary starts at matches 0 after a
+        //    restart, so "growth" against a never-loaded baseline is just "the
+        //    user has any unread match". Only compare once a real summary has
+        //    been stored before this foreground; on first load just store it.
+        //  - tap: a notification tap (chat/beacon/news/invite) is the user's
+        //    explicit destination and navigates synchronously, while this
+        //    decision resolves after an HTTP round trip — it would land second
+        //    and steal focus to Beacon. Stand down if a tap navigated recently.
+        const baseline = useNotificationStore.getState();
+        const prevBeaconMatches = baseline.summary.matches;
+        const summaryLoaded = baseline.summaryLoaded;
         notificationsApi.summary().then((s) => {
           useNotificationStore.getState().setSummary(s);
-          if (s.matches > prevBeaconMatches && s.matches > 0) {
+          const tapRecent = wasNotificationTapRecent();
+          const shouldBump = summaryLoaded && !tapRecent && s.matches > prevBeaconMatches && s.matches > 0;
+          navTrace('appState bump decision', {
+            prevBeaconMatches,
+            matches: s.matches,
+            summaryLoaded,
+            tapRecent,
+            pushed: shouldBump,
+          });
+          if (shouldBump) {
             router.push({ pathname: '/(app)/beacon', params: { tab: 'matches' } });
           }
         }).catch(() => {});
