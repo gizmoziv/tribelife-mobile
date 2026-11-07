@@ -19,10 +19,9 @@ import { useAuthStore } from '@/store/authStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { introApi, ApiError } from '@/services/api';
-import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { IntroIdeasSheet } from '@/components/ui/chat/IntroIdeasSheet';
-import { COLORS, FONTS, SPACING } from '@/constants';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import {
   INTRO_MIN_LENGTH,
   INTRO_MAX_LENGTH,
@@ -68,6 +67,7 @@ export function IntroGate() {
   );
 
   const len = text.trim().length;
+  const postDisabled = len < INTRO_MIN_LENGTH || submitting;
 
   const markPosted = () => {
     useAuthStore.getState().updateUser({ hasPostedInChat: true });
@@ -116,11 +116,11 @@ export function IntroGate() {
         pointerEvents="box-none"
         style={[styles.center, { paddingBottom: tabBarSpace }]}
       >
-        <GlassCard style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.borderGlow }]}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, { color: colors.text }]}>Introduce yourself</Text>
             <Pressable
-              style={[styles.infoButton, { borderColor: colors.border }]}
+              style={[styles.infoButton, { backgroundColor: colors.primary }]}
               onPress={() => {
                 Keyboard.dismiss();
                 setIdeasOpen(true);
@@ -129,7 +129,7 @@ export function IntroGate() {
               accessibilityLabel="Ideas for what to write"
               hitSlop={10}
             >
-              <Text style={[styles.infoText, { color: colors.textMuted }]}>i</Text>
+              <Text style={styles.infoText}>i</Text>
             </Pressable>
           </View>
           <Text style={[styles.body, { color: colors.textMuted }]}>
@@ -164,13 +164,18 @@ export function IntroGate() {
             </Text>
           </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <PillButton
-            title={error ? 'Try again' : 'Post intro'}
-            onPress={onSubmit}
-            disabled={len < INTRO_MIN_LENGTH || submitting}
-            loading={submitting}
-          />
-        </GlassCard>
+          {/* PillButton fades itself to 50% when disabled, which washes out on a light
+              card; a solid indigo backing keeps it a readable, clearly-disabled button. */}
+          <View style={[styles.postWrap, postDisabled && styles.postWrapDisabled]}>
+            <PillButton
+              title={error ? 'Try again' : 'Post intro'}
+              onPress={onSubmit}
+              disabled={len < INTRO_MIN_LENGTH || submitting}
+              loading={submitting}
+              textStyle={styles.postText}
+            />
+          </View>
+        </View>
       </KeyboardAvoidingView>
       <IntroIdeasSheet visible={ideasOpen} onClose={() => setIdeasOpen(false)} />
     </View>
@@ -187,13 +192,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.sm,
   },
   card: {
     width: '100%',
-    maxWidth: 420,
-    padding: SPACING.lg,
+    padding: SPACING.md,
     gap: SPACING.sm,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    ...SHADOWS.lg,
   },
   titleRow: {
     flexDirection: 'row',
@@ -201,16 +208,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   infoButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   infoText: {
-    fontSize: 13,
-    fontFamily: FONTS.semiBold,
+    fontSize: 14,
+    fontFamily: FONTS.bold,
+    color: '#FFFFFF',
   },
   title: {
     fontSize: 20,
@@ -247,6 +254,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FONTS.medium,
     color: COLORS.error,
+  },
+  postWrap: {
+    borderRadius: 9999,
+  },
+  postWrapDisabled: {
+    backgroundColor: '#3730A3',
+  },
+  postText: {
+    fontFamily: FONTS.bold,
   },
 });
 
