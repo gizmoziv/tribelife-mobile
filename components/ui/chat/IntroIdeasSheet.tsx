@@ -31,7 +31,7 @@ export function IntroIdeasSheet({ visible, onClose }: IntroIdeasSheetProps) {
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Card — stopPropagation so tapping the card doesn't close */}
         <Pressable
-          style={[styles.card, { backgroundColor: colors.background }]}
+          style={[styles.card, { backgroundColor: colors.background, borderColor: colors.borderGlow }]}
           onPress={(e) => e.stopPropagation()}
         >
           <Text style={[styles.title, { color: colors.text }]}>Ideas for your intro</Text>
@@ -67,6 +67,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 340,
     borderRadius: RADIUS.lg,
+    borderWidth: 1,
     padding: SPACING.lg,
     gap: SPACING.sm,
   },
