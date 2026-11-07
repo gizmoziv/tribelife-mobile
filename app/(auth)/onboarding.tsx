@@ -24,6 +24,7 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { GlowBadge } from '@/components/ui/GlowBadge';
+import { NotYouLogout } from '@/components/ui/NotYouLogout';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
 
 function GlobeIcon() {
@@ -818,6 +819,7 @@ export default function OnboardingScreen() {
               </View>
             </AnimatedEntry>
           )}
+          <NotYouLogout />
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>

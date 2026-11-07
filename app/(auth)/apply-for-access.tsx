@@ -10,6 +10,7 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { GlassInput } from '@/components/ui/GlassInput';
 import { PillButton } from '@/components/ui/PillButton';
+import { NotYouLogout } from '@/components/ui/NotYouLogout';
 import { SocialsRepeater, isSocialEntryComplete } from '@/components/ui/SocialsRepeater';
 
 const REASON_MAX_LENGTH = 1000;
@@ -176,6 +177,7 @@ export default function ApplyForAccessScreen() {
               style={styles.submitButton}
             />
           </AnimatedEntry>
+          <NotYouLogout />
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>

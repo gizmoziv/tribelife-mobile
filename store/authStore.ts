@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import type { User, Capabilities, AccessStatus } from '@/types';
 import { setToken, clearToken, auth, extractAccessStatus } from '@/services/api';
 import { purgeAllChatDrafts } from '@/utils/chatDraft';
@@ -92,6 +93,15 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await clearToken();
+    // Best-effort: forget the cached Google account so the next sign-in shows the
+    // account chooser instead of silently reusing the previous (maybe wrong) one.
+    // Must never block or fail the logout (not signed in with Google, no Play
+    // Services, native module unavailable, ...).
+    try {
+      await GoogleSignin.signOut();
+    } catch {
+      /* ignore */
+    }
     // Shared devices; the next account must not see or accidentally send the
     // previous account's unsent text. The generation bump inside
     // purgeAllChatDrafts blocks the unmount flush of chat screens that are
