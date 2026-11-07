@@ -138,7 +138,11 @@ export default function GroupInfoScreen() {
   const handleUploadIcon = useCallback(async () => {
     if (!isAdmin) return;
     try {
-      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      // Android uses the system photo picker (no permission needed); only iOS asks.
+      const permResult =
+        Platform.OS === 'ios'
+          ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+          : { granted: true };
       if (!permResult.granted) {
         Alert.alert('Permission needed', 'Please allow access to your photo library to upload a group icon.');
         return;

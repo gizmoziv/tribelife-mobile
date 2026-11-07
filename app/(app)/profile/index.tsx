@@ -460,8 +460,11 @@ export default function ProfileScreen() {
 
   async function handleAvatarUpload() {
     try {
+      // Android uses the system photo picker (no permission needed); only iOS asks.
       const permResult =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+        Platform.OS === 'ios'
+          ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+          : { granted: true };
       if (!permResult.granted) {
         Alert.alert(
           'Permission needed',

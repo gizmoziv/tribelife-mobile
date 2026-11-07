@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { TouchableOpacity, Alert, StyleSheet, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as DocumentPicker from 'expo-document-picker';
@@ -52,7 +52,11 @@ async function compressImages(assets: ImagePicker.ImagePickerAsset[]): Promise<s
 }
 
 async function pickFromLibrary(onImagesSelected: (uris: string[]) => void) {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  // Android uses the system photo picker (no permission needed); only iOS asks.
+  const { status } =
+    Platform.OS === 'ios'
+      ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+      : { status: 'granted' };
   if (status !== 'granted') {
     Alert.alert('Permission Needed', 'Please allow access to your photo library in Settings.');
     return;
