@@ -1,7 +1,7 @@
 // Phase 44 intro gate — an absolute overlay inside ChatsScreen, deliberately not a
 // modal component, so the absolute tab bar stays tappable (D-01). Gate only on
 // hasPostedInChat === false (D-02, D-12).
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useChatsStore } from '@/store/chatsStore';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
-import { introApi } from '@/services/api';
+import { introApi, ApiError } from '@/services/api';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { COLORS, FONTS, SPACING } from '@/constants';
@@ -27,6 +27,22 @@ import {
 } from '@/constants/intro';
 
 const GENERIC_ERROR = "Couldn't post your intro. Check your connection and try again.";
+const RATE_LIMIT_ERROR = 'Please wait a moment and try again.';
+
+type IntroErrorResult = { kind: 'posted' } | { kind: 'error'; message: string };
+
+// Maps a failed POST /api/intro to either success (a racing post already landed,
+// D-05) or an inline message. The server's text is shown only for 400/403/422.
+function classifyIntroError(err: unknown): IntroErrorResult {
+  if (!(err instanceof ApiError)) return { kind: 'error', message: GENERIC_ERROR };
+  const code = (err.data as { code?: unknown } | null | undefined)?.code;
+  if (err.status === 409 || code === 'already_posted') return { kind: 'posted' };
+  if (err.status === 400 || err.status === 403 || err.status === 422) {
+    return { kind: 'error', message: err.message || GENERIC_ERROR };
+  }
+  if (err.status === 429) return { kind: 'error', message: RATE_LIMIT_ERROR };
+  return { kind: 'error', message: GENERIC_ERROR };
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -37,6 +53,7 @@ export function IntroGate() {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
 
   const len = text.trim().length;
 
@@ -48,17 +65,26 @@ export function IntroGate() {
   };
 
   const onSubmit = async () => {
+    if (inFlightRef.current) return;
     const content = text.trim();
     if (content.length < INTRO_MIN_LENGTH) return;
+    inFlightRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
       await introApi.post(content);
       markPosted();
-    } catch {
-      // Keep the typed text so the user can retry (D-03).
-      setError(GENERIC_ERROR);
+    } catch (err) {
+      const result = classifyIntroError(err);
+      if (result.kind === 'posted') {
+        // A racing second device or an earlier tap already succeeded (D-05).
+        markPosted();
+      } else {
+        // Keep the typed text so the user can retry (D-03).
+        setError(result.message);
+      }
     } finally {
+      inFlightRef.current = false;
       setSubmitting(false);
     }
   };
@@ -97,7 +123,10 @@ export function IntroGate() {
             placeholder={INTRO_PLACEHOLDER}
             placeholderTextColor={colors.textMuted}
             value={text}
-            onChangeText={setText}
+            onChangeText={(v) => {
+              setText(v);
+              if (error) setError(null);
+            }}
             textAlignVertical="top"
           />
           <View style={styles.counterRow}>

@@ -72,10 +72,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       // only user/capabilities — this is the mechanism D-17's foreground
       // unlock depends on. Destructuring here would silently drop accessStatus.
       const meResponse = await auth.me();
-      set({
-        user: meResponse.user,
-        capabilities: meResponse.capabilities,
-        accessStatus: extractAccessStatus(meResponse),
+      // Phase 44 D-11: the server never reverts hasPostedInChat, so a /me that
+      // started before the intro committed must not flip it back (research
+      // Pitfall 3). Same-user only, so a shared device never inherits another
+      // account's flag.
+      set((state) => {
+        const keepPosted =
+          state.user?.id === meResponse.user.id && state.user?.hasPostedInChat === true;
+        return {
+          user: keepPosted ? { ...meResponse.user, hasPostedInChat: true } : meResponse.user,
+          capabilities: meResponse.capabilities,
+          accessStatus: extractAccessStatus(meResponse),
+        };
       });
     } catch (err) {
       console.warn('[session] refresh failed', err);
