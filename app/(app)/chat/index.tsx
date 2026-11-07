@@ -109,9 +109,17 @@ const DRAFT_LIST_REREAD_MS = 800;
 
 // Phase 44: the intro gate overlays the (unchanged) Chats screen body.
 export default function ChatsScreen() {
+  const gated = useAuthStore((s) => s.user?.hasPostedInChat) === false;
   return (
     <View style={styles.gateHost}>
-      <ChatsScreenBody />
+      {/* Screen readers skip the dimmed list while the intro card is up */}
+      <View
+        style={styles.gateHost}
+        importantForAccessibility={gated ? 'no-hide-descendants' : 'auto'}
+        accessibilityElementsHidden={gated}
+      >
+        <ChatsScreenBody />
+      </View>
       <IntroGate />
     </View>
   );

@@ -1,17 +1,19 @@
 // Phase 44 intro gate — an absolute overlay inside ChatsScreen, deliberately not a
 // modal component, so the absolute tab bar stays tappable (D-01). Gate only on
 // hasPostedInChat === false (D-02, D-12).
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   Pressable,
   Platform,
+  Keyboard,
   StyleSheet,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { useChatsStore } from '@/store/chatsStore';
@@ -19,6 +21,7 @@ import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { introApi, ApiError } from '@/services/api';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
+import { IntroIdeasSheet } from '@/components/ui/chat/IntroIdeasSheet';
 import { COLORS, FONTS, SPACING } from '@/constants';
 import {
   INTRO_MIN_LENGTH,
@@ -53,7 +56,16 @@ export function IntroGate() {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ideasOpen, setIdeasOpen] = useState(false);
   const inFlightRef = useRef(false);
+
+  // Leaving the Chats tab closes the keyboard and the ideas sheet (research Pitfall 6).
+  useFocusEffect(
+    useCallback(() => () => {
+      Keyboard.dismiss();
+      setIdeasOpen(false);
+    }, []),
+  );
 
   const len = text.trim().length;
 
@@ -92,7 +104,7 @@ export function IntroGate() {
   if (hasPosted !== false) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View style={StyleSheet.absoluteFill} accessibilityViewIsModal>
       {/* Scrim — swallows touches so the dimmed list underneath is unreachable */}
       <Pressable
         style={[StyleSheet.absoluteFill, styles.scrim]}
@@ -105,7 +117,21 @@ export function IntroGate() {
         style={[styles.center, { paddingBottom: tabBarSpace }]}
       >
         <GlassCard style={styles.card}>
-          <Text style={[styles.title, { color: colors.text }]}>Introduce yourself</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.text }]}>Introduce yourself</Text>
+            <Pressable
+              style={[styles.infoButton, { borderColor: colors.border }]}
+              onPress={() => {
+                Keyboard.dismiss();
+                setIdeasOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Ideas for what to write"
+              hitSlop={10}
+            >
+              <Text style={[styles.infoText, { color: colors.textMuted }]}>i</Text>
+            </Pressable>
+          </View>
           <Text style={[styles.body, { color: colors.textMuted }]}>
             Post a short hello to your Local Chat to start chatting.
           </Text>
@@ -146,6 +172,7 @@ export function IntroGate() {
           />
         </GlassCard>
       </KeyboardAvoidingView>
+      <IntroIdeasSheet visible={ideasOpen} onClose={() => setIdeasOpen(false)} />
     </View>
   );
 }
@@ -167,6 +194,23 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     padding: SPACING.lg,
     gap: SPACING.sm,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  infoButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoText: {
+    fontSize: 13,
+    fontFamily: FONTS.semiBold,
   },
   title: {
     fontSize: 20,
