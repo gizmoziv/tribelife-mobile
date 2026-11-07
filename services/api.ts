@@ -26,6 +26,7 @@ import type {
   LinkPreview,
   AccessStatus,
   SocialEntry,
+  IntroPostResponse,
 } from '@/types';
 
 const TOKEN_KEY = 'tribelife_jwt';
@@ -466,6 +467,15 @@ export const chats = {
   // Phase 20: fetch archived conversations (dm + group only).
   listArchived: () =>
     request<ChatsListResponse>('/api/chats/archived'),
+};
+
+// ── Phase 44: Chats intro gate ─────────────────────────────────────────────
+export const introApi = {
+  post: (content: string) =>
+    request<IntroPostResponse>('/api/intro', {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
 };
 
 // ── Beacons ────────────────────────────────────────────────────────────────

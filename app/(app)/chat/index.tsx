@@ -69,6 +69,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
+import { IntroGate } from '@/components/ui/chat/IntroGate';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
@@ -106,7 +107,17 @@ function BellOffIcon({ size = 16, color = '#7A8BA8' }: { size?: number; color?: 
 // native pop animation — i.e. after this screen's own focus event.
 const DRAFT_LIST_REREAD_MS = 800;
 
+// Phase 44: the intro gate overlays the (unchanged) Chats screen body.
 export default function ChatsScreen() {
+  return (
+    <View style={styles.gateHost}>
+      <ChatsScreenBody />
+      <IntroGate />
+    </View>
+  );
+}
+
+function ChatsScreenBody() {
   const { colors } = useTheme();
   const router = useRouter();
   // Phase 10 D-07: useChatsStore is the single source of truth for the
@@ -2219,6 +2230,7 @@ function formatTime(iso: string): string {
 }
 
 const styles = StyleSheet.create({
+  gateHost: { flex: 1 },
   container: { flex: 1 },
   toggleContainer: {
     paddingHorizontal: SPACING.page,

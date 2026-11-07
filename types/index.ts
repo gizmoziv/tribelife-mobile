@@ -32,6 +32,14 @@ export interface User {
   bio: string | null;
   // Phase 35: optional — absent on old server builds. null/absent = not gated.
   accessStatus?: AccessStatus | null;
+  // Phase 44 (D-10/D-18): optional — absent on old server builds. Gate ONLY on === false; absent never gates.
+  hasPostedInChat?: boolean;
+}
+
+export interface IntroPostResponse {
+  ok: true;
+  hasPostedInChat: true;
+  message: { id: number; roomId: string; createdAt: string | null };
 }
 
 export interface ReactionGroup {
