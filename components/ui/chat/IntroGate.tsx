@@ -28,7 +28,8 @@ import {
   INTRO_PLACEHOLDER,
 } from '@/constants/intro';
 
-const GENERIC_ERROR = "Couldn't post your intro. Check your connection and try again.";
+const GENERIC_ERROR =
+  "Couldn't post your intro. Check your connection and try again.";
 const RATE_LIMIT_ERROR = 'Please wait a moment and try again.';
 
 type IntroErrorResult = { kind: 'posted' } | { kind: 'error'; message: string };
@@ -36,9 +37,11 @@ type IntroErrorResult = { kind: 'posted' } | { kind: 'error'; message: string };
 // Maps a failed POST /api/intro to either success (a racing post already landed,
 // D-05) or an inline message. The server's text is shown only for 400/403/422.
 function classifyIntroError(err: unknown): IntroErrorResult {
-  if (!(err instanceof ApiError)) return { kind: 'error', message: GENERIC_ERROR };
+  if (!(err instanceof ApiError))
+    return { kind: 'error', message: GENERIC_ERROR };
   const code = (err.data as { code?: unknown } | null | undefined)?.code;
-  if (err.status === 409 || code === 'already_posted') return { kind: 'posted' };
+  if (err.status === 409 || code === 'already_posted')
+    return { kind: 'posted' };
   if (err.status === 400 || err.status === 403 || err.status === 422) {
     return { kind: 'error', message: err.message || GENERIC_ERROR };
   }
@@ -60,10 +63,13 @@ export function IntroGate() {
 
   // Leaving the Chats tab closes the keyboard and the ideas sheet (research Pitfall 6).
   useFocusEffect(
-    useCallback(() => () => {
-      Keyboard.dismiss();
-      setIdeasOpen(false);
-    }, []),
+    useCallback(
+      () => () => {
+        Keyboard.dismiss();
+        setIdeasOpen(false);
+      },
+      [],
+    ),
   );
 
   const len = text.trim().length;
@@ -116,9 +122,19 @@ export function IntroGate() {
         pointerEvents="box-none"
         style={[styles.center, { paddingBottom: tabBarSpace }]}
       >
-        <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.borderGlow }]}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.borderGlow,
+            },
+          ]}
+        >
           <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: colors.text }]}>Introduce yourself</Text>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Introduce yourself
+            </Text>
             <Pressable
               style={[styles.infoButton, { backgroundColor: colors.primary }]}
               onPress={() => {
@@ -133,7 +149,7 @@ export function IntroGate() {
             </Pressable>
           </View>
           <Text style={[styles.body, { color: colors.textMuted }]}>
-            Post a short hello to your Local Chat to start chatting.
+            Say hello in your local chat to start chatting.
           </Text>
           <TextInput
             style={[
@@ -157,7 +173,9 @@ export function IntroGate() {
           />
           <View style={styles.counterRow}>
             <Text style={[styles.hint, { color: colors.textMuted }]}>
-              {len < INTRO_MIN_LENGTH ? `At least ${INTRO_MIN_LENGTH} characters` : ''}
+              {len < INTRO_MIN_LENGTH
+                ? `At least ${INTRO_MIN_LENGTH} characters`
+                : ''}
             </Text>
             <Text style={[styles.counter, { color: colors.textMuted }]}>
               {`${len}/${INTRO_MAX_LENGTH}`}
@@ -166,7 +184,9 @@ export function IntroGate() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {/* PillButton fades itself to 50% when disabled, which washes out on a light
               card; a solid indigo backing keeps it a readable, clearly-disabled button. */}
-          <View style={[styles.postWrap, postDisabled && styles.postWrapDisabled]}>
+          <View
+            style={[styles.postWrap, postDisabled && styles.postWrapDisabled]}
+          >
             <PillButton
               title={error ? 'Try again' : 'Post intro'}
               onPress={onSubmit}
@@ -177,7 +197,10 @@ export function IntroGate() {
           </View>
         </View>
       </KeyboardAvoidingView>
-      <IntroIdeasSheet visible={ideasOpen} onClose={() => setIdeasOpen(false)} />
+      <IntroIdeasSheet
+        visible={ideasOpen}
+        onClose={() => setIdeasOpen(false)}
+      />
     </View>
   );
 }
