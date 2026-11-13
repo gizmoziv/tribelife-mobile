@@ -433,17 +433,23 @@ function RootLayoutInner() {
           if (!deepLinkHandled) {
             getPostLoginLandingRoute().then((landing) => {
               if (landing.params?.tab !== 'matches') return;
-              // A notification tap (e.g. the Android FCM consume, which this
-              // branch cannot see) is the user's explicit intent — never
-              // override it with the passive Matches landing.
-              const tapRecent = wasNotificationTapRecent();
-              navTrace('restoreSession landing-replace decision', { tapRecent, replaced: !tapRecent });
-              if (tapRecent) return;
-              try {
+              // 261112-lnd: queue through the cold-start readiness gate instead
+              // of calling router.replace directly. In force_update mode the
+              // Stack is not mounted, so a direct replace had no navigator and
+              // tore down/re-created the root layout (remount loop). The gate
+              // never runs in force_update mode and, in normal mode, runs once
+              // the navigator is mounted + after the settle window.
+              navTrace('restoreSession landing-replace queued');
+              scheduleColdStartNav('postLoginLanding', () => {
+                // A notification tap (e.g. the Android FCM consume, which this
+                // branch cannot see) is the user's explicit intent — never
+                // override it with the passive Matches landing. Evaluated at
+                // RUN time (after the settle window), not at queue time.
+                const tapRecent = wasNotificationTapRecent();
+                navTrace('restoreSession landing-replace ran/skipped', { tapRecent, replaced: !tapRecent });
+                if (tapRecent) return;
                 router.replace(landing);
-              } catch {
-                // navigator not mounted yet — same outcome as before (landing skipped), minus the unhandled rejection
-              }
+              });
             });
           }
 
