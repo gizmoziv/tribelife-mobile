@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import { AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { auth } from './api';
+import { debugTrace } from './navTrace'; // TEMP(261112-fsr)
 import { useForegroundContextStore, type ForegroundContext } from '@/store/foregroundContextStore';
 
 // Decide whether an incoming push should be suppressed at the OS level.
@@ -60,6 +61,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
     let finalStatus = existingStatus;
 
     if (existingStatus !== 'granted') {
+      debugTrace('Notifications.requestPermissionsAsync enter'); // TEMP(261112-fsr)
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }

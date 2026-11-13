@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
-import { AppState, AppStateStatus, Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform, View, Text } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ExpoLinking from 'expo-linking';
@@ -31,7 +31,7 @@ import { useChatsStore } from '@/store/chatsStore';
 import { adaptChatNotification } from '@/services/chatNotificationAdapter';
 import { routeChatNotificationTap, getPostLoginLandingRoute } from '@/services/notificationRouting';
 import { markNotificationTap, wasNotificationTapRecent } from '@/services/notificationTapGuard';
-import { navTrace } from '@/services/navTrace';
+import { navTrace, debugTrace } from '@/services/navTrace'; // TEMP(261112-fsr): debugTrace
 import {
   registerForPushNotifications,
   sendPushTokenToServer,
@@ -221,6 +221,11 @@ function runColdStartNav(
 
 function RootLayoutInner() {
   const { isDark } = useTheme();
+  // TEMP(261112-fsr): dev-only mount/unmount trace (no-op when __DEV__ is false).
+  useEffect(() => {
+    debugTrace('RootLayoutInner mount');
+    return () => debugTrace('RootLayoutInner unmount');
+  }, []);
   const { token, user, setAuth, setLoading, isAuthenticated, isLoading, accessStatus } = useAuthStore();
   const { incrementUnread, addNotification, markOneRead } = useNotificationStore();
   const router = useRouter();
@@ -258,6 +263,10 @@ function RootLayoutInner() {
   // transitions (rapid background→foreground) from overwriting each other's
   // results with stale data (CR-01).
   const versionCheckInFlight = useRef(false);
+  // TEMP(261112-fsr): dev-only trace of each versionResult status change.
+  useEffect(() => {
+    debugTrace('versionResult status', { status: versionResult?.status ?? null });
+  }, [versionResult?.status]);
 
   // Cold-start version check — fires once after fonts load (D-09).
   // checkVersion() resolves to 'unreachable' on any network failure (never
@@ -471,6 +480,13 @@ function RootLayoutInner() {
   }, []);
 
   useEffect(() => {
+    // TEMP(261112-fsr): dev-only skip toggle + run trace. Both inert when __DEV__ is false.
+    const skipPushReg = __DEV__ && process.env.EXPO_PUBLIC_DEBUG_SKIP_PUSH_REG === '1';
+    debugTrace('push effect run', {
+      hasAuth: !!(token && user),
+      skipped: skipPushReg,
+    });
+    if (skipPushReg) return;
     if (!(token && user)) return;
     if (Platform.OS === 'android') {
       // Android routes message pushes via raw FCM. Still run the expo path to
@@ -689,6 +705,19 @@ function RootLayoutInner() {
   // 'unreachable' is treated as 'ok' (fail-open) — the user proceeds
   // into the app and the downstream error UI takes over if needed.
   if (versionResult.status === 'force_update') {
+    // TEMP(261112-fsr): dev-only plain-View variant to isolate the RN Modal.
+    if (__DEV__ && process.env.EXPO_PUBLIC_DEBUG_PLAIN_VIEW === '1') {
+      return (
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text>Update Required (debug plain view)</Text>
+            </View>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      );
+    }
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
@@ -743,6 +772,11 @@ function RootLayoutInner() {
 }
 
 export default function RootLayout() {
+  // TEMP(261112-fsr): dev-only mount/unmount trace (no-op when __DEV__ is false).
+  useEffect(() => {
+    debugTrace('RootLayout mount');
+    return () => debugTrace('RootLayout unmount');
+  }, []);
   return (
     <ThemeProvider>
       <RootLayoutInner />

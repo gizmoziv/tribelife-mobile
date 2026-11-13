@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Alert,
   Modal,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
+import { debugTrace } from '@/services/navTrace'; // TEMP(261112-fsr)
 import { COLORS, FONTS, SPACING, RADIUS } from '@/constants';
 import {
   IOS_STORE_URL,
@@ -38,6 +39,11 @@ interface ForceUpdateModalProps {
  */
 export function ForceUpdateModal({ message }: ForceUpdateModalProps): React.ReactElement {
   const { colors } = useTheme();
+  // TEMP(261112-fsr): dev-only mount/unmount trace (no-op when __DEV__ is false).
+  useEffect(() => {
+    debugTrace('ForceUpdateModal mount');
+    return () => debugTrace('ForceUpdateModal unmount');
+  }, []);
 
   const handleUpdate = async (): Promise<void> => {
     try {

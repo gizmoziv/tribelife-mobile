@@ -17,3 +17,11 @@ export function navTrace(event: string, detail?: Record<string, unknown>): void 
   const suffix = detail ? ` ${JSON.stringify(detail)}` : '';
   console.log(`[nav-trace] ${stamp} appState=${AppState.currentState} ${event}${suffix}`);
 }
+
+// TEMP(261112-fsr): dev-only trace for the Android force-update flash repro.
+// navTrace() itself is always on (ships to production), so new instrumentation
+// goes through this wrapper, which is a no-op when __DEV__ is false.
+export function debugTrace(event: string, detail?: Record<string, unknown>): void {
+  if (!__DEV__) return;
+  navTrace(event, detail);
+}
