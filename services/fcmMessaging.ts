@@ -41,7 +41,6 @@ import notifee, {
 } from 'react-native-notify-kit';
 import { router } from 'expo-router';
 import { auth } from './api';
-import { debugTrace } from './navTrace'; // TEMP(261112-fsr)
 import { adaptChatNotification } from './chatNotificationAdapter';
 import { routeChatNotificationTap } from './notificationRouting';
 import { markNotificationTap } from './notificationTapGuard';
@@ -252,7 +251,6 @@ export async function registerAndroidFcmToken(): Promise<void> {
   try {
     const messaging = getMessaging(getApp());
     await registerDeviceForRemoteMessages(messaging); // no-op on Android, harmless
-    debugTrace('notifee.requestPermission enter'); // TEMP(261112-fsr)
     await notifee.requestPermission(); // Android 13+ POST_NOTIFICATIONS prompt
     const token = await getToken(messaging);
     // Only POST when the token actually changed (idempotent-but-quiet).

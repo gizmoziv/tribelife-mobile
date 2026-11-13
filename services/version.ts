@@ -85,11 +85,6 @@ async function attemptCheck(): Promise<VersionCheckResult> {
 }
 
 export async function checkVersion(): Promise<VersionCheckResult> {
-  // TEMP(261112-fsr): dev-only force-update repro switch. Unreachable when __DEV__ is false.
-  if (__DEV__ && process.env.EXPO_PUBLIC_DEBUG_FORCE_UPDATE === '1') {
-    return { status: 'force_update', minVersion: '99.0.0' };
-  }
-
   // D-05 — dev builds bypass the network entirely.
   if (__DEV__) return { status: 'ok' };
 
