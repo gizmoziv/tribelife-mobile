@@ -53,13 +53,13 @@ async function compressImages(assets: ImagePicker.ImagePickerAsset[]): Promise<s
 
 async function pickFromLibrary(onImagesSelected: (uris: string[]) => void) {
   // Android uses the system photo picker (no permission needed); only iOS asks.
-  const { status } =
-    Platform.OS === 'ios'
-      ? await ImagePicker.requestMediaLibraryPermissionsAsync()
-      : { status: 'granted' };
-  if (status !== 'granted') {
-    Alert.alert('Permission Needed', 'Please allow access to your photo library in Settings.');
-    return;
+  // Keep this an iOS-only block: a ternary + destructure here compiled to an unconditional alert in Android release bytecode (261121-hx0).
+  if (Platform.OS === 'ios') {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Needed', 'Please allow access to your photo library in Settings.');
+      return;
+    }
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
