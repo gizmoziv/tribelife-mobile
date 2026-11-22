@@ -63,6 +63,7 @@ import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { LocationPicker } from '@/components/ui/tribe/LocationPicker';
+import { PillToggle } from '@/components/ui/PillToggle';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { OrgCard } from '@/components/ui/OrgCard';
 import { DeleteAccountSurveyModal } from '@/components/ui/profile/DeleteAccountSurveyModal';
@@ -397,6 +398,11 @@ export default function ProfileScreen() {
   // (older backend 404 / network error) — the caption + Change link hide.
   const [shabbatStatus, setShabbatStatus] = useState<ShabbatStatus | null>(null);
   const [shabbatLocationVisible, setShabbatLocationVisible] = useState(false);
+  // Phase 47 (D-01): the shared location modal serves both the Shabbat "Change
+  // location" link and the candle-reminder opt-in. The ref marks a pending
+  // opt-in so only a completed LocationPicker save turns the reminder on.
+  const [locationModalPurpose, setLocationModalPurpose] = useState<'shabbat' | 'candle'>('shabbat');
+  const pendingCandleOptIn = useRef(false);
   // Phase 47 (CANDLE-01/03): candle-lighting reminder. available=false (older
   // backend, no candleLocationSet in the GET) hides the whole row.
   const [candlePrefs, setCandlePrefs] = useState<{
@@ -484,26 +490,83 @@ export default function ProfileScreen() {
     }, [refreshShabbatStatus, refreshNotifPrefs]),
   );
 
+  const closeLocationModal = useCallback(() => {
+    // Cancel / backdrop / Android back: a pending candle opt-in is abandoned,
+    // so the reminder stays OFF.
+    pendingCandleOptIn.current = false;
+    setShabbatLocationVisible(false);
+  }, []);
+
+  const openCandleLocationModal = useCallback(() => {
+    pendingCandleOptIn.current = true;
+    setLocationModalPurpose('candle');
+    setShabbatLocationVisible(true);
+  }, []);
+
   // Phase 47 (D-01, D-02): turning the reminder ON without a saved candle
   // location never PUTs first — it asks for the location instead.
   const handleCandleReminderToggle = useCallback(
     async (value: boolean) => {
       if (value && !candlePrefs.locationSet) {
-        setShabbatLocationVisible(true);
+        openCandleLocationModal();
         return;
       }
       setCandlePrefs((prev) => ({ ...prev, enabled: value }));
       try {
         await notificationsApi.updatePreferences({ candleReminder: value });
-      } catch {
+      } catch (err) {
         setCandlePrefs((prev) => ({ ...prev, enabled: !value }));
+        if (err instanceof ApiError && err.status === 422) {
+          // Server says there is no location after all.
+          setCandlePrefs((prev) => ({ ...prev, locationSet: false }));
+          openCandleLocationModal();
+          return;
+        }
         Alert.alert(
           'Something went wrong',
           "Couldn't update candle-lighting reminders. Please try again.",
         );
       }
     },
-    [candlePrefs.locationSet],
+    [candlePrefs.locationSet, openCandleLocationModal],
+  );
+
+  // LocationPicker saved a location. A pending candle opt-in completes now;
+  // either way refetch so the effective value matches the server (a
+  // Shabbat-only location change also flips the auto-ON default).
+  const handleLocationSet = useCallback(async () => {
+    setShabbatLocationVisible(false);
+    refreshShabbatStatus();
+    if (pendingCandleOptIn.current) {
+      pendingCandleOptIn.current = false;
+      try {
+        await notificationsApi.updatePreferences({ candleReminder: true });
+        setCandlePrefs((prev) => ({ ...prev, enabled: true, locationSet: true }));
+      } catch {
+        Alert.alert(
+          'Something went wrong',
+          "Couldn't turn on candle-lighting reminders. Please try again.",
+        );
+      }
+    }
+    refreshNotifPrefs();
+  }, [refreshShabbatStatus, refreshNotifPrefs]);
+
+  const updateCandleLead = useCallback(
+    async (lead: CandleLeadMinutes) => {
+      const previous = candlePrefs.lead;
+      setCandlePrefs((prev) => ({ ...prev, lead }));
+      try {
+        await notificationsApi.updatePreferences({ candleReminderLeadMinutes: lead });
+      } catch {
+        setCandlePrefs((prev) => ({ ...prev, lead: previous }));
+        Alert.alert(
+          'Something went wrong',
+          "Couldn't update the reminder time. Please try again.",
+        );
+      }
+    },
+    [candlePrefs.lead],
   );
 
   const updateNotifPref = useCallback(
@@ -1011,7 +1074,11 @@ export default function ProfileScreen() {
             {/* A real touch target — a nested <Text onPress> inside the caption did not fire on device. */}
             {shabbatStatus ? (
               <TouchableOpacity
-                onPress={() => setShabbatLocationVisible(true)}
+                onPress={() => {
+                  pendingCandleOptIn.current = false;
+                  setLocationModalPurpose('shabbat');
+                  setShabbatLocationVisible(true);
+                }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 accessibilityRole="button"
                 accessibilityLabel="Change Shabbat times location"
@@ -1039,6 +1106,16 @@ export default function ProfileScreen() {
                     />
                   }
                 />
+                {pushEnabled && candlePrefs.enabled ? (
+                  <View style={styles.candleLeadWrap}>
+                    <PillToggle
+                      compact
+                      options={['30 min', '1 hour', '2 hours']}
+                      activeIndex={[30, 60, 120].indexOf(candlePrefs.lead)}
+                      onSelect={(i) => updateCandleLead(([30, 60, 120] as const)[i])}
+                    />
+                  </View>
+                ) : null}
                 <Text style={[styles.privacyCaption, { color: colors.textMuted }]}>
                   {candlePrefs.locationSet
                     ? `A push before candle lighting on Fridays and Erev Yom Tov.${
@@ -1863,7 +1940,7 @@ export default function ProfileScreen() {
         visible={shabbatLocationVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setShabbatLocationVisible(false)}
+        onRequestClose={closeLocationModal}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1872,7 +1949,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
-            onPress={() => setShabbatLocationVisible(false)}
+            onPress={closeLocationModal}
           />
           <View
             style={[
@@ -1886,16 +1963,20 @@ export default function ProfileScreen() {
             <View style={shabbatStyles.headerRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[renameStyles.title, { color: colors.text }]}>
-                  Shabbat times location
+                  {locationModalPurpose === 'candle'
+                    ? 'Candle-lighting location'
+                    : 'Shabbat times location'}
                 </Text>
                 <Text
                   style={[renameStyles.subtitle, { color: colors.textMuted }]}
                 >
-                  Also used for the candle-lighting card on the Tribe tab.
+                  {locationModalPurpose === 'candle'
+                    ? 'Reminders use the same location as the candle card on the Tribe tab.'
+                    : 'Also used for the candle-lighting card on the Tribe tab.'}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setShabbatLocationVisible(false)}
+                onPress={closeLocationModal}
                 hitSlop={12}
                 accessibilityRole="button"
               >
@@ -1904,12 +1985,7 @@ export default function ProfileScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <LocationPicker
-              onLocationSet={() => {
-                setShabbatLocationVisible(false);
-                refreshShabbatStatus();
-              }}
-            />
+            <LocationPicker onLocationSet={handleLocationSet} />
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -2133,6 +2209,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: { fontSize: 15, fontFamily: FONTS.medium },
+  candleLeadWrap: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
   privacyCaption: {
     fontSize: 12,
     fontFamily: FONTS.regular,
