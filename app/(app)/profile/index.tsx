@@ -63,7 +63,6 @@ import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { LocationPicker } from '@/components/ui/tribe/LocationPicker';
-import { PillToggle } from '@/components/ui/PillToggle';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { OrgCard } from '@/components/ui/OrgCard';
 import { DeleteAccountSurveyModal } from '@/components/ui/profile/DeleteAccountSurveyModal';
@@ -378,6 +377,7 @@ export default function ProfileScreen() {
 
   // Notification preferences
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [notificationsExpanded, setNotificationsExpanded] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState({
     mentionsPush: true,
     timezoneChatPush: true,
@@ -551,23 +551,6 @@ export default function ProfileScreen() {
     }
     refreshNotifPrefs();
   }, [refreshShabbatStatus, refreshNotifPrefs]);
-
-  const updateCandleLead = useCallback(
-    async (lead: CandleLeadMinutes) => {
-      const previous = candlePrefs.lead;
-      setCandlePrefs((prev) => ({ ...prev, lead }));
-      try {
-        await notificationsApi.updatePreferences({ candleReminderLeadMinutes: lead });
-      } catch {
-        setCandlePrefs((prev) => ({ ...prev, lead: previous }));
-        Alert.alert(
-          'Something went wrong',
-          "Couldn't update the reminder time. Please try again.",
-        );
-      }
-    },
-    [candlePrefs.lead],
-  );
 
   const updateNotifPref = useCallback(
     async (key: keyof typeof notifPrefs, value: boolean) => {
@@ -983,9 +966,71 @@ export default function ProfileScreen() {
           </SettingsSection>
         </AnimatedEntry>
 
+        {/* Referrals */}
+        <AnimatedEntry delay={75}>
+          <GlassCard>
+            <View style={styles.referralSection}>
+              <Text style={[styles.referralTitle, { color: colors.text }]}>
+                Invite Friends
+              </Text>
+              {/* <Text style={[styles.referralCount, { color: colors.textMuted }]}>
+                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
+              </Text> */}
+              <Text style={[styles.referralReward, { color: COLORS.primary }]}>
+                {premiumMonthsEarned > 0
+                  ? `${premiumMonthsEarned} of 12 premium months earned!`
+                  : 'Share to earn free premium months!'}
+              </Text>
+              {funnelData && (
+                <>
+                  <Text
+                    style={[styles.referralCount, { color: colors.textMuted }]}
+                  >
+                    Profile shares:{' '}
+                    {funnelData.bySource.profile_share?.joined ?? 0} joined →{' '}
+                    {funnelData.bySource.profile_share?.paid ?? 0} paid
+                  </Text>
+                  <Text
+                    style={[styles.referralCount, { color: colors.textMuted }]}
+                  >
+                    Group invites:{' '}
+                    {funnelData.bySource.group_invite?.joined ?? 0} joined →{' '}
+                    {funnelData.bySource.group_invite?.paid ?? 0} paid
+                  </Text>
+                </>
+              )}
+              <PillButton
+                title="Share TribeLife"
+                onPress={handleShare}
+                variant="primary"
+                style={{ marginTop: 12 }}
+              />
+            </View>
+          </GlassCard>
+        </AnimatedEntry>
+
         {/* Notifications */}
         <AnimatedEntry delay={90}>
           <SettingsSection title="Notifications">
+            {/* One tap target that shows/hides all notification settings (starts collapsed). */}
+            <TouchableOpacity
+              onPress={() => setNotificationsExpanded((v) => !v)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: notificationsExpanded }}
+              style={[
+                styles.row,
+                { borderBottomColor: colors.border },
+                !notificationsExpanded && { borderBottomWidth: 0 },
+              ]}
+            >
+              <Text style={[styles.referralTitle, { color: colors.text }]}>Manage Your Notifications</Text>
+              <View style={{ transform: [{ rotate: notificationsExpanded ? '90deg' : '0deg' }] }}>
+                <ChevronIcon color={colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+            {notificationsExpanded ? (
+              <>
             <SettingsRow
               label="Push Notifications"
               right={
@@ -1036,6 +1081,24 @@ export default function ProfileScreen() {
                   />
                 }
               />
+              {/* Phase 47 (CANDLE-01, D-01/D-02/D-08): push sub-toggle under
+                  Beacon Matches; hidden against an older backend. */}
+              {candlePrefs.available ? (
+                <>
+                  <SettingsRow
+                    label="Candle-lighting reminder"
+                    right={
+                      <Switch
+                        value={pushEnabled && candlePrefs.enabled}
+                        onValueChange={handleCandleReminderToggle}
+                        trackColor={{ false: colors.border, true: COLORS.primary }}
+                        thumbColor="#FFF"
+                        disabled={!pushEnabled}
+                      />
+                    }
+                  />
+                </>
+              ) : null}
               <SettingsRow
                 label="Breaking News Notifications"
                 right={
@@ -1089,42 +1152,6 @@ export default function ProfileScreen() {
                 </Text>
               </TouchableOpacity>
             ) : null}
-            {/* Phase 47 (CANDLE-01, D-01/D-02/D-08): hidden against an older
-                backend. Disabled with the Push master switch like the other
-                push sub-toggles. */}
-            {candlePrefs.available ? (
-              <>
-                <SettingsRow
-                  label="Candle-lighting reminder"
-                  right={
-                    <Switch
-                      value={pushEnabled && candlePrefs.enabled}
-                      onValueChange={handleCandleReminderToggle}
-                      trackColor={{ false: colors.border, true: COLORS.primary }}
-                      thumbColor="#FFF"
-                      disabled={!pushEnabled}
-                    />
-                  }
-                />
-                {pushEnabled && candlePrefs.enabled ? (
-                  <View style={styles.candleLeadWrap}>
-                    <PillToggle
-                      compact
-                      options={['30 min', '1 hour', '2 hours']}
-                      activeIndex={[30, 60, 120].indexOf(candlePrefs.lead)}
-                      onSelect={(i) => updateCandleLead(([30, 60, 120] as const)[i])}
-                    />
-                  </View>
-                ) : null}
-                <Text style={[styles.privacyCaption, { color: colors.textMuted }]}>
-                  {candlePrefs.locationSet
-                    ? `A push before candle lighting on Fridays and Erev Yom Tov.${
-                        shabbatStatus
-                          ? ` Times based on ${shabbatStatus.location.label}.`
-                          : ''
-                      }`
-                    : 'Turning this on asks for your candle-lighting location first.'}
-                </Text>
               </>
             ) : null}
           </SettingsSection>
@@ -1355,49 +1382,6 @@ export default function ProfileScreen() {
             </View>
           </AnimatedEntry>
         )}
-
-        {/* Referrals */}
-        <AnimatedEntry delay={150}>
-          <GlassCard>
-            <View style={styles.referralSection}>
-              <Text style={[styles.referralTitle, { color: colors.text }]}>
-                Invite Friends
-              </Text>
-              {/* <Text style={[styles.referralCount, { color: colors.textMuted }]}>
-                {referralCount} {referralCount === 1 ? 'person' : 'people'} joined through your link
-              </Text> */}
-              <Text style={[styles.referralReward, { color: COLORS.primary }]}>
-                {premiumMonthsEarned > 0
-                  ? `${premiumMonthsEarned} of 12 premium months earned!`
-                  : 'Share to earn free premium months!'}
-              </Text>
-              {funnelData && (
-                <>
-                  <Text
-                    style={[styles.referralCount, { color: colors.textMuted }]}
-                  >
-                    Profile shares:{' '}
-                    {funnelData.bySource.profile_share?.joined ?? 0} joined →{' '}
-                    {funnelData.bySource.profile_share?.paid ?? 0} paid
-                  </Text>
-                  <Text
-                    style={[styles.referralCount, { color: colors.textMuted }]}
-                  >
-                    Group invites:{' '}
-                    {funnelData.bySource.group_invite?.joined ?? 0} joined →{' '}
-                    {funnelData.bySource.group_invite?.paid ?? 0} paid
-                  </Text>
-                </>
-              )}
-              <PillButton
-                title="Share TribeLife"
-                onPress={handleShare}
-                variant="primary"
-                style={{ marginTop: 12 }}
-              />
-            </View>
-          </GlassCard>
-        </AnimatedEntry>
 
         {/* Account */}
         <AnimatedEntry delay={240}>
@@ -2209,10 +2193,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: { fontSize: 15, fontFamily: FONTS.medium },
-  candleLeadWrap: {
-    marginTop: 8,
-    marginBottom: 4,
-  },
   privacyCaption: {
     fontSize: 12,
     fontFamily: FONTS.regular,
@@ -2226,7 +2206,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   premiumInner: { gap: 10 },
-  premiumTitle: { fontSize: 18, fontFamily: FONTS.bold },
+  premiumTitle: { fontSize: 18, fontFamily: FONTS.semiBold },
   premiumDesc: { fontSize: 14, fontFamily: FONTS.regular, lineHeight: 22 },
   subscriptionInfo: { fontSize: 11, fontFamily: FONTS.regular, lineHeight: 16 },
   restoreText: { fontSize: 13, fontFamily: FONTS.regular, textAlign: 'center' },
