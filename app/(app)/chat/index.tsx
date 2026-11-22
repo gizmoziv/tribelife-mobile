@@ -70,7 +70,7 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { IntroGate } from '@/components/ui/chat/IntroGate';
-import { ShabbatAnnouncementCard } from '@/components/ui/ShabbatAnnouncementCard';
+import { ShabbatAnnouncementCard, SHABBAT_ANNOUNCEMENT_ENABLED } from '@/components/ui/ShabbatAnnouncementCard';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
@@ -954,7 +954,7 @@ function ChatsList({
       keyboardDismissMode="on-drag"
       extraData={draftTexts}
       ListHeaderComponent={
-        introGated || isArchiveView ? null : <ShabbatAnnouncementCard />
+        !SHABBAT_ANNOUNCEMENT_ENABLED || introGated || isArchiveView ? null : <ShabbatAnnouncementCard />
       }
       ListEmptyComponent={
         emptyText ? (

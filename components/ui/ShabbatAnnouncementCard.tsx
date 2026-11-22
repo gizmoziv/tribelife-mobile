@@ -23,6 +23,9 @@ import { FONTS, SPACING } from '@/constants';
 
 const SEEN_KEY = 'shabbat_announcement_seen';
 
+/** Operator/CPO 2026-11-22: announcement hidden for now. Flip to true to show it again (no other change needed). */
+export const SHABBAT_ANNOUNCEMENT_ENABLED = false;
+
 export function ShabbatAnnouncementCard() {
   const { colors } = useTheme();
   const userId = useAuthStore((s) => s.user?.id);
