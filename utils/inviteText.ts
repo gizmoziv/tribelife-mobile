@@ -97,6 +97,11 @@ export function whatsAppUrl(digits: string | null, text: string): string {
   return `https://wa.me/?text=${encoded}`;
 }
 
+/** LinkedIn share link; LinkedIn reads only `url`, the card preview comes from the page's OG tags. */
+export function linkedInShareUrl(link: string): string {
+  return `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(link)}`;
+}
+
 /** JSON object of contactId -> ISO date; anything else is treated as empty. */
 export function parseInvitedMap(raw: string | null): Record<string, string> {
   if (!raw) return {};

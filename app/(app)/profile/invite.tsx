@@ -7,10 +7,13 @@ import {
   Pressable,
   SectionList,
   FlatList,
+  ScrollView,
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
   Platform,
+  Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { getLocales } from 'expo-localization';
@@ -29,6 +32,8 @@ import { intlPhone } from '@/utils/phoneIntl';
 import {
   inviteLink,
   personalInvite,
+  genericInvite,
+  linkedInShareUrl,
   firstNameOf,
   displayNameOf,
   pickPhones,
@@ -145,6 +150,16 @@ async function inviteSendText(rawNumber: string, body: string): Promise<SendResu
   }
 }
 
+async function inviteSmsAvailable(): Promise<boolean> {
+  const S = inviteSmsModule();
+  if (!S) return false;
+  try {
+    return await S.isAvailableAsync();
+  } catch {
+    return false;
+  }
+}
+
 async function inviteSendWhatsApp(digits: string | null, body: string): Promise<boolean> {
   try {
     // Documented https click-to-chat link only: no app-scheme URL, no installed-app probe.
@@ -213,8 +228,10 @@ export default function InviteScreen() {
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [invited, setInvited] = useState<Record<string, string>>({});
+  const [smsAvailable, setSmsAvailable] = useState(false);
   const [chooser, setChooser] = useState<{ contact: InviteContact; channel: Channel } | null>(null);
   const sendingRef = useRef(false);
+  const recheckingRef = useRef(false);
   const invitedRef = useRef<Record<string, string>>({});
   const region = useMemo(() => getLocales()[0]?.regionCode ?? null, []);
 
@@ -232,6 +249,40 @@ export default function InviteScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    inviteSmsAvailable().then((available) => {
+      if (alive) setSmsAvailable(available);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Load contacts for a granted access level and route to the right view.
+  const loadForLevel = useCallback(async (level: Access) => {
+    const loaded = await inviteLoadContacts();
+    setAccess(level);
+    setContacts(loaded.contacts);
+    setHiddenCount(loaded.hiddenCount);
+    if (level === 'limited') {
+      // iOS limited access: the shared set IS the selection.
+      setSelectedIds(loaded.contacts.map((c) => c.id));
+      setStep('list');
+      return;
+    }
+    // Full access: bring back the user's own earlier selection, if any still exists.
+    const saved = await inviteReadSelected();
+    const present = new Set(loaded.contacts.map((c) => c.id));
+    const restored = saved.filter((id) => present.has(id));
+    if (restored.length > 0) {
+      setSelectedIds(restored);
+      setStep('list');
+      return;
+    }
+    setStep('pick');
+  }, []);
+
   const accessAndLoad = useCallback(async () => {
     setStep('loading');
     try {
@@ -240,32 +291,40 @@ export default function InviteScreen() {
         setStep('denied');
         return;
       }
-      const loaded = await inviteLoadContacts();
-      setAccess(level);
-      setContacts(loaded.contacts);
-      setHiddenCount(loaded.hiddenCount);
-      if (level === 'limited') {
-        // iOS limited access: the shared set IS the selection.
-        setSelectedIds(loaded.contacts.map((c) => c.id));
-        setStep('list');
-        return;
-      }
-      // Full access: bring back the user's own earlier selection, if any still exists.
-      const saved = await inviteReadSelected();
-      const present = new Set(loaded.contacts.map((c) => c.id));
-      const restored = saved.filter((id) => present.has(id));
-      if (restored.length > 0) {
-        setSelectedIds(restored);
-        setStep('list');
-        return;
-      }
-      setStep('pick');
+      await loadForLevel(level);
     } catch (err) {
       console.error('[invite]', err);
       Alert.alert("Couldn't load contacts", 'Please try again in a moment.');
       setStep('denied');
     }
-  }, []);
+  }, [loadForLevel]);
+
+  // Denied: when the user comes back from Settings with access granted, load on this screen.
+  useEffect(() => {
+    if (step !== 'denied') return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || recheckingRef.current) return;
+      recheckingRef.current = true;
+      inviteEnsureAccess(false)
+        .then(async (level) => {
+          if (level === 'denied') return;
+          setStep('loading');
+          try {
+            await loadForLevel(level);
+          } catch (err) {
+            console.error('[invite]', err);
+            setStep('denied');
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          recheckingRef.current = false;
+        });
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [step, loadForLevel]);
 
   useEffect(() => {
     let alive = true;
@@ -355,6 +414,30 @@ export default function InviteScreen() {
     [sendTo],
   );
 
+  const shareWhatsApp = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    const opened = await inviteSendWhatsApp(null, genericInvite(link));
+    if (!opened) Alert.alert("Couldn't open WhatsApp", 'Please try again.');
+  }, [link]);
+
+  const shareLinkedIn = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      await Linking.openURL(linkedInShareUrl(link));
+    } catch {
+      Alert.alert("Couldn't open LinkedIn", 'Please try again.');
+    }
+  }, [link]);
+
+  const shareMore = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    try {
+      await Share.share({ message: genericInvite(link) });
+    } catch {
+      // Cancelled or unavailable: nothing to report.
+    }
+  }, [link]);
+
   const chooserActions = useMemo(() => {
     if (!chooser) return [];
     const labels = new Set<string>();
@@ -396,6 +479,24 @@ export default function InviteScreen() {
 
   const bottomPad = tabBarSpace + SPACING.md;
 
+  const shareRow = handle ? (
+    <ShareRow
+      onWhatsApp={shareWhatsApp}
+      onLinkedIn={shareLinkedIn}
+      onMore={shareMore}
+      borderColor={colors.border}
+      textColor={colors.text}
+    />
+  ) : null;
+  const previewCard = (
+    <PreviewCard
+      text={personalInvite('[first name]', link)}
+      cardColor={colors.surfaceElevated}
+      textColor={colors.text}
+      mutedColor={colors.textMuted}
+    />
+  );
+
   const renderIntro = () => (
     <View style={styles.introWrap}>
       <View style={styles.introBody}>
@@ -418,19 +519,22 @@ export default function InviteScreen() {
   );
 
   const renderDenied = () => (
-    <View style={styles.centerWrap}>
-      <Text style={[styles.deniedText, { color: colors.text }]}>
-        Contacts access is off for TribeLife. You can turn it on in Settings.
-      </Text>
-      <PillButton
-        title="Open Settings"
-        onPress={() => {
-          Linking.openSettings().catch(() => {});
-        }}
-        variant="primary"
-        style={{ marginTop: SPACING.md }}
-      />
-    </View>
+    <ScrollView contentContainerStyle={{ paddingBottom: bottomPad }}>
+      {shareRow}
+      <View style={styles.deniedWrap}>
+        <Text style={[styles.deniedText, { color: colors.text }]}>
+          Contacts access is off for TribeLife. You can turn it on in Settings.
+        </Text>
+        <PillButton
+          title="Open Settings"
+          onPress={() => {
+            Linking.openSettings().catch(() => {});
+          }}
+          variant="primary"
+          style={{ marginTop: SPACING.md }}
+        />
+      </View>
+    </ScrollView>
   );
 
   const renderPick = () => (
@@ -440,6 +544,12 @@ export default function InviteScreen() {
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled
         contentContainerStyle={{ paddingBottom: SPACING.md }}
+        ListHeaderComponent={
+          <View>
+            {shareRow}
+            {previewCard}
+          </View>
+        }
         renderSectionHeader={({ section }) => (
           <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
             <Text style={[styles.sectionHeaderText, { color: colors.textMuted }]}>
@@ -521,11 +631,15 @@ export default function InviteScreen() {
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ paddingBottom: bottomPad }}
       ListHeaderComponent={
-        access === 'all' ? (
-          <Pressable onPress={handleEditSelection} hitSlop={8} style={styles.editLink}>
-            <Text style={[styles.editLinkText, { color: COLORS.primary }]}>Edit selection</Text>
-          </Pressable>
-        ) : null
+        <View>
+          {shareRow}
+          {previewCard}
+          {access === 'all' ? (
+            <Pressable onPress={handleEditSelection} hitSlop={8} style={styles.editLink}>
+              <Text style={[styles.editLinkText, { color: COLORS.primary }]}>Edit selection</Text>
+            </Pressable>
+          ) : null}
+        </View>
       }
       ListEmptyComponent={
         <Text style={[styles.footNote, { color: colors.textMuted }]}>
@@ -563,7 +677,9 @@ export default function InviteScreen() {
             ) : null}
           </View>
           <View style={styles.rowButtons}>
-            <RowButton label="Text" color={COLORS.primary} onPress={() => handleSend(item, 'text')} />
+            {smsAvailable ? (
+              <RowButton label="Text" color={COLORS.primary} onPress={() => handleSend(item, 'text')} />
+            ) : null}
             <RowButton label="WhatsApp" color={COLORS.primary} onPress={() => handleSend(item, 'whatsapp')} />
           </View>
         </View>
@@ -573,10 +689,19 @@ export default function InviteScreen() {
 
   let body: React.ReactNode = null;
   if (step === 'intro') body = renderIntro();
-  else if (step === 'loading' || step === 'boot') {
+  else if (step === 'boot') {
     body = (
       <View style={styles.centerWrap}>
         <ActivityIndicator color={COLORS.primary} />
+      </View>
+    );
+  } else if (step === 'loading') {
+    body = (
+      <View style={styles.flex}>
+        {shareRow}
+        <View style={styles.centerWrap}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
       </View>
     );
   } else if (step === 'denied') body = renderDenied();
@@ -600,6 +725,63 @@ export default function InviteScreen() {
         actions={chooserActions}
       />
     </SafeAreaView>
+  );
+}
+
+// ── Share row + message preview ──────────────────────────────────────────────
+function ShareRow({
+  onWhatsApp,
+  onLinkedIn,
+  onMore,
+  borderColor,
+  textColor,
+}: {
+  onWhatsApp: () => void;
+  onLinkedIn: () => void;
+  onMore: () => void;
+  borderColor: string;
+  textColor: string;
+}) {
+  const items = [
+    { label: 'WhatsApp', onPress: onWhatsApp },
+    { label: 'LinkedIn', onPress: onLinkedIn },
+    { label: 'More', onPress: onMore },
+  ];
+  return (
+    <View style={styles.shareRow}>
+      {items.map((item) => (
+        <Pressable
+          key={item.label}
+          onPress={item.onPress}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.shareButton, { borderColor, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Text style={[styles.shareButtonText, { color: textColor }]}>{item.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function PreviewCard({
+  text,
+  cardColor,
+  textColor,
+  mutedColor,
+}: {
+  text: string;
+  cardColor: string;
+  textColor: string;
+  mutedColor: string;
+}) {
+  return (
+    <View style={[styles.previewCard, { backgroundColor: cardColor }]}>
+      <Text style={[styles.previewTitle, { color: mutedColor }]}>Message preview</Text>
+      <Text style={[styles.previewText, { color: textColor }]}>{text}</Text>
+      <Text style={[styles.previewNote, { color: mutedColor }]}>
+        Each friend gets their own message. Nothing is sent until you tap Send in Messages or WhatsApp.
+      </Text>
+    </View>
   );
 }
 
@@ -751,6 +933,53 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     fontFamily: FONTS.medium,
     textAlign: 'center',
+  },
+  deniedWrap: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.xl,
+  },
+  shareRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
+  },
+  shareButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: RADIUS.pill,
+    paddingVertical: 10,
+  },
+  shareButtonText: {
+    fontSize: 14,
+    fontFamily: FONTS.semiBold,
+  },
+  previewCard: {
+    marginHorizontal: SPACING.page,
+    marginBottom: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+  },
+  previewTitle: {
+    fontSize: 12,
+    fontFamily: FONTS.semiBold,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  previewText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: FONTS.regular,
+  },
+  previewNote: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: FONTS.regular,
+    marginTop: 8,
   },
   sectionHeader: {
     paddingHorizontal: SPACING.page,

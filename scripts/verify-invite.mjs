@@ -136,6 +136,14 @@ eq(intl('054-123-4567', null), null, 'intl:nationalNoRegion');
 eq(intl('12', 'IL'), null, 'intl:tooShort');
 eq(intl('hello', 'US'), null, 'intl:text');
 
+// 13b. linkedInShareUrl
+eq(
+  fn('linkedInShareUrl')(L),
+  'https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftribelife.app%2Fu%2Fdana_k%3Fref%3Ddana_k',
+  'linkedin:encoded',
+);
+ok(!String(fn('linkedInShareUrl')(L)).includes('?ref='), 'linkedin:noRawRef');
+
 // 14. Module hygiene
 const textSrc = fs.readFileSync(textPath, 'utf8');
 ok(
