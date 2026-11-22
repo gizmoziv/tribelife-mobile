@@ -959,18 +959,23 @@ export default function ProfileScreen() {
               {shabbatStatus
                 ? ` Times based on ${shabbatStatus.location.label}${
                     shabbatStatus.active ? ' · Paused now' : ''
-                  }. `
+                  }.`
                 : ''}
-              {shabbatStatus ? (
-                <Text
-                  style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}
-                  onPress={() => setShabbatLocationVisible(true)}
-                  accessibilityRole="link"
-                >
-                  Change
-                </Text>
-              ) : null}
             </Text>
+            {/* A real touch target — a nested <Text onPress> inside the caption did not fire on device. */}
+            {shabbatStatus ? (
+              <TouchableOpacity
+                onPress={() => setShabbatLocationVisible(true)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Change Shabbat times location"
+                style={{ alignSelf: 'flex-start', paddingTop: 6 }}
+              >
+                <Text style={{ color: COLORS.primary, fontFamily: FONTS.semiBold, fontSize: 12 }}>
+                  Change location
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </SettingsSection>
         </AnimatedEntry>
 
