@@ -74,6 +74,7 @@ import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { AttachmentComposer } from '@/components/ui/chat/AttachmentComposer';
+import { PasteImageChip } from '@/components/ui/chat/PasteImageChip';
 import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
@@ -173,6 +174,13 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [selection, setSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const [isUploading, setIsUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  // Phase 46: composer focus gates the "Paste image" chip. Blur is delayed so a
+  // chip tap that blurs the input still lands before the chip unmounts.
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+  }, []);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isAgeGated, setIsAgeGated] = useState(false);
   const [ageGateHours, setAgeGateHours] = useState(0);
@@ -1286,6 +1294,10 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
             {/* Reply composer */}
             <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
             <AttachmentComposer attachment={pendingAttachment} onCancel={() => setPendingAttachment(null)} />
+            <PasteImageChip
+              active={inputFocused && !pendingAttachment && !isUploading && !isRecording && !editingMessage && !isAgeGated}
+              onImagesSelected={handleImagesSelected}
+            />
 
             {/* Chat input */}
             <View style={{ position: 'relative' }}>
@@ -1345,6 +1357,14 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
                         editable={!isAgeGated}
                         multiline
                         onSubmitEditing={handleSend}
+                        onFocus={() => {
+                          if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+                          setInputFocused(true);
+                        }}
+                        onBlur={() => {
+                          if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+                          inputBlurTimerRef.current = setTimeout(() => setInputFocused(false), 300);
+                        }}
                       />
                     </View>
                     {/* Send-slot swap (VOICE-01): mic on empty input, send

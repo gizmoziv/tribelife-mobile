@@ -69,6 +69,7 @@ import { AttachmentComposer } from '@/components/ui/chat/AttachmentComposer';
 import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
+import { PasteImageChip } from '@/components/ui/chat/PasteImageChip';
 import { SwipeableMessage } from '@/components/ui/chat/SwipeableMessage';
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
 import { ScrollToBottomButton } from '@/components/chat/ScrollToBottomButton';
@@ -1056,6 +1057,7 @@ export default function LocalChatScreen() {
             isUploading={isUploading || sendingChunks}
             hasPendingAttachment={!!pendingAttachment}
             isRecording={isRecording}
+            isEditing={!!editingMessage}
             onStartRecording={() => setIsRecording(true)}
             onDiscardVoice={() => setIsRecording(false)}
             onSendVoice={handleSendVoice}
@@ -1171,6 +1173,7 @@ function ChatInput({
   isUploading,
   hasPendingAttachment,
   isRecording,
+  isEditing,
   onStartRecording,
   onDiscardVoice,
   onSendVoice,
@@ -1192,6 +1195,8 @@ function ChatInput({
    * `chat/index.tsx`'s separate ChatInput copy is unaffected. */
   hasPendingAttachment?: boolean;
   isRecording?: boolean;
+  /** Phase 46: an edit is in progress — hides the Paste image chip. */
+  isEditing?: boolean;
   onStartRecording?: () => void;
   onDiscardVoice?: () => void;
   onSendVoice?: (cdnUrl: string, durationMs: number, waveform: number[]) => void;
@@ -1207,6 +1212,13 @@ function ChatInput({
   const { colors } = useTheme();
   const tabBarSpace = useTabBarSpace();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Phase 46: composer focus gates the "Paste image" chip. Blur is delayed so a
+  // chip tap that blurs the input still lands before the chip unmounts.
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -1229,6 +1241,12 @@ function ChatInput({
           scope={mentionScope}
           contextId={mentionContextId}
           onSelect={onMentionSelect}
+        />
+      )}
+      {onImagesSelected && (
+        <PasteImageChip
+          active={inputFocused && !hasPendingAttachment && !isUploading && !isRecording && !isEditing}
+          onImagesSelected={onImagesSelected}
         />
       )}
       <View style={[styles.inputBar, { backgroundColor: 'transparent', paddingBottom: bottomPadding }]}>
@@ -1260,6 +1278,14 @@ function ChatInput({
                 onSelectionChange={onSelectionChange ? (e) => onSelectionChange(e.nativeEvent.selection) : undefined}
                 multiline
                 onSubmitEditing={onSend}
+                onFocus={() => {
+                  if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+                  setInputFocused(true);
+                }}
+                onBlur={() => {
+                  if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+                  inputBlurTimerRef.current = setTimeout(() => setInputFocused(false), 300);
+                }}
               />
             </View>
             {/* Send-slot swap (VOICE-01): mic on empty input, send otherwise —
