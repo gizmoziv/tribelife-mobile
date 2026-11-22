@@ -6,7 +6,6 @@ import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Clipboard from 'expo-clipboard';
 import * as ExpoLinking from 'expo-linking';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -69,74 +68,6 @@ function extractAndStoreAttribution(url: string) {
     AsyncStorage.setItem('attributionSource', source);
   } catch { /* ignore parse errors */ }
 }
-
-/**
- * Recover an attribution payload left on the clipboard by the interstitial
- * pages (/invite, /g/:slug, /u/:handle). Runs ONCE per install (guarded by
- * a flag) and only when the user is not yet authenticated, to avoid
- * inspecting the clipboard on every launch.
- *
- * Phase 13: supports 3 payload formats:
- *  - `tribelife-ref:<handle>`              → source = 'handle_code'
- *  - `tribelife-g-ref:<handle>:<slug>`     → source = 'group_invite'
- *  - `tribelife-u-ref:<handle>:<handle>`   → source = 'profile_share'
- */
-async function recoverAttributionFromClipboard() {
-  try {
-    const alreadyChecked = await AsyncStorage.getItem('clipboardRefChecked');
-    if (alreadyChecked) return;
-    await AsyncStorage.setItem('clipboardRefChecked', '1');
-
-    const hasString = await Clipboard.hasStringAsync();
-    if (!hasString) return;
-
-    const content = await Clipboard.getStringAsync();
-    if (!content) return;
-
-    // Match in order — first hit wins. The two-segment patterns (g-ref / u-ref)
-    // are matched BEFORE the single-segment fallback so a payload like
-    // `tribelife-g-ref:alice:my-group` is not misclassified.
-    const matchG = content.match(/^tribelife-g-ref:([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)$/);
-    const matchU = content.match(/^tribelife-u-ref:([a-zA-Z0-9_-]+):([a-zA-Z0-9_-]+)$/);
-    const match = content.match(/^tribelife-ref:([a-zA-Z0-9_-]+)$/);
-
-    let ref: string | null = null;
-    let source: 'handle_code' | 'profile_share' | 'group_invite' | null = null;
-    // Deferred deep link target — the slug or handle the interstitial captured.
-    // Persisted alongside the attribution so the auth-restore branch in this
-    // file (pendingGroupSlug) can auto-navigate to the join screen after the
-    // user finishes onboarding from a fresh App Store install.
-    let pendingGroupSlug: string | null = null;
-    let pendingProfileHandle: string | null = null;
-    if (matchG) {
-      ref = matchG[1].toLowerCase();
-      source = 'group_invite';
-      pendingGroupSlug = matchG[2];
-    } else if (matchU) {
-      ref = matchU[1].toLowerCase();
-      source = 'profile_share';
-      pendingProfileHandle = matchU[2];
-    } else if (match) {
-      ref = match[1].toLowerCase();
-      source = 'handle_code';
-    }
-
-    if (!ref || !source) return;
-
-    await AsyncStorage.setItem('attributionRef', ref);
-    await AsyncStorage.setItem('attributionSource', source);
-    if (pendingGroupSlug) {
-      await AsyncStorage.setItem('pendingGroupSlug', pendingGroupSlug);
-    }
-    if (pendingProfileHandle) {
-      await AsyncStorage.setItem('pendingProfileHandle', pendingProfileHandle);
-    }
-
-    // Clear the clipboard so the user doesn't accidentally paste it elsewhere
-    await Clipboard.setStringAsync('');
-  } catch { /* ignore clipboard errors */ }
-}
-
 
 // Configure RevenueCat
 const rcKey = Platform.OS === 'ios'
@@ -289,12 +220,6 @@ function RootLayoutInner() {
         }
 
         const token = await getToken();
-        // First launch without a session: recover an attribution payload an
-        // interstitial page (/invite, /g/:slug, /u/:handle) may have left on
-        // the clipboard.
-        if (!token) {
-          await recoverAttributionFromClipboard();
-        }
         if (token) {
           const deviceTimezone = Localization.getCalendars()[0]?.timeZone ?? undefined;
           const meResponse = await auth.me(deviceTimezone);

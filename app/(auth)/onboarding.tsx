@@ -275,8 +275,9 @@ export default function OnboardingScreen() {
   // gate them and any navigation here would fight the root-layout gate.
   const enterApp = async () => {
     // Deferred deep-link: if a /g/:slug interstitial wrote a pending group
-    // slug to the clipboard before install, recoverAttributionFromClipboard
-    // (in _layout.tsx) has already persisted it to AsyncStorage. Consume it
+    // slug to the clipboard before install, the welcome-screen invite claim
+    // (services/inviteClipboard.ts) persisted, if the user tapped it, it to
+    // AsyncStorage. Consume it
     // here so first-onboarding lands the user on the Join Group screen
     // instead of the default beacon/globe CTA.
     const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
