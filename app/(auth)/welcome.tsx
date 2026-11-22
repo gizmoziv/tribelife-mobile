@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,24 +10,16 @@ import {
   Platform,
   Linking,
   ScrollView,
-  AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ClipboardPasteButton, isPasteButtonAvailable } from 'expo-clipboard';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import { auth, extractAccessStatus } from '@/services/api';
 import { getPostLoginLandingRoute } from '@/services/notificationRouting';
-import {
-  shouldOfferInviteClipboardClaim,
-  claimInviteFromClipboard,
-  parseAndStoreInvite,
-  type InviteClaimResult,
-} from '@/services/inviteClipboard';
 import { FONTS, COLORS, SPACING, SHADOWS, RADIUS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -100,13 +92,6 @@ function sanitizeRedirect(raw: string | string[] | undefined): string | null {
   return v;
 }
 
-// iOS 16+ system paste control: hands us the text with no "Allow Paste" alert.
-// Plain boolean (never destructure from a Platform.OS conditional).
-let usePasteControl = false;
-if (Platform.OS === 'ios' && isPasteButtonAvailable) {
-  usePasteControl = true;
-}
-
 export default function WelcomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ redirect?: string }>();
@@ -116,10 +101,6 @@ export default function WelcomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
   const [appleAvailable, setAppleAvailable] = useState(false);
-  const [inviteOfferVisible, setInviteOfferVisible] = useState(false);
-  const [isClaimingInvite, setIsClaimingInvite] = useState(false);
-  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
-  const inviteClaimAttempted = useRef(false);
 
   useEffect(() => {
     GoogleSignin.configure({
@@ -131,59 +112,6 @@ export default function WelcomeScreen() {
       AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
     }
   }, []);
-
-  // Prompt-free detection only (metadata, never clipboard text). Re-checks when
-  // the app returns to the foreground so a payload copied in Safari shows up.
-  useEffect(() => {
-    let cancelled = false;
-    const check = () => {
-      if (inviteClaimAttempted.current) return;
-      shouldOfferInviteClipboardClaim().then((offer) => {
-        if (cancelled || inviteClaimAttempted.current) return;
-        setInviteOfferVisible(offer);
-      });
-    };
-    check();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') check();
-    });
-    return () => {
-      cancelled = true;
-      sub.remove();
-    };
-  }, []);
-
-  const finishInviteClaim = (result: InviteClaimResult) => {
-    setInviteOfferVisible(false);
-    setIsClaimingInvite(false);
-    if (result.matched) {
-      setInviteMessage('Invite found — continue to sign in');
-    } else {
-      setInviteMessage('No invite found — you can continue normally');
-    }
-  };
-
-  // Android / iOS without the paste control: explicit tap, then a clipboard read.
-  const handleInviteClaim = async () => {
-    if (isClaimingInvite) return;
-    inviteClaimAttempted.current = true;
-    setIsClaimingInvite(true);
-    const result = await claimInviteFromClipboard();
-    finishInviteClaim(result);
-  };
-
-  // iOS paste control: the system supplies the text, so no clipboard read here.
-  const handleInvitePaste = async (data: { type: string; text?: string }) => {
-    if (isClaimingInvite) return;
-    inviteClaimAttempted.current = true;
-    setIsClaimingInvite(true);
-    let pastedText = '';
-    if (data.type === 'text' && typeof data.text === 'string') {
-      pastedText = data.text;
-    }
-    const result = await parseAndStoreInvite(pastedText);
-    finishInviteClaim(result);
-  };
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -210,13 +138,12 @@ export default function WelcomeScreen() {
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding'); // onboarding always wins
       } else {
-        // Deferred deep-link: if the welcome-screen invite claim
-        // (services/inviteClipboard.ts) persisted a pending group slug from a
-        // fresh-install
-        // /g/:slug interstitial, route to the Join Group screen on first
-        // post-login navigation. Wins over `redirectTarget` and the landing
-        // route — the user came in via a group invite, not a session
-        // restore.
+        // Deferred deep-link: if a /g/:slug deep link persisted a pending group
+        // slug (existing account signing back in), route to the Join Group
+        // screen on first post-login navigation. New accounts never reach this
+        // branch: onboarding consumes the slug after it completes. Wins over
+        // `redirectTarget` and the landing route — the user came in via a
+        // group invite, not a session restore.
         const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
         if (pendingGroupSlug) {
           await AsyncStorage.removeItem('pendingGroupSlug');
@@ -275,13 +202,12 @@ export default function WelcomeScreen() {
       if (needsOnboarding) {
         router.replace('/(auth)/onboarding'); // onboarding always wins
       } else {
-        // Deferred deep-link: if the welcome-screen invite claim
-        // (services/inviteClipboard.ts) persisted a pending group slug from a
-        // fresh-install
-        // /g/:slug interstitial, route to the Join Group screen on first
-        // post-login navigation. Wins over `redirectTarget` and the landing
-        // route — the user came in via a group invite, not a session
-        // restore.
+        // Deferred deep-link: if a /g/:slug deep link persisted a pending group
+        // slug (existing account signing back in), route to the Join Group
+        // screen on first post-login navigation. New accounts never reach this
+        // branch: onboarding consumes the slug after it completes. Wins over
+        // `redirectTarget` and the landing route — the user came in via a
+        // group invite, not a session restore.
         const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
         if (pendingGroupSlug) {
           await AsyncStorage.removeItem('pendingGroupSlug');
@@ -402,36 +328,6 @@ export default function WelcomeScreen() {
             }
             style={{ width: '100%' }}
           />
-
-          {inviteMessage ? (
-            <Text style={[styles.inviteText, { color: COLORS.textMuted }]}>
-              {inviteMessage}
-            </Text>
-          ) : inviteOfferVisible && usePasteControl ? (
-            <View style={styles.inviteRow}>
-              <Text style={[styles.inviteText, { color: COLORS.textMuted }]}>
-                Came from an invite?
-              </Text>
-              <ClipboardPasteButton
-                acceptedContentTypes={['plain-text']}
-                displayMode="iconAndLabel"
-                style={styles.pasteButton}
-                onPress={handleInvitePaste}
-              />
-            </View>
-          ) : inviteOfferVisible ? (
-            <TouchableOpacity
-              onPress={handleInviteClaim}
-              disabled={isClaimingInvite}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={[styles.inviteText, styles.inviteLink, { color: COLORS.text }]}>
-                Came from an invite? Tap to continue
-              </Text>
-            </TouchableOpacity>
-          ) : null}
 
           <Text style={[styles.terms, { color: COLORS.textMuted }]}>
             By continuing, you agree to our{' '}
@@ -559,24 +455,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
     color: COLORS.primary,
     lineHeight: 18,
-  },
-  inviteText: {
-    fontSize: 14,
-    fontFamily: FONTS.medium,
-    textAlign: 'center',
-  },
-  inviteLink: {
-    textDecorationLine: 'underline',
-  },
-  inviteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-  },
-  pasteButton: {
-    width: 100,
-    height: 36,
   },
   terms: {
     fontSize: 12,

@@ -234,8 +234,13 @@ function RootLayoutInner() {
           // matches and routing the user to the Matches tab.
           let deepLinkHandled = false;
 
-          // Handle pending group invite from deep link (saved pre-auth)
-          const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
+          // Handle pending group invite from deep link (saved pre-auth).
+          // Skipped while onboarding is outstanding: the slug stays in storage
+          // and onboarding's enterApp consumes it after completion (a nav here
+          // would push /g/:slug past the onboarding gate and double-navigate).
+          const pendingGroupSlug = needsOnboarding
+            ? null
+            : await AsyncStorage.getItem('pendingGroupSlug');
           if (pendingGroupSlug) {
             await AsyncStorage.removeItem('pendingGroupSlug');
             scheduleColdStartNav('pendingGroupInvite', () => router.push(`/g/${pendingGroupSlug}`));

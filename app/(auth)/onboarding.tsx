@@ -11,14 +11,22 @@ import {
   Platform,
   ScrollView,
   Linking,
+  AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ClipboardPasteButton, isPasteButtonAvailable } from 'expo-clipboard';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth, accessApi, isReferralReviewRequiredError } from '@/services/api';
+import {
+  shouldOfferInviteClipboardClaim,
+  claimInviteFromClipboard,
+  parseAndStoreInvite,
+  type InviteClaimResult,
+} from '@/services/inviteClipboard';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -56,6 +64,13 @@ const REFERRAL_FAILURE_MESSAGE =
 // user's captured ref flips it read-only.
 type OnboardingStep = 'referral' | 'profile';
 
+// iOS 16+ system paste control: hands us the text with no "Allow Paste" alert.
+// Plain boolean (never destructure from a Platform.OS conditional).
+let usePasteControl = false;
+if (Platform.OS === 'ios' && isPasteButtonAvailable) {
+  usePasteControl = true;
+}
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -77,6 +92,15 @@ export default function OnboardingScreen() {
     'handle_code' | 'profile_share' | 'group_invite' | null
   >(null);
   const [typedReferrer, setTypedReferrer] = useState('');
+
+  // Invite clipboard claim (261122-gwy). Detection is prompt-free metadata
+  // only; the clipboard text is read solely from the Paste tap (Android / iOS
+  // without the system control) or handed to us by Apple's paste control.
+  const [inviteOfferVisible, setInviteOfferVisible] = useState(false);
+  const [isClaimingInvite, setIsClaimingInvite] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const inviteClaimAttempted = useRef(false);
+  const inviteClaimApplied = useRef(false);
 
   // Phase 35 step machine — resolved inside the attribution effect below.
   const [step, setStep] = useState<OnboardingStep | null>(null);
@@ -121,6 +145,65 @@ export default function OnboardingScreen() {
   }, []);
 
   const isReadOnlyRef = !!recognizedRef;
+
+  // Offer the claim only on the editable organic profile form (no captured ref).
+  // Re-checks on foreground so a payload copied in Safari shows up on return.
+  useEffect(() => {
+    if (step !== 'profile' || recognizedRef) return;
+    let cancelled = false;
+    const check = () => {
+      if (inviteClaimAttempted.current) return;
+      shouldOfferInviteClipboardClaim().then((offer) => {
+        if (cancelled || inviteClaimAttempted.current) return;
+        setInviteOfferVisible(offer);
+      });
+    };
+    check();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, [step, recognizedRef]);
+
+  const finishInviteClaim = (result: InviteClaimResult) => {
+    setInviteOfferVisible(false);
+    setIsClaimingInvite(false);
+    if (result.matched) {
+      // Same state a typed code uses, so submission treats it identically.
+      const code = result.ref.replace(/[^a-z0-9_]/g, '').slice(0, 30);
+      setTypedReferrer(code);
+      setReferralError(null);
+      inviteClaimApplied.current = true;
+      setInviteMessage(`Invite from @${code} applied`);
+    } else {
+      setInviteMessage('No invite code found on your clipboard');
+    }
+  };
+
+  // Android / iOS without the paste control: explicit tap, then a clipboard read.
+  const handleInviteClaim = async () => {
+    if (isClaimingInvite) return;
+    inviteClaimAttempted.current = true;
+    setIsClaimingInvite(true);
+    const result = await claimInviteFromClipboard();
+    finishInviteClaim(result);
+  };
+
+  // iOS paste control: the system supplies the text, so no clipboard read here.
+  const handleInvitePaste = async (data: { type: string; text?: string }) => {
+    if (isClaimingInvite) return;
+    inviteClaimAttempted.current = true;
+    setIsClaimingInvite(true);
+    let pastedText = '';
+    if (data.type === 'text' && typeof data.text === 'string') {
+      pastedText = data.text;
+    }
+    const result = await parseAndStoreInvite(pastedText);
+    finishInviteClaim(result);
+  };
 
   const detectedTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
 
@@ -259,10 +342,11 @@ export default function OnboardingScreen() {
       acceptedTermsAt: new Date().toISOString(),
     });
     await refreshSession();
-    // Clear AsyncStorage attribution on success ONLY (recognized ref case).
+    // Clear AsyncStorage attribution on success ONLY (recognized ref case, or
+    // a code filled by the invite clipboard claim, which persisted the keys).
     // For organic typed there is nothing in AsyncStorage to clear.
     // Failed submits keep the keys so a retry preserves attribution.
-    if (recognizedRef) {
+    if (recognizedRef || inviteClaimApplied.current) {
       await Promise.all([
         AsyncStorage.removeItem('attributionRef'),
         AsyncStorage.removeItem('attributionSource'),
@@ -275,11 +359,12 @@ export default function OnboardingScreen() {
   // gate them and any navigation here would fight the root-layout gate.
   const enterApp = async () => {
     // Deferred deep-link: if a /g/:slug interstitial wrote a pending group
-    // slug to the clipboard before install, the welcome-screen invite claim
-    // (services/inviteClipboard.ts) persisted, if the user tapped it, it to
-    // AsyncStorage. Consume it
-    // here so first-onboarding lands the user on the Join Group screen
-    // instead of the default beacon/globe CTA.
+    // slug to the clipboard before install, the invite claim on this screen's
+    // Referral field (services/inviteClipboard.ts) persisted it to
+    // AsyncStorage (a /g/:slug deep link taken while signed out does too).
+    // Consume it here so first-onboarding lands the user on the Join Group
+    // screen instead of the default beacon/globe CTA. The _layout cold-start
+    // restore deliberately leaves it alone while needsOnboarding is true.
     const pendingGroupSlug = await AsyncStorage.getItem('pendingGroupSlug');
     if (pendingGroupSlug) {
       await AsyncStorage.removeItem('pendingGroupSlug');
@@ -670,7 +755,31 @@ export default function OnboardingScreen() {
                         autoCorrect={false}
                         maxLength={30}
                       />
+                      {inviteOfferVisible && !typedReferrer && !inviteMessage ? (
+                        usePasteControl ? (
+                          <ClipboardPasteButton
+                            acceptedContentTypes={['plain-text']}
+                            displayMode="iconOnly"
+                            style={styles.invitePasteButton}
+                            onPress={handleInvitePaste}
+                          />
+                        ) : (
+                          <TouchableOpacity
+                            onPress={handleInviteClaim}
+                            disabled={isClaimingInvite}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel="Paste invite code"
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Text style={styles.invitePasteText}>Paste</Text>
+                          </TouchableOpacity>
+                        )
+                      ) : null}
                     </View>
+                    {inviteMessage ? (
+                      <Text style={styles.inviteMessage}>{inviteMessage}</Text>
+                    ) : null}
                     {/* <Text style={styles.referralHint}>Optional — leave blank if you don't have one</Text> */}
                   </View>
                 )}
@@ -1016,6 +1125,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.text,
     fontFamily: FONTS.regular,
+  },
+  invitePasteButton: {
+    width: 44,
+    height: 36,
+  },
+  invitePasteText: {
+    fontSize: 14,
+    fontFamily: FONTS.semiBold,
+    color: COLORS.text,
+    paddingHorizontal: 6,
+  },
+  inviteMessage: {
+    fontSize: 12,
+    fontFamily: FONTS.medium,
+    color: COLORS.textMuted,
+    marginTop: 6,
+    paddingLeft: 16,
   },
   referralHint: {
     fontSize: 12,
