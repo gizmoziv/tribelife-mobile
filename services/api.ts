@@ -544,6 +544,10 @@ export const notificationsApi = {
       // runtime; the client type previously omitted it. Drives the Privacy
       // "Read Receipts" toggle (29-04).
       readReceipts?: boolean;
+      // Phase 45 (SHAB-01): Shabbat & Yom Tov Mode. Absent on an older
+      // backend — callers treat undefined as false.
+      shabbatMode?: boolean;
+      shabbatAnnouncementSeen?: boolean;
     }>('/api/notifications/preferences'),
 
   updatePreferences: (prefs: {
@@ -554,11 +558,25 @@ export const notificationsApi = {
     dmsPush?: boolean;
     groupsPush?: boolean;
     readReceipts?: boolean;
+    shabbatMode?: boolean;
+    shabbatAnnouncementSeen?: true;
   }) =>
     request('/api/notifications/preferences', {
       method: 'PUT',
       body: JSON.stringify(prefs),
     }),
+
+  // Phase 45: where Shabbat Mode times come from + whether a window is active.
+  getShabbatStatus: () =>
+    request<ShabbatStatus>('/api/notifications/shabbat-status'),
+};
+
+export type ShabbatStatus = {
+  enabled: boolean;
+  announcementSeen: boolean;
+  location: { source: 'city' | 'gps' | 'timezone'; label: string };
+  active: boolean;
+  nextWindow: { start: string; end: string } | null;
 };
 
 // ── News Push ──────────────────────────────────────────────────────────────

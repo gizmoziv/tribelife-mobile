@@ -16,7 +16,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Purchases from 'react-native-purchases';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -30,6 +30,7 @@ import {
   groupsApi,
   newsPushApi,
   ApiError,
+  type ShabbatStatus,
 } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
@@ -60,6 +61,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { PillButton } from '@/components/ui/PillButton';
 import { AvatarCircle } from '@/components/ui/AvatarCircle';
 import { GlowBadge } from '@/components/ui/GlowBadge';
+import { LocationPicker } from '@/components/ui/tribe/LocationPicker';
 import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { OrgCard } from '@/components/ui/OrgCard';
 import { DeleteAccountSurveyModal } from '@/components/ui/profile/DeleteAccountSurveyModal';
@@ -386,7 +388,14 @@ export default function ProfileScreen() {
     // setNotifPrefs and reflects server state on load (D-04a — GET already
     // returns it). This is the only new key the typed updateNotifPref needs.
     readReceipts: true,
+    // Phase 45 (SHAB-01): OFF by default; absent in an older backend's GET
+    // keeps this default via the merge-into-prev below.
+    shabbatMode: false,
   });
+  // Phase 45 (D-10): where Shabbat Mode times come from. null = unavailable
+  // (older backend 404 / network error) — the caption + Change link hide.
+  const [shabbatStatus, setShabbatStatus] = useState<ShabbatStatus | null>(null);
+  const [shabbatLocationVisible, setShabbatLocationVisible] = useState(false);
   const [newsPushEnabled, setNewsPushEnabled] = useState(true); // default true matches DB column default
 
   useEffect(() => {
@@ -436,17 +445,39 @@ export default function ProfileScreen() {
     }
   }, []);
 
+  const refreshShabbatStatus = useCallback(() => {
+    notificationsApi
+      .getShabbatStatus()
+      .then(setShabbatStatus)
+      .catch(() => setShabbatStatus(null));
+  }, []);
+
+  // Refetch on focus so the label reflects a location changed elsewhere
+  // (Tribe tab candle card) and the "Paused now" hint stays current.
+  useFocusEffect(
+    useCallback(() => {
+      refreshShabbatStatus();
+    }, [refreshShabbatStatus]),
+  );
+
   const updateNotifPref = useCallback(
     async (key: keyof typeof notifPrefs, value: boolean) => {
       setNotifPrefs((prev) => ({ ...prev, [key]: value }));
       try {
         await notificationsApi.updatePreferences({ [key]: value });
+        if (key === 'shabbatMode') refreshShabbatStatus();
       } catch {
         // Revert on failure
         setNotifPrefs((prev) => ({ ...prev, [key]: !value }));
+        if (key === 'shabbatMode') {
+          Alert.alert(
+            'Something went wrong',
+            "Couldn't update Shabbat & Yom Tov Mode. Please try again.",
+          );
+        }
       }
     },
-    [],
+    [refreshShabbatStatus],
   );
 
   const updateNewsPushPref = useCallback(async (value: boolean) => {
@@ -909,6 +940,37 @@ export default function ProfileScreen() {
                 }
               />
             </View>
+            {/* Phase 45 (SHAB-01, D-09/D-10): its own row below the push
+                sub-toggles. Deliberately NOT disabled by the Push master
+                switch — it only holds pushes, so it stays settable. */}
+            <SettingsRow
+              label="Shabbat & Yom Tov Mode"
+              right={
+                <Switch
+                  value={notifPrefs.shabbatMode}
+                  onValueChange={(v) => updateNotifPref('shabbatMode', v)}
+                  trackColor={{ false: colors.border, true: COLORS.primary }}
+                  thumbColor="#FFF"
+                />
+              }
+            />
+            <Text style={[styles.privacyCaption, { color: colors.textMuted }]}>
+              Pauses notifications from candle lighting to Havdalah.
+              {shabbatStatus
+                ? ` Times based on ${shabbatStatus.location.label}${
+                    shabbatStatus.active ? ' · Paused now' : ''
+                  }. `
+                : ''}
+              {shabbatStatus ? (
+                <Text
+                  style={{ color: COLORS.primary, fontFamily: FONTS.semiBold }}
+                  onPress={() => setShabbatLocationVisible(true)}
+                  accessibilityRole="link"
+                >
+                  Change
+                </Text>
+              ) : null}
+            </Text>
           </SettingsSection>
         </AnimatedEntry>
 
@@ -1717,6 +1779,62 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* Phase 45 (D-10): reuse the Tribe candle-card LocationPicker. */}
+      <Modal
+        visible={shabbatLocationVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShabbatLocationVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={renameStyles.backdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShabbatLocationVisible(false)}
+          />
+          <View
+            style={[
+              renameStyles.card,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={shabbatStyles.headerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[renameStyles.title, { color: colors.text }]}>
+                  Shabbat times location
+                </Text>
+                <Text
+                  style={[renameStyles.subtitle, { color: colors.textMuted }]}
+                >
+                  Also used for the candle-lighting card on the Tribe tab.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShabbatLocationVisible(false)}
+                hitSlop={12}
+                accessibilityRole="button"
+              >
+                <Text style={[shabbatStyles.cancel, { color: colors.textMuted }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <LocationPicker
+              onLocationSet={() => {
+                setShabbatLocationVisible(false);
+                refreshShabbatStatus();
+              }}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <DeleteAccountSurveyModal
         visible={deleteModalVisible}
         onClose={() => setDeleteModalVisible(false)}
@@ -1836,6 +1954,15 @@ function SettingsRow({
     </View>
   );
 }
+
+const shabbatStyles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  cancel: { fontSize: 14, fontFamily: FONTS.medium },
+});
 
 const bioStyles = StyleSheet.create({
   card: {
