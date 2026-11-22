@@ -168,6 +168,9 @@ export default function LocalChatScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [menuVisible, setMenuVisible] = useState(false);
+  // True while the context menu's full emoji picker flow ("+") is open — its search field
+  // can raise the keyboard after the menu itself has closed.
+  const [emojiPickerActive, setEmojiPickerActive] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
@@ -181,7 +184,7 @@ export default function LocalChatScreen() {
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
-  const { isAtBottom, handleScroll, scrollToBottom } = useScrollToBottom(flatListRef);
+  const { isAtBottom, handleScroll, scrollToBottom, scrollGuard } = useScrollToBottom(flatListRef);
   // Measured height of the composer block below (edit/reply banners + input
   // row) so the scroll-to-bottom FAB floats just above it instead of a fixed
   // offset — that block's height varies (reply/edit banner, recording bar,
@@ -195,7 +198,7 @@ export default function LocalChatScreen() {
   const reversedMessages = useMemo(() => [...messages].reverse(), [messages]);
   // Viber-style floating sticky date header (fades in on scroll, out after ~1.5s).
   const stickyDate = useStickyChatDate();
-  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages, scrollGuard.release);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
@@ -392,6 +395,9 @@ export default function LocalChatScreen() {
         // Phase 22 (BUG-A): dedup by id so the local-chat optimistic pin-system
         // append + this socket echo don't double the same line.
         setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+        // The echo of the reader's own send is an explicit "take me down": drop
+        // any reaction scroll-guard hold so it cannot fight this scroll.
+        if (msg.senderId === user?.id) scrollGuard.release();
         // Inverted list: visual bottom = offset 0 (newest message).
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
         // D-17: re-advance server read-position for messages from others while
@@ -526,6 +532,8 @@ export default function LocalChatScreen() {
       if (!data.roomId) return;
       if (data.userId === user?.id) return;
 
+      // Someone else's reaction must not move the reader (see useScrollPositionGuard).
+      scrollGuard.holdPosition();
       setMessages((prev) =>
         prev.map((msg) => {
           if (msg.id !== data.messageId) return msg;
@@ -570,7 +578,15 @@ export default function LocalChatScreen() {
     });
 
     return () => { offReaction(); };
-  }, [roomId, user?.id]);
+  }, [roomId, user?.id, scrollGuard]);
+
+  // While the context menu (or its full emoji picker) is up nobody can scroll
+  // the list, so any movement is spurious: pin the reader's offset for as long
+  // as it is open. A reaction applied just before it closes keeps its own short
+  // post-update tail (see applyOptimisticReaction).
+  useEffect(() => {
+    scrollGuard.setOverlayOpen(menuVisible || emojiPickerActive);
+  }, [menuVisible, emojiPickerActive, scrollGuard]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
   const handleLongPress = useCallback((message: Message) => {
@@ -581,6 +597,8 @@ export default function LocalChatScreen() {
   const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
     const userId = user?.id;
     if (!userId) return;
+    // Pin the reader's scroll offset across the update (see useScrollPositionGuard).
+    scrollGuard.holdPosition();
     setMessages((prev) =>
       prev.map((msg) => {
         if (msg.id !== messageId) return msg;
@@ -608,7 +626,7 @@ export default function LocalChatScreen() {
         return { ...msg, reactions };
       }),
     );
-  }, [user?.id]);
+  }, [user?.id, scrollGuard]);
 
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;
@@ -962,6 +980,7 @@ export default function LocalChatScreen() {
           onViewableItemsChanged={stickyDate.onViewableItemsChanged}
           viewabilityConfig={stickyDate.viewabilityConfig}
           onScroll={handleScroll}
+          {...scrollGuard.dragProps}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
@@ -1057,6 +1076,7 @@ export default function LocalChatScreen() {
         <ContextMenu
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
+          onFullPickerActiveChange={setEmojiPickerActive}
           onReact={handleReact}
           onCopy={selectedMessage?.content ? handleCopy : undefined}
           onReply={handleReply}

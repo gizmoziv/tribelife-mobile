@@ -8,6 +8,9 @@ import * as Haptics from 'expo-haptics';
 export function useScrollToMessage<T extends { id: number }>(
   flatListRef: React.RefObject<FlatList | null>,
   messages: T[],
+  // Called right before the list is moved (e.g. to release the screen's scroll-
+  // position guard so it does not fight this deliberate jump).
+  onBeforeScroll?: () => void,
 ) {
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -18,6 +21,7 @@ export function useScrollToMessage<T extends { id: number }>(
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+    onBeforeScroll?.();
     flatListRef.current?.scrollToIndex({
       index,
       animated: true,
@@ -30,7 +34,7 @@ export function useScrollToMessage<T extends { id: number }>(
     timeoutRef.current = setTimeout(() => {
       setHighlightedId(null);
     }, 1500);
-  }, [messages, flatListRef]);
+  }, [messages, flatListRef, onBeforeScroll]);
 
   return { highlightedId, scrollToMessage };
 }

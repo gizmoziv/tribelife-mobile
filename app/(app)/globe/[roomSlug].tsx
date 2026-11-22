@@ -26,6 +26,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { useScrollToMessage } from '@/hooks/useScrollToMessage';
+import { useScrollPositionGuard } from '@/hooks/useScrollPositionGuard';
 import { useDraftMessage, roomDraftKey } from '@/hooks/useDraftMessage';
 import { useAuthStore } from '@/store/authStore';
 import { useGlobeStore } from '@/store/globeStore';
@@ -177,6 +178,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [ageGateHours, setAgeGateHours] = useState(0);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  // True while the context menu's full emoji picker flow ("+") is open — its search field
+  // can raise the keyboard after the menu itself has closed.
+  const [emojiPickerActive, setEmojiPickerActive] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<GlobeMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<GlobeMessage | null>(null);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
@@ -188,6 +192,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
   const flatListRef = useRef<FlatList>(null);
+  // Pins the reader's scroll offset around in-place message updates (reactions)
+  // so they cannot throw a mid-history reader to the newest message.
+  const scrollGuard = useScrollPositionGuard(flatListRef);
   // Measured height of the composer block below (edit/reply banners + input
   // row, or the join-chat bar) so the scroll-to-bottom FAB floats just above
   // it instead of a fixed offset — that block's height varies.
@@ -198,7 +205,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   // Viber-style floating sticky date header (fades in on scroll, out after ~1.5s).
   const stickyDate = useStickyChatDate();
   // Pass reversedMessages so scrollToIndex targets the correct inverted index.
-  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages, scrollGuard.release);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
   const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
@@ -629,6 +636,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       // Skip own reactions — already handled optimistically
       if (data.userId === user?.id) return;
 
+      // Someone else's reaction must not move the reader (see useScrollPositionGuard).
+      scrollGuard.holdPosition();
       // Update messages in the globe store
       const current = useGlobeStore.getState().messages;
       setMessages(current.map((msg) => {
@@ -673,7 +682,15 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     });
 
     return () => { offReaction(); };
-  }, [globeRoomId, user?.id, setMessages]);
+  }, [globeRoomId, user?.id, setMessages, scrollGuard]);
+
+  // While the context menu (or its full emoji picker) is up nobody can scroll
+  // the list, so any movement is spurious: pin the reader's offset for as long
+  // as it is open. A reaction applied just before it closes keeps its own short
+  // post-update tail (see applyOptimisticReaction).
+  useEffect(() => {
+    scrollGuard.setOverlayOpen(menuVisible || emojiPickerActive);
+  }, [menuVisible, emojiPickerActive, scrollGuard]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
   const handleLongPress = useCallback((message: Message | GlobeMessage) => {
@@ -684,6 +701,8 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
   const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
     const userId = user?.id;
     if (!userId) return;
+    // Pin the reader's scroll offset across the update (see useScrollPositionGuard).
+    scrollGuard.holdPosition();
     const current = useGlobeStore.getState().messages;
     setMessages(
       current.map((msg) => {
@@ -712,7 +731,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
         return { ...msg, reactions };
       }),
     );
-  }, [user?.id, setMessages]);
+  }, [user?.id, setMessages, scrollGuard]);
 
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;
@@ -825,15 +844,18 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       // Inverted list: offset 0 means at bottom (newest)
       const atBottom = contentOffset.y < SCROLL_THRESHOLD;
       setIsAtBottom(atBottom);
+      scrollGuard.onScroll(e);
     },
-    [setIsAtBottom],
+    [setIsAtBottom, scrollGuard],
   );
 
   const scrollToBottom = useCallback(() => {
+    // The reader asked to go down — never let the reaction scroll guard fight it.
+    scrollGuard.release();
     // Inverted list: visual bottom = offset 0 (newest messages).
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     resetNewMessageCount();
-  }, [resetNewMessageCount]);
+  }, [resetNewMessageCount, scrollGuard]);
 
   // ── Load more (pagination) ──────────────────────────────────────────────
   const handleLoadMore = useCallback(() => {
@@ -975,6 +997,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     // Auto-scroll to bottom after sending (inverted: bottom = offset 0).
     setIsAtBottom(true);
     resetNewMessageCount();
+    scrollGuard.release();
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
     // Stop typing. Note: GIF/document staging previously skipped this emit
     // (they were separate immediate sends); routing everything through
@@ -985,7 +1008,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
-  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, sendingChunks, prepareChunks, startChunkedSend, replyTo, pendingAttachment, clearDraft]);
+  }, [input, roomSlug, isAgeGated, isRateLimited, isUploading, sendingChunks, prepareChunks, startChunkedSend, replyTo, pendingAttachment, clearDraft, scrollGuard]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the globe:message echo. Passes the route/curated slug (NOT the
@@ -997,8 +1020,9 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
     setIsRecording(false);
     setIsAtBottom(true);
     resetNewMessageCount();
+    scrollGuard.release();
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-  }, [roomSlug, replyTo]);
+  }, [roomSlug, replyTo, scrollGuard]);
 
   // ── Typing indicator ────────────────────────────────────────────────────
   const handleInputChange = useCallback(
@@ -1177,6 +1201,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
+          {...scrollGuard.dragProps}
           scrollEventThrottle={16}
           onViewableItemsChanged={stickyDate.onViewableItemsChanged}
           viewabilityConfig={stickyDate.viewabilityConfig}
@@ -1371,6 +1396,7 @@ export function GlobeRoomScreen({ slug: roomSlug, backLabel, aroundMessageId }: 
         <ContextMenu
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
+          onFullPickerActiveChange={setEmojiPickerActive}
           onReact={handleReact}
           onCopy={selectedMessage?.content ? handleCopy : undefined}
           onReply={handleReply}

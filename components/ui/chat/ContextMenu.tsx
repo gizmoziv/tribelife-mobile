@@ -116,6 +116,10 @@ interface ContextMenuProps {
   // so the row is completely absent from the menu for users who can't pin.
   onPin?: () => void;        // optional — shown only when caller passes a defined handler
   onUnpin?: () => void;      // optional — shown only when the message is the current pin AND caller is empowered
+  // Fires true from the moment "+" (full emoji picker) is tapped until the picker is dismissed,
+  // false otherwise. The picker has its own search field, so its keyboard can rise while this
+  // menu is already closed — chat screens use this to keep their list from reacting to it.
+  onFullPickerActiveChange?: (active: boolean) => void;
   messageContent: string;
 }
 
@@ -134,6 +138,7 @@ export function ContextMenu({
   translateDisabledHint,
   onPin,
   onUnpin,
+  onFullPickerActiveChange,
   messageContent,
 }: ContextMenuProps) {
   const { colors } = useTheme();
@@ -146,6 +151,12 @@ export function ContextMenu({
       Keyboard.dismiss();
     }
   }, [visible]);
+
+  const fullPickerActive = pendingFullPicker || showFullPicker;
+  useEffect(() => {
+    onFullPickerActiveChange?.(fullPickerActive);
+    // Callback identity intentionally omitted: report transitions of the flag only.
+  }, [fullPickerActive]);
 
   // Open emoji picker after context menu finishes dismissing
   useEffect(() => {

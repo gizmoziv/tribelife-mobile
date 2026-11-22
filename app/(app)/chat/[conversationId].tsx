@@ -196,6 +196,9 @@ export default function DMThreadScreen() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [menuVisible, setMenuVisible] = useState(false);
+  // True while the context menu's full emoji picker flow ("+") is open — its search field
+  // can raise the keyboard after the menu itself has closed.
+  const [emojiPickerActive, setEmojiPickerActive] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
@@ -238,7 +241,7 @@ export default function DMThreadScreen() {
     }, 300);
   }, [router]);
   const flatListRef = useRef<FlatList>(null);
-  const { isAtBottom, handleScroll, scrollToBottom } = useScrollToBottom(flatListRef);
+  const { isAtBottom, handleScroll, scrollToBottom, scrollGuard } = useScrollToBottom(flatListRef);
   // Measured height of the composer block below (edit/reply banners + input
   // row, or the archived/join bar) so the scroll-to-bottom FAB floats just
   // above it instead of a fixed offset — that block's height varies.
@@ -259,7 +262,7 @@ export default function DMThreadScreen() {
   );
   // Pass reversedMessages so scrollToIndex (in useScrollToMessage) targets the
   // correct inverted visual index — mirrors globe/[roomSlug].tsx + chat/local.tsx.
-  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages);
+  const { highlightedId, scrollToMessage } = useScrollToMessage(flatListRef, reversedMessages, scrollGuard.release);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Phase 14 D-04: highlight flash state for tap-to-jump from search results
   const [flashHighlightedId, setFlashHighlightedId] = useState<number | undefined>(undefined);
@@ -796,6 +799,8 @@ export default function DMThreadScreen() {
       // Skip own reactions — already handled optimistically
       if (data.userId === user?.id) return;
 
+      // Someone else's reaction must not move the reader (see useScrollPositionGuard).
+      scrollGuard.holdPosition();
       setMessages((prev) =>
         prev.map((msg) => {
           if (msg.id !== data.messageId) return msg;
@@ -840,7 +845,15 @@ export default function DMThreadScreen() {
     });
 
     return () => { offReaction(); };
-  }, [conversationId, user?.id]);
+  }, [conversationId, user?.id, scrollGuard]);
+
+  // While the context menu (or its full emoji picker) is up nobody can scroll
+  // the list, so any movement is spurious: pin the reader's offset for as long
+  // as it is open. A reaction applied just before it closes keeps its own short
+  // post-update tail (see applyOptimisticReaction).
+  useEffect(() => {
+    scrollGuard.setOverlayOpen(menuVisible || emojiPickerActive);
+  }, [menuVisible, emojiPickerActive, scrollGuard]);
 
   // ── Context menu handlers ───────────────────────────────────────────────
   const handleLongPress = useCallback((message: Message) => {
@@ -851,6 +864,8 @@ export default function DMThreadScreen() {
   const applyOptimisticReaction = useCallback((messageId: number, emoji: string) => {
     const userId = user?.id;
     if (!userId) return;
+    // Pin the reader's scroll offset across the update (see useScrollPositionGuard).
+    scrollGuard.holdPosition();
     setMessages((prev) =>
       prev.map((msg) => {
         if (msg.id !== messageId) return msg;
@@ -881,7 +896,7 @@ export default function DMThreadScreen() {
         return { ...msg, reactions };
       }),
     );
-  }, [user?.id]);
+  }, [user?.id, scrollGuard]);
 
   const handleReact = useCallback(async (emoji: string) => {
     if (!selectedMessage) return;
@@ -1166,8 +1181,9 @@ export default function DMThreadScreen() {
     setPendingAttachment(null);
     stopTyping({ conversationId });
     // Inverted list: visual bottom = offset 0.
+    scrollGuard.release();
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-  }, [input, conversationId, replyTo, user, pendingAttachment, isUploading, sendingChunks, prepareChunks, startChunkedSend, clearDraft]);
+  }, [input, conversationId, replyTo, user, pendingAttachment, isUploading, sendingChunks, prepareChunks, startChunkedSend, clearDraft, scrollGuard]);
 
   // Voice send mirrors the photo flow (D-01): no optimistic bubble — the bubble
   // arrives on the dm:message echo. The same emitter serves 1:1 DMs and groups
@@ -1177,8 +1193,9 @@ export default function DMThreadScreen() {
     setReplyTo(null);
     setIsRecording(false);
     stopTyping({ conversationId });
+    scrollGuard.release();
     setTimeout(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }), 100);
-  }, [conversationId, replyTo]);
+  }, [conversationId, replyTo, scrollGuard]);
 
   const handleInputChange = (text: string) => {
     setInput(text);
@@ -1375,6 +1392,7 @@ export default function DMThreadScreen() {
           onViewableItemsChanged={stickyDate.onViewableItemsChanged}
           viewabilityConfig={stickyDate.viewabilityConfig}
           onScroll={handleScroll}
+          {...scrollGuard.dragProps}
           scrollEventThrottle={16}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
@@ -1551,6 +1569,7 @@ export default function DMThreadScreen() {
         <ContextMenu
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
+          onFullPickerActiveChange={setEmojiPickerActive}
           onReact={handleReact}
           onCopy={selectedMessage?.content ? handleCopy : undefined}
           onReply={handleReply}
