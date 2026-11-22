@@ -113,7 +113,8 @@ export function PasteImageChip({ active, disabled, onImagesSelected }: PasteImag
 
   if (USE_SYSTEM_PASTE_BUTTON) {
     return (
-      <View style={[styles.systemRow, { backgroundColor: colors.surfaceElevated }]}>
+      // Apple's button alone — a "Paste image" label beside it read as a second button.
+      <View style={styles.systemRow}>
         <ClipboardPasteButton
           acceptedContentTypes={['image']}
           displayMode="iconAndLabel"
@@ -121,11 +122,7 @@ export function PasteImageChip({ active, disabled, onImagesSelected }: PasteImag
           style={styles.systemButton}
           onPress={handleSystemPaste}
         />
-        {busy ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <Text style={[styles.label, { color: colors.primary }]}>Paste image</Text>
-        )}
+        {busy ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       </View>
     );
   }
