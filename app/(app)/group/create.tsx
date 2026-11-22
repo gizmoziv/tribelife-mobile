@@ -457,7 +457,6 @@ export default function CreateGroupScreen() {
               <BulletRow
                 icon={<IconMoon color={COLORS.primary} />}
                 text="Shabbat mode notifications — auto-pause and resume"
-                comingSoon
                 textColor={colors.text}
                 mutedColor={colors.textMuted}
               />
