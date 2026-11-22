@@ -70,6 +70,7 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { GlowBadge } from '@/components/ui/GlowBadge';
 import { MessageBubble } from '@/components/ui/chat/MessageBubble';
 import { IntroGate } from '@/components/ui/chat/IntroGate';
+import { ShabbatAnnouncementCard } from '@/components/ui/ShabbatAnnouncementCard';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { MentionAutocomplete, type MentionScope } from '@/components/ui/chat/MentionAutocomplete';
@@ -897,6 +898,9 @@ function ChatsList({
   const router = useRouter();
   const tabBarSpace = useTabBarSpace();
   const isArchiveView = pillFilter === 'archive';
+  // Phase 45 (D-15): one-time Shabbat Mode announcement sits at the top of the
+  // list, never while the Phase-44 intro gate is up (hasPostedInChat === false).
+  const introGated = useAuthStore((s) => s.user?.hasPostedInChat) === false;
 
   const renderRow = useCallback(({ item }: { item: ChatsRow }) => {
     // Only dm and group rows are archivable — room rows render without swipe.
@@ -949,6 +953,9 @@ function ChatsList({
       contentContainerStyle={{ paddingVertical: SPACING.sm }}
       keyboardDismissMode="on-drag"
       extraData={draftTexts}
+      ListHeaderComponent={
+        introGated || isArchiveView ? null : <ShabbatAnnouncementCard />
+      }
       ListEmptyComponent={
         emptyText ? (
           <View style={styles.emptyMatches}>
