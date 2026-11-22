@@ -338,6 +338,10 @@ function RootLayoutInner() {
                 useTribeHubStore.getState().refreshTodayIfStale();
               });
               deepLinkHandled = true;
+            } else if (nData?.type === 'shabbat_summary') {
+              // Post-Havdalah "While you were away" summary: open the bell (notifications) screen.
+              scheduleColdStartNav('shabbatSummaryTap', () => router.push('/notifications'));
+              deepLinkHandled = true;
             } else if (nData?.type === 'org_invite' && nData?.token) {
               scheduleColdStartNav('orgInviteTap', () => router.push({
                 pathname: '/org/invite/[token]',
@@ -497,6 +501,9 @@ function RootLayoutInner() {
         router.push('/(app)/tribe');
         useTribeHubStore.getState().openSheet('details');
         useTribeHubStore.getState().refreshTodayIfStale();
+      } else if (data?.type === 'shabbat_summary') {
+        // Post-Havdalah summary tap while running: open the bell (notifications) screen.
+        router.push('/notifications');
       } else if (data?.type === 'org_invite' && data?.token) {
         router.push({
           pathname: '/org/invite/[token]',
