@@ -82,6 +82,9 @@
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
       ]
     },
     "plugins": [
@@ -142,6 +145,12 @@
       "./plugins/withoutMediaPlaybackPermission",
       "./plugins/withoutVisualUserSelectedPermission",
       "./plugins/withCommunicationNotifications",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "TribeLife uses the contacts you choose to let you send them a personal invite. Your contacts stay on your phone and are never uploaded."
+        }
+      ],
       [
         "expo-splash-screen",
         {

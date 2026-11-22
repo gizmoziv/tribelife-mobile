@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { requireOptionalNativeModule } from 'expo';
 import Purchases from 'react-native-purchases';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -67,6 +68,10 @@ import { AnimatedEntry } from '@/components/ui/AnimatedEntry';
 import { OrgCard } from '@/components/ui/OrgCard';
 import { DeleteAccountSurveyModal } from '@/components/ui/profile/DeleteAccountSurveyModal';
 import Svg, { Path, Circle } from 'react-native-svg';
+
+// Invite Contacts needs the native module that ships in the 1.9.2 store build.
+// An older binary lacks it, so the entry point stays hidden there.
+const CONTACTS_NATIVE = requireOptionalNativeModule('ExpoContactsNext') != null;
 
 function ChevronIcon({ color }: { color: string }) {
   return (
@@ -1005,6 +1010,14 @@ export default function ProfileScreen() {
                 variant="primary"
                 style={{ marginTop: 12 }}
               />
+              {CONTACTS_NATIVE && (
+                <PillButton
+                  title="Invite Contacts"
+                  variant="outline"
+                  onPress={() => router.push('/(app)/profile/invite')}
+                  style={{ marginTop: 8 }}
+                />
+              )}
             </View>
           </GlassCard>
         </AnimatedEntry>
