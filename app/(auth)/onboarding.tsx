@@ -11,20 +11,19 @@ import {
   Platform,
   ScrollView,
   Linking,
-  AppState,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ClipboardPasteButton, isPasteButtonAvailable } from 'expo-clipboard';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { auth, accessApi, isReferralReviewRequiredError } from '@/services/api';
 import {
   shouldOfferInviteClipboardClaim,
   claimInviteFromClipboard,
-  parseAndStoreInvite,
+  markInviteClipboardChecked,
   type InviteClaimResult,
 } from '@/services/inviteClipboard';
 import { FONTS, COLORS, SPACING, RADIUS, SHADOWS } from '@/constants';
@@ -64,13 +63,6 @@ const REFERRAL_FAILURE_MESSAGE =
 // user's captured ref flips it read-only.
 type OnboardingStep = 'referral' | 'profile';
 
-// iOS 16+ system paste control: hands us the text with no "Allow Paste" alert.
-// Plain boolean (never destructure from a Platform.OS conditional).
-let usePasteControl = false;
-if (Platform.OS === 'ios' && isPasteButtonAvailable) {
-  usePasteControl = true;
-}
-
 export default function OnboardingScreen() {
   const router = useRouter();
   const { colors } = useTheme();
@@ -93,9 +85,9 @@ export default function OnboardingScreen() {
   >(null);
   const [typedReferrer, setTypedReferrer] = useState('');
 
-  // Invite clipboard claim (261122-gwy). Detection is prompt-free metadata
-  // only; the clipboard text is read solely from the Paste tap (Android / iOS
-  // without the system control) or handed to us by Apple's paste control.
+  // Invite clipboard claim (261122-hdy). Detection is prompt-free metadata
+  // only (hasStringAsync); the explainer card shows automatically and the
+  // clipboard text is read solely from its Continue tap.
   const [inviteOfferVisible, setInviteOfferVisible] = useState(false);
   const [isClaimingInvite, setIsClaimingInvite] = useState(false);
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
@@ -153,25 +145,19 @@ export default function OnboardingScreen() {
 
   const isReadOnlyRef = !!recognizedRef;
 
-  // Offer the claim only on the editable organic profile form (no captured ref).
-  // Re-checks on foreground so a payload copied in Safari shows up on return.
+  // Show the explainer once, on landing on the editable organic profile step
+  // (no captured ref, once-per-install flag unset, clipboard reports a string).
+  // No clipboard content is read here.
   useEffect(() => {
     if (step !== 'profile' || recognizedRef) return;
+    if (inviteClaimAttempted.current) return;
     let cancelled = false;
-    const check = () => {
-      if (inviteClaimAttempted.current) return;
-      shouldOfferInviteClipboardClaim().then((offer) => {
-        if (cancelled || inviteClaimAttempted.current) return;
-        setInviteOfferVisible(offer);
-      });
-    };
-    check();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') check();
+    shouldOfferInviteClipboardClaim().then((offer) => {
+      if (cancelled || inviteClaimAttempted.current) return;
+      setInviteOfferVisible(offer);
     });
     return () => {
       cancelled = true;
-      sub.remove();
     };
   }, [step, recognizedRef]);
 
@@ -187,12 +173,13 @@ export default function OnboardingScreen() {
       inviteClaimApplied.current = true;
       setInviteMessage(`Invite from @${code} applied`);
     } else {
-      setInviteMessage('No invite code found on your clipboard');
+      setInviteMessage('No invite code found');
     }
   };
 
-  // Android / iOS without the paste control: explicit tap, then a clipboard read.
-  const handleInviteClaim = async () => {
+  // Continue on the explainer card: the ONLY clipboard read. iOS then shows its
+  // system "Allow Paste" popup; Don't Allow / empty / no match -> quiet no-match.
+  const handleInviteContinue = async () => {
     if (isClaimingInvite) return;
     inviteClaimAttempted.current = true;
     setIsClaimingInvite(true);
@@ -200,17 +187,12 @@ export default function OnboardingScreen() {
     finishInviteClaim(result);
   };
 
-  // iOS paste control: the system supplies the text, so no clipboard read here.
-  const handleInvitePaste = async (data: { type: string; text?: string }) => {
+  // Skip (or Android back): close, burn the once flag, never touch the clipboard.
+  const handleInviteSkip = () => {
     if (isClaimingInvite) return;
     inviteClaimAttempted.current = true;
-    setIsClaimingInvite(true);
-    let pastedText = '';
-    if (data.type === 'text' && typeof data.text === 'string') {
-      pastedText = data.text;
-    }
-    const result = await parseAndStoreInvite(pastedText);
-    finishInviteClaim(result);
+    setInviteOfferVisible(false);
+    void markInviteClipboardChecked();
   };
 
   const detectedTimezone = Localization.getCalendars()[0]?.timeZone ?? 'UTC';
@@ -772,27 +754,6 @@ export default function OnboardingScreen() {
                         autoCorrect={false}
                         maxLength={30}
                       />
-                      {inviteOfferVisible && !typedReferrer && !inviteMessage ? (
-                        usePasteControl ? (
-                          <ClipboardPasteButton
-                            acceptedContentTypes={['plain-text']}
-                            displayMode="iconOnly"
-                            style={styles.invitePasteButton}
-                            onPress={handleInvitePaste}
-                          />
-                        ) : (
-                          <TouchableOpacity
-                            onPress={handleInviteClaim}
-                            disabled={isClaimingInvite}
-                            activeOpacity={0.7}
-                            accessibilityRole="button"
-                            accessibilityLabel="Paste invite code"
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Text style={styles.invitePasteText}>Paste</Text>
-                          </TouchableOpacity>
-                        )
-                      ) : null}
                     </View>
                     {inviteMessage ? (
                       <Text style={styles.inviteMessage}>{inviteMessage}</Text>
@@ -950,6 +911,43 @@ export default function OnboardingScreen() {
           <NotYouLogout />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Invite clipboard explainer (261122-hdy). Dark card, COLORS.* directly. */}
+      <Modal
+        visible={inviteOfferVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleInviteSkip}
+      >
+        <View style={styles.inviteBackdrop}>
+          <View style={styles.inviteCard}>
+            <Text style={styles.inviteCardTitle}>Joining from an invite?</Text>
+            <Text style={styles.inviteCardBody}>
+              TribeLife will check your clipboard for your invite code so we can
+              connect you with the person who invited you.
+            </Text>
+            <PillButton
+              title="Continue"
+              onPress={handleInviteContinue}
+              variant="primary"
+              size="md"
+              loading={isClaimingInvite}
+              style={{ width: '100%', marginTop: SPACING.lg }}
+            />
+            <TouchableOpacity
+              onPress={handleInviteSkip}
+              disabled={isClaimingInvite}
+              style={styles.skipButton}
+              accessibilityRole="button"
+              accessibilityLabel="Skip"
+            >
+              <Text style={[styles.skipText, { color: COLORS.textMuted }]}>
+                Skip
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -1144,15 +1142,36 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: FONTS.regular,
   },
-  invitePasteButton: {
-    width: 44,
-    height: 36,
+  inviteBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
   },
-  invitePasteText: {
-    fontSize: 14,
+  inviteCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    padding: SPACING.lg,
+    alignItems: 'center',
+  },
+  inviteCardTitle: {
+    fontSize: 20,
     fontFamily: FONTS.semiBold,
     color: COLORS.text,
-    paddingHorizontal: 6,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+  },
+  inviteCardBody: {
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   inviteMessage: {
     fontSize: 12,
