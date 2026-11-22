@@ -102,6 +102,26 @@ export function linkedInShareUrl(link: string): string {
   return `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(link)}`;
 }
 
+/**
+ * Checklist search: case-insensitive name substring; a query with 2+ digits also
+ * matches any phone's digits (one digit alone matches names only).
+ */
+export function matchesQuery(name: string, phones: string[], query: string): boolean {
+  const q = query.trim().toLocaleLowerCase();
+  if (!q) return true;
+  if (name.toLocaleLowerCase().includes(q)) return true;
+  const digits = q.replace(/\D/g, '');
+  if (digits.length < 2) return false;
+  return phones.some((phone) => phone.replace(/\D/g, '').includes(digits));
+}
+
+/** Footer for contacts left out because they have no phone number. */
+export function hiddenNote(n: number): string {
+  if (n <= 0) return '';
+  if (n === 1) return "1 contact without a phone number isn't shown";
+  return `${n} contacts without a phone number aren't shown`;
+}
+
 /** JSON object of contactId -> ISO date; anything else is treated as empty. */
 export function parseInvitedMap(raw: string | null): Record<string, string> {
   if (!raw) return {};

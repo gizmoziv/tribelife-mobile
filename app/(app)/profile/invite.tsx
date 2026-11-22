@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   SectionList,
   FlatList,
   ScrollView,
+  TextInput,
   ActivityIndicator,
   Alert,
   AppState,
@@ -41,6 +42,8 @@ import {
   sectionKeyOf,
   isRTLText,
   invitedLabel,
+  matchesQuery,
+  hiddenNote,
   whatsAppUrl,
   parseInvitedMap,
   parseIdList,
@@ -207,9 +210,17 @@ function inviteWriteSelected(ids: string[]): void {
   AsyncStorage.setItem(SELECTED_KEY, JSON.stringify(ids)).catch(() => {});
 }
 
-function nonePhoneNote(count: number): string {
-  if (count === 1) return "1 contact without a phone number isn't shown";
-  return `${count} contacts without a phone number aren't shown`;
+// iOS 18+ limited access: Apple's picker adds contacts to the shared set. It resolves
+// with only the newly granted ids, so callers reload the whole set afterwards.
+async function inviteSelectMore(): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  const C = inviteContactsModule();
+  if (!C) return;
+  try {
+    await C.Contact.presentAccessPicker();
+  } catch {
+    // Below iOS 18, or a picker is already open.
+  }
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -229,6 +240,8 @@ export default function InviteScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [invited, setInvited] = useState<Record<string, string>>({});
   const [smsAvailable, setSmsAvailable] = useState(false);
+  const [query, setQuery] = useState('');
+  const deferredQuery = useDeferredValue(query);
   const [chooser, setChooser] = useState<{ contact: InviteContact; channel: Channel } | null>(null);
   const sendingRef = useRef(false);
   const recheckingRef = useRef(false);
@@ -352,12 +365,14 @@ export default function InviteScreen() {
   }, []);
 
   const handleContinuePick = useCallback(() => {
+    setQuery('');
     inviteWriteSelected(checkedIds);
     setSelectedIds(checkedIds);
     setStep('list');
   }, [checkedIds]);
 
   const handleEditSelection = useCallback(() => {
+    setQuery('');
     setCheckedIds(selectedIds);
     setStep('pick');
   }, [selectedIds]);
@@ -456,9 +471,30 @@ export default function InviteScreen() {
     });
   }, [chooser, region, sendTo]);
 
+  const handleSelectMore = useCallback(async () => {
+    Haptics.selectionAsync().catch(() => {});
+    await inviteSelectMore();
+    try {
+      const loaded = await inviteLoadContacts();
+      setContacts(loaded.contacts);
+      setHiddenCount(loaded.hiddenCount);
+      // Limited access: the whole shared set is the selection, so replace, never merge.
+      setSelectedIds(loaded.contacts.map((c) => c.id));
+    } catch {
+      // Keep what is on screen.
+    }
+  }, []);
+
+  const filteredContacts = useMemo(
+    () => contacts.filter((c) => matchesQuery(c.name, c.phones, deferredQuery)),
+    [contacts, deferredQuery],
+  );
+
+  const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds]);
+
   const sections = useMemo(() => {
     const byKey = new Map<string, InviteContact[]>();
-    for (const c of contacts) {
+    for (const c of filteredContacts) {
       const key = sectionKeyOf(c.name);
       const bucket = byKey.get(key);
       if (bucket) bucket.push(c);
@@ -470,7 +506,7 @@ export default function InviteScreen() {
       return a.localeCompare(b);
     });
     return keys.map((key) => ({ title: key, data: byKey.get(key) ?? [] }));
-  }, [contacts]);
+  }, [filteredContacts]);
 
   const selectedContacts = useMemo(() => {
     const set = new Set(selectedIds);
@@ -537,12 +573,60 @@ export default function InviteScreen() {
     </ScrollView>
   );
 
+  const renderPickItem = ({ item }: { item: InviteContact }) => (
+    <PickRow
+      item={item}
+      checked={checkedSet.has(item.id)}
+      region={region}
+      onToggle={toggleChecked}
+      borderColor={colors.border}
+      avatarBg={colors.surfaceElevated}
+      textColor={colors.text}
+      mutedColor={colors.textMuted}
+    />
+  );
+
   const renderPick = () => (
     <View style={styles.flex}>
+      <View style={[styles.searchBox, { backgroundColor: colors.surfaceElevated }]}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search contacts"
+          placeholderTextColor={colors.textMuted}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+          clearButtonMode="never"
+          style={[styles.searchInput, { color: colors.text }]}
+        />
+        {query.length > 0 ? (
+          <Pressable
+            onPress={() => setQuery('')}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M6 6l12 12M18 6L6 18"
+                stroke={colors.textMuted}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+              />
+            </Svg>
+          </Pressable>
+        ) : null}
+      </View>
       <SectionList
         sections={sections}
+        extraData={checkedSet}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled
+        initialNumToRender={20}
+        windowSize={7}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: SPACING.md }}
         ListHeaderComponent={
           <View>
@@ -557,59 +641,16 @@ export default function InviteScreen() {
             </Text>
           </View>
         )}
-        renderItem={({ item }) => {
-          const checked = checkedIds.includes(item.id);
-          return (
-            <Pressable
-              onPress={() => toggleChecked(item.id)}
-              style={({ pressed }) => [styles.pickRow, { opacity: pressed ? 0.8 : 1 }]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked }}
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  {
-                    borderColor: checked ? COLORS.primary : colors.border,
-                    backgroundColor: checked ? COLORS.primary : 'transparent',
-                  },
-                ]}
-              >
-                {checked && (
-                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                    <Path
-                      d="M5 12l5 5 9-10"
-                      stroke="#FFFFFF"
-                      strokeWidth={3}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
-                )}
-              </View>
-              <Avatar name={item.name} bg={colors.surfaceElevated} fg={colors.text} />
-              <View style={styles.rowText}>
-                <Text
-                  style={[
-                    styles.rowName,
-                    { color: colors.text },
-                    isRTLText(item.name) && styles.rtl,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
-                <Text style={[styles.rowPhone, { color: colors.textMuted }]} numberOfLines={1}>
-                  {intlPhone(item.phones[0], region)?.display ?? item.phones[0]}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        }}
+        renderItem={renderPickItem}
+        ListEmptyComponent={
+          deferredQuery.trim() ? (
+            <Text style={[styles.footNote, { color: colors.textMuted }]}>No matches</Text>
+          ) : null
+        }
         ListFooterComponent={
           hiddenCount > 0 ? (
             <Text style={[styles.footNote, { color: colors.textMuted }]}>
-              {nonePhoneNote(hiddenCount)}
+              {hiddenNote(hiddenCount)}
             </Text>
           ) : null
         }
@@ -625,10 +666,28 @@ export default function InviteScreen() {
     </View>
   );
 
+  const renderListItem = ({ item }: { item: InviteContact }) => (
+    <InviteRow
+      item={item}
+      invitedAt={invited[item.id] ?? null}
+      smsAvailable={smsAvailable}
+      region={region}
+      onSend={handleSend}
+      avatarBg={colors.surfaceElevated}
+      textColor={colors.text}
+      mutedColor={colors.textMuted}
+    />
+  );
+
   const renderList = () => (
     <FlatList
       data={selectedContacts}
+      extraData={invited}
       keyExtractor={(item) => item.id}
+      initialNumToRender={20}
+      windowSize={7}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       contentContainerStyle={{ paddingBottom: bottomPad }}
       ListHeaderComponent={
         <View>
@@ -642,48 +701,39 @@ export default function InviteScreen() {
         </View>
       }
       ListEmptyComponent={
-        <Text style={[styles.footNote, { color: colors.textMuted }]}>
-          No contacts with a phone number to invite.
-        </Text>
+        access === 'limited' ? (
+          <View style={styles.emptyWrap}>
+            <Text style={[styles.deniedText, { color: colors.text }]}>
+              No contacts shared with TribeLife yet
+            </Text>
+            <PillButton
+              title="Select contacts"
+              onPress={handleSelectMore}
+              variant="primary"
+              style={{ marginTop: SPACING.md }}
+            />
+          </View>
+        ) : (
+          <Text style={[styles.footNote, { color: colors.textMuted }]}>
+            No contacts with a phone number to invite.
+          </Text>
+        )
       }
       ListFooterComponent={
-        hiddenCount > 0 ? (
-          <Text style={[styles.footNote, { color: colors.textMuted }]}>
-            {nonePhoneNote(hiddenCount)}
-          </Text>
-        ) : null
-      }
-      renderItem={({ item }) => (
-        <View style={styles.listRow}>
-          <Avatar name={item.name} bg={colors.surfaceElevated} fg={colors.text} />
-          <View style={styles.rowText}>
-            <Text
-              style={[
-                styles.rowName,
-                { color: colors.text },
-                isRTLText(item.name) && styles.rtl,
-              ]}
-              numberOfLines={1}
-            >
-              {item.name}
+        <View>
+          {access === 'limited' && selectedContacts.length > 0 ? (
+            <Pressable onPress={handleSelectMore} hitSlop={8} style={styles.editLink}>
+              <Text style={[styles.editLinkText, { color: COLORS.primary }]}>Select more contacts</Text>
+            </Pressable>
+          ) : null}
+          {hiddenCount > 0 ? (
+            <Text style={[styles.footNote, { color: colors.textMuted }]}>
+              {hiddenNote(hiddenCount)}
             </Text>
-            <Text style={[styles.rowPhone, { color: colors.textMuted }]} numberOfLines={1}>
-              {intlPhone(item.phones[0], region)?.display ?? item.phones[0]}
-            </Text>
-            {invited[item.id] ? (
-              <Text style={[styles.invitedText, { color: COLORS.primary }]}>
-                {invitedLabel(invited[item.id])}
-              </Text>
-            ) : null}
-          </View>
-          <View style={styles.rowButtons}>
-            {smsAvailable ? (
-              <RowButton label="Text" color={COLORS.primary} onPress={() => handleSend(item, 'text')} />
-            ) : null}
-            <RowButton label="WhatsApp" color={COLORS.primary} onPress={() => handleSend(item, 'whatsapp')} />
-          </View>
+          ) : null}
         </View>
-      )}
+      }
+      renderItem={renderListItem}
     />
   );
 
@@ -786,6 +836,115 @@ function PreviewCard({
 }
 
 // ── Row pieces ───────────────────────────────────────────────────────────────
+const PickRow = memo(function PickRow({
+  item,
+  checked,
+  region,
+  onToggle,
+  borderColor,
+  avatarBg,
+  textColor,
+  mutedColor,
+}: {
+  item: InviteContact;
+  checked: boolean;
+  region: string | null;
+  onToggle: (id: string) => void;
+  borderColor: string;
+  avatarBg: string;
+  textColor: string;
+  mutedColor: string;
+}) {
+  return (
+    <Pressable
+      onPress={() => onToggle(item.id)}
+      style={({ pressed }) => [styles.pickRow, { opacity: pressed ? 0.8 : 1 }]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+    >
+      <View
+        style={[
+          styles.checkbox,
+          {
+            borderColor: checked ? COLORS.primary : borderColor,
+            backgroundColor: checked ? COLORS.primary : 'transparent',
+          },
+        ]}
+      >
+        {checked && (
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M5 12l5 5 9-10"
+              stroke="#FFFFFF"
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        )}
+      </View>
+      <Avatar name={item.name} bg={avatarBg} fg={textColor} />
+      <View style={styles.rowText}>
+        <Text
+          style={[styles.rowName, { color: textColor }, isRTLText(item.name) && styles.rtl]}
+          numberOfLines={1}
+        >
+          {item.name}
+        </Text>
+        <Text style={[styles.rowPhone, { color: mutedColor }]} numberOfLines={1}>
+          {intlPhone(item.phones[0], region)?.display ?? item.phones[0]}
+        </Text>
+      </View>
+    </Pressable>
+  );
+});
+
+const InviteRow = memo(function InviteRow({
+  item,
+  invitedAt,
+  smsAvailable,
+  region,
+  onSend,
+  avatarBg,
+  textColor,
+  mutedColor,
+}: {
+  item: InviteContact;
+  invitedAt: string | null;
+  smsAvailable: boolean;
+  region: string | null;
+  onSend: (contact: InviteContact, channel: Channel) => void;
+  avatarBg: string;
+  textColor: string;
+  mutedColor: string;
+}) {
+  return (
+    <View style={styles.listRow}>
+      <Avatar name={item.name} bg={avatarBg} fg={textColor} />
+      <View style={styles.rowText}>
+        <Text
+          style={[styles.rowName, { color: textColor }, isRTLText(item.name) && styles.rtl]}
+          numberOfLines={1}
+        >
+          {item.name}
+        </Text>
+        <Text style={[styles.rowPhone, { color: mutedColor }]} numberOfLines={1}>
+          {intlPhone(item.phones[0], region)?.display ?? item.phones[0]}
+        </Text>
+        {invitedAt ? (
+          <Text style={[styles.invitedText, { color: COLORS.primary }]}>{invitedLabel(invitedAt)}</Text>
+        ) : null}
+      </View>
+      <View style={styles.rowButtons}>
+        {smsAvailable ? (
+          <RowButton label="Text" color={COLORS.primary} onPress={() => onSend(item, 'text')} />
+        ) : null}
+        <RowButton label="WhatsApp" color={COLORS.primary} onPress={() => onSend(item, 'whatsapp')} />
+      </View>
+    </View>
+  );
+});
+
 function Avatar({ name, bg, fg }: { name: string; bg: string; fg: string }) {
   return (
     <View style={[styles.avatar, { backgroundColor: bg }]}>
@@ -933,6 +1092,26 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     fontFamily: FONTS.medium,
     textAlign: 'center',
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: SPACING.page,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: 14,
+    borderRadius: RADIUS.pill,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: FONTS.regular,
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    paddingHorizontal: SPACING.page,
+    paddingTop: SPACING.xl,
   },
   deniedWrap: {
     alignItems: 'center',

@@ -144,6 +144,25 @@ eq(
 );
 ok(!String(fn('linkedInShareUrl')(L)).includes('?ref='), 'linkedin:noRawRef');
 
+// 13c. matchesQuery
+const mq = fn('matchesQuery');
+ok(mq('Dana Levi', ['054-123-4567'], '') === true, 'mq:empty');
+ok(mq('Dana Levi', ['054-123-4567'], '   ') === true, 'mq:blank');
+ok(mq('Dana Levi', [], 'lev') === true, 'mq:nameSub');
+ok(mq('Dana Levi', [], 'LEVI') === true, 'mq:nameCase');
+ok(mq('Dana Levi', [], 'xyz') === false, 'mq:nameMiss');
+ok(mq('שרה כהן', [], 'כהן') === true, 'mq:hebrew');
+ok(mq('Dana Levi', ['054-123-4567'], '0541') === true, 'mq:digits');
+ok(mq('Dana Levi', ['054-123-4567'], '999') === false, 'mq:digitsMiss');
+ok(mq('Dana Levi', ['054-123-4567'], '5') === false, 'mq:oneDigit');
+ok(mq('Dana Levi', ['054-123-4567'], ' 054 123 ') === true, 'mq:digitsSpaced');
+
+// 13d. hiddenNote
+const hn = fn('hiddenNote');
+eq(hn(0), '', 'hidden:zero');
+eq(hn(1), "1 contact without a phone number isn't shown", 'hidden:one');
+eq(hn(7), "7 contacts without a phone number aren't shown", 'hidden:many');
+
 // 14. Module hygiene
 const textSrc = fs.readFileSync(textPath, 'utf8');
 ok(
