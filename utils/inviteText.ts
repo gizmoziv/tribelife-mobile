@@ -89,3 +89,38 @@ export function invitedLabel(iso: string): string {
   if (Number.isNaN(d.getTime())) return '';
   return `✓ Invited · ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 }
+
+/** Click-to-chat link; without digits it opens WhatsApp's generic share (user picks the chat). */
+export function whatsAppUrl(digits: string | null, text: string): string {
+  const encoded = encodeURIComponent(text);
+  if (digits) return `https://wa.me/${digits}?text=${encoded}`;
+  return `https://wa.me/?text=${encoded}`;
+}
+
+/** JSON object of contactId -> ISO date; anything else is treated as empty. */
+export function parseInvitedMap(raw: string | null): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'string') out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** JSON array of contact ids; non-string entries are dropped. */
+export function parseIdList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === 'string');
+  } catch {
+    return [];
+  }
+}

@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { getLocales } from 'expo-localization';
 import { requireOptionalNativeModule } from 'expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -23,6 +24,8 @@ import { useAuthStore } from '@/store/authStore';
 import { FONTS, SPACING, RADIUS, SHADOWS, COLORS } from '@/constants';
 import { useTabBarSpace } from '@/hooks/useTabBarSpace';
 import { PillButton } from '@/components/ui/PillButton';
+import { ActionSheetModal } from '@/components/ui/ActionSheetModal';
+import { intlPhone } from '@/utils/phoneIntl';
 import {
   inviteLink,
   personalInvite,
@@ -33,6 +36,9 @@ import {
   sectionKeyOf,
   isRTLText,
   invitedLabel,
+  whatsAppUrl,
+  parseInvitedMap,
+  parseIdList,
 } from '@/utils/inviteText';
 
 // ── Lazy native modules ──────────────────────────────────────────────────────
@@ -65,6 +71,7 @@ function inviteSmsModule(): SmsModule | null {
 type Step = 'boot' | 'intro' | 'loading' | 'denied' | 'pick' | 'list';
 type Access = 'all' | 'limited' | 'denied';
 type SendResult = 'sent' | 'cancelled' | 'unknown' | 'failed';
+type Channel = 'text' | 'whatsapp';
 
 interface InviteContact {
   id: string;
@@ -79,6 +86,8 @@ interface LoadedContacts {
 }
 
 const INTRO_KEY = 'invite_intro_seen';
+const INVITED_KEY = 'invite_invited_map';
+const SELECTED_KEY = 'invite_selected_ids';
 const INTRO_BODY = 'Pick a few friends from your contacts and send each one a personal invite by text or WhatsApp.';
 
 // ── Native helpers (module-level named functions) ────────────────────────────
@@ -136,6 +145,16 @@ async function inviteSendText(rawNumber: string, body: string): Promise<SendResu
   }
 }
 
+async function inviteSendWhatsApp(digits: string | null, body: string): Promise<boolean> {
+  try {
+    // Documented https click-to-chat link only: no app-scheme URL, no installed-app probe.
+    await Linking.openURL(whatsAppUrl(digits, body));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function inviteReadIntroSeen(): Promise<boolean> {
   try {
     return (await AsyncStorage.getItem(INTRO_KEY)) === '1';
@@ -146,6 +165,31 @@ async function inviteReadIntroSeen(): Promise<boolean> {
 
 function inviteWriteIntroSeen(): void {
   AsyncStorage.setItem(INTRO_KEY, '1').catch(() => {});
+}
+
+// On-device only: contact ids with ISO dates, and an id list. Never names or numbers.
+async function inviteReadInvited(): Promise<Record<string, string>> {
+  try {
+    return parseInvitedMap(await AsyncStorage.getItem(INVITED_KEY));
+  } catch {
+    return {};
+  }
+}
+
+function inviteWriteInvited(map: Record<string, string>): void {
+  AsyncStorage.setItem(INVITED_KEY, JSON.stringify(map)).catch(() => {});
+}
+
+async function inviteReadSelected(): Promise<string[]> {
+  try {
+    return parseIdList(await AsyncStorage.getItem(SELECTED_KEY));
+  } catch {
+    return [];
+  }
+}
+
+function inviteWriteSelected(ids: string[]): void {
+  AsyncStorage.setItem(SELECTED_KEY, JSON.stringify(ids)).catch(() => {});
 }
 
 function nonePhoneNote(count: number): string {
@@ -169,9 +213,24 @@ export default function InviteScreen() {
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [invited, setInvited] = useState<Record<string, string>>({});
+  const [chooser, setChooser] = useState<{ contact: InviteContact; channel: Channel } | null>(null);
   const sendingRef = useRef(false);
+  const invitedRef = useRef<Record<string, string>>({});
+  const region = useMemo(() => getLocales()[0]?.regionCode ?? null, []);
 
   const headerTop = Platform.select({ android: insets.top, default: 0 });
+
+  useEffect(() => {
+    let alive = true;
+    inviteReadInvited().then((saved) => {
+      if (!alive) return;
+      invitedRef.current = { ...saved, ...invitedRef.current };
+      setInvited(invitedRef.current);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const accessAndLoad = useCallback(async () => {
     setStep('loading');
@@ -188,6 +247,15 @@ export default function InviteScreen() {
       if (level === 'limited') {
         // iOS limited access: the shared set IS the selection.
         setSelectedIds(loaded.contacts.map((c) => c.id));
+        setStep('list');
+        return;
+      }
+      // Full access: bring back the user's own earlier selection, if any still exists.
+      const saved = await inviteReadSelected();
+      const present = new Set(loaded.contacts.map((c) => c.id));
+      const restored = saved.filter((id) => present.has(id));
+      if (restored.length > 0) {
+        setSelectedIds(restored);
         setStep('list');
         return;
       }
@@ -225,6 +293,7 @@ export default function InviteScreen() {
   }, []);
 
   const handleContinuePick = useCallback(() => {
+    inviteWriteSelected(checkedIds);
     setSelectedIds(checkedIds);
     setStep('list');
   }, [checkedIds]);
@@ -235,33 +304,74 @@ export default function InviteScreen() {
   }, [selectedIds]);
 
   const markInvited = useCallback((id: string) => {
-    setInvited((prev) => ({ ...prev, [id]: new Date().toISOString() }));
+    invitedRef.current = { ...invitedRef.current, [id]: new Date().toISOString() };
+    setInvited(invitedRef.current);
+    inviteWriteInvited(invitedRef.current);
   }, []);
 
-  const handleText = useCallback(
-    async (contact: InviteContact) => {
+  const sendTo = useCallback(
+    async (contact: InviteContact, channel: Channel, number: string) => {
       if (sendingRef.current) return;
       if (!handle) return;
       sendingRef.current = true;
       try {
         const body = personalInvite(contact.first, link);
-        const result = await inviteSendText(contact.phones[0], body);
-        if (result === 'sent' || result === 'unknown') {
+        if (channel === 'text') {
+          const result = await inviteSendText(number, body);
+          if (result === 'sent' || result === 'unknown') {
+            markInvited(contact.id);
+            return;
+          }
+          if (result === 'failed') {
+            Alert.alert(
+              "Couldn't open Messages",
+              "This device can't send text messages. Try WhatsApp instead.",
+            );
+          }
+          return;
+        }
+        const digits = intlPhone(number, region)?.waDigits ?? null;
+        const opened = await inviteSendWhatsApp(digits, body);
+        if (opened) {
           markInvited(contact.id);
           return;
         }
-        if (result === 'failed') {
-          Alert.alert(
-            "Couldn't open Messages",
-            "This device can't send text messages. Try WhatsApp instead.",
-          );
-        }
+        Alert.alert("Couldn't open WhatsApp", 'Please try again, or use Text.');
       } finally {
         sendingRef.current = false;
       }
     },
-    [handle, link, markInvited],
+    [handle, link, markInvited, region],
   );
+
+  const handleSend = useCallback(
+    (contact: InviteContact, channel: Channel) => {
+      if (contact.phones.length > 1) {
+        setChooser({ contact, channel });
+        return;
+      }
+      sendTo(contact, channel, contact.phones[0]);
+    },
+    [sendTo],
+  );
+
+  const chooserActions = useMemo(() => {
+    if (!chooser) return [];
+    const labels = new Set<string>();
+    return chooser.contact.phones.map((number) => {
+      let label = intlPhone(number, region)?.display ?? number;
+      if (labels.has(label)) label = `${label} (${number})`;
+      labels.add(label);
+      return {
+        label,
+        onPress: () => {
+          const { contact, channel } = chooser;
+          setChooser(null);
+          sendTo(contact, channel, number);
+        },
+      };
+    });
+  }, [chooser, region, sendTo]);
 
   const sections = useMemo(() => {
     const byKey = new Map<string, InviteContact[]>();
@@ -380,7 +490,7 @@ export default function InviteScreen() {
                   {item.name}
                 </Text>
                 <Text style={[styles.rowPhone, { color: colors.textMuted }]} numberOfLines={1}>
-                  {item.phones[0]}
+                  {intlPhone(item.phones[0], region)?.display ?? item.phones[0]}
                 </Text>
               </View>
             </Pressable>
@@ -444,7 +554,7 @@ export default function InviteScreen() {
               {item.name}
             </Text>
             <Text style={[styles.rowPhone, { color: colors.textMuted }]} numberOfLines={1}>
-              {item.phones[0]}
+              {intlPhone(item.phones[0], region)?.display ?? item.phones[0]}
             </Text>
             {invited[item.id] ? (
               <Text style={[styles.invitedText, { color: COLORS.primary }]}>
@@ -452,7 +562,10 @@ export default function InviteScreen() {
               </Text>
             ) : null}
           </View>
-          <RowButton label="Text" color={COLORS.primary} onPress={() => handleText(item)} />
+          <View style={styles.rowButtons}>
+            <RowButton label="Text" color={COLORS.primary} onPress={() => handleSend(item, 'text')} />
+            <RowButton label="WhatsApp" color={COLORS.primary} onPress={() => handleSend(item, 'whatsapp')} />
+          </View>
         </View>
       )}
     />
@@ -480,6 +593,12 @@ export default function InviteScreen() {
         insetsTop={headerTop}
       />
       {body}
+      <ActionSheetModal
+        visible={chooser !== null}
+        onClose={() => setChooser(null)}
+        title="Choose a number"
+        actions={chooserActions}
+      />
     </SafeAreaView>
   );
 }
@@ -694,7 +813,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.medium,
     marginTop: 4,
   },
+  rowButtons: {
+    gap: 6,
+    alignItems: 'stretch',
+  },
   rowButton: {
+    alignItems: 'center',
     borderWidth: 1.5,
     borderRadius: RADIUS.pill,
     paddingHorizontal: 14,
