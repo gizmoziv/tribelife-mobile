@@ -73,6 +73,7 @@ import { LINK_CLICKS_UPSELL_BODY } from '@/utils/linkClicksViewModel';
 import { ContextMenu } from '@/components/ui/chat/ContextMenu';
 import { ReplyComposer } from '@/components/ui/chat/ReplyComposer';
 import { AttachmentComposer } from '@/components/ui/chat/AttachmentComposer';
+import { PasteImageChip } from '@/components/ui/chat/PasteImageChip';
 import { EditComposer } from '@/components/ui/chat/EditComposer';
 import { MentionAutocomplete } from '@/components/ui/chat/MentionAutocomplete';
 import { MentionTextInput } from '@/components/ui/chat/MentionTextInput';
@@ -208,6 +209,13 @@ export default function DMThreadScreen() {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  // Phase 46: composer focus gates the "Paste image" chip. Blur is delayed so a
+  // chip tap that blurs the input still lands before the chip unmounts.
+  const [inputFocused, setInputFocused] = useState(false);
+  const inputBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+  }, []);
   const [translations, setTranslations] = useState<Record<number, { text: string; showing: boolean }>>({});
   const [langPickerVisible, setLangPickerVisible] = useState(false);
   const [preferredLanguage, setPreferredLanguage] = useState<string>('English');
@@ -1495,6 +1503,10 @@ export default function DMThreadScreen() {
             ) : null}
             <ReplyComposer replyTo={replyTo} onCancel={() => setReplyTo(null)} />
             <AttachmentComposer attachment={pendingAttachment} onCancel={() => setPendingAttachment(null)} />
+            <PasteImageChip
+              active={inputFocused && !pendingAttachment && !isUploading && !isRecording && !editingMessage}
+              onImagesSelected={handleImagesSelected}
+            />
 
             <View style={{ position: 'relative' }}>
               <MentionAutocomplete
@@ -1535,6 +1547,14 @@ export default function DMThreadScreen() {
                         onChangeText={handleInputChange}
                         selection={selection}
                         onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
+                        onFocus={() => {
+                          if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+                          setInputFocused(true);
+                        }}
+                        onBlur={() => {
+                          if (inputBlurTimerRef.current) clearTimeout(inputBlurTimerRef.current);
+                          inputBlurTimerRef.current = setTimeout(() => setInputFocused(false), 300);
+                        }}
                         multiline
                       />
                     </View>

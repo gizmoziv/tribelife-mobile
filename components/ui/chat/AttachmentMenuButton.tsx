@@ -35,7 +35,7 @@ function PaperclipIcon() {
   );
 }
 
-async function compressImages(assets: ImagePicker.ImagePickerAsset[]): Promise<string[]> {
+export async function compressImages(assets: { uri: string; width: number; height: number }[]): Promise<string[]> {
   const compressed = await Promise.all(
     assets.map(async (asset) => {
       const longestSide = Math.max(asset.width, asset.height);
