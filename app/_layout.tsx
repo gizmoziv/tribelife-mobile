@@ -27,6 +27,7 @@ import { connectSocket, emitForeground, emitBackground } from '@/services/socket
 import { useNotificationStore } from '@/store/notificationStore';
 import { onNotification, onChatNotification, onRoomMessage, onGlobeMessage, onDirectMessage } from '@/services/socket';
 import { useChatsStore } from '@/store/chatsStore';
+import { useTribeHubStore } from '@/store/tribeHubStore';
 import { adaptChatNotification } from '@/services/chatNotificationAdapter';
 import { routeChatNotificationTap, getPostLoginLandingRoute } from '@/services/notificationRouting';
 import { markNotificationTap, wasNotificationTapRecent } from '@/services/notificationTapGuard';
@@ -328,6 +329,15 @@ function RootLayoutInner() {
                 params: nData?.articleId ? { highlightArticleId: String(nData.articleId) } : {},
               }));
               deepLinkHandled = true;
+            } else if (nData?.type === 'candle_reminder') {
+              // Candle reminder tap: Tribe tab + candle details sheet (the sheet
+              // shows its loading state until today's data lands).
+              scheduleColdStartNav('candleReminderTap', () => {
+                router.push('/(app)/tribe');
+                useTribeHubStore.getState().openSheet('details');
+                useTribeHubStore.getState().refreshTodayIfStale();
+              });
+              deepLinkHandled = true;
             } else if (nData?.type === 'org_invite' && nData?.token) {
               scheduleColdStartNav('orgInviteTap', () => router.push({
                 pathname: '/org/invite/[token]',
@@ -482,6 +492,11 @@ function RootLayoutInner() {
           pathname: '/(app)/tribe',
           params: data?.articleId ? { highlightArticleId: String(data.articleId) } : {},
         });
+      } else if (data?.type === 'candle_reminder') {
+        // Candle reminder tap while running: Tribe tab + candle details sheet.
+        router.push('/(app)/tribe');
+        useTribeHubStore.getState().openSheet('details');
+        useTribeHubStore.getState().refreshTodayIfStale();
       } else if (data?.type === 'org_invite' && data?.token) {
         router.push({
           pathname: '/org/invite/[token]',
