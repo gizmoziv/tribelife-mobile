@@ -101,6 +101,13 @@ export default function OnboardingScreen() {
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
   const inviteClaimAttempted = useRef(false);
   const inviteClaimApplied = useRef(false);
+  // Set when the Referral value came from a successful paste claim. Submitted
+  // with the detected source exactly like a link-captured ref (261122-h0o);
+  // cleared the moment the user types, which makes it manual_entry again.
+  const [pastedClaim, setPastedClaim] = useState<{
+    ref: string;
+    source: 'handle_code' | 'profile_share' | 'group_invite';
+  } | null>(null);
 
   // Phase 35 step machine — resolved inside the attribution effect below.
   const [step, setStep] = useState<OnboardingStep | null>(null);
@@ -175,6 +182,7 @@ export default function OnboardingScreen() {
       // Same state a typed code uses, so submission treats it identically.
       const code = result.ref.replace(/[^a-z0-9_]/g, '').slice(0, 30);
       setTypedReferrer(code);
+      setPastedClaim({ ref: result.ref, source: result.source });
       setReferralError(null);
       inviteClaimApplied.current = true;
       setInviteMessage(`Invite from @${code} applied`);
@@ -311,6 +319,7 @@ export default function OnboardingScreen() {
   const persistOnboarding = async () => {
     // Resolve referral values from component state (populated on mount).
     // recognized ref → keep its captured source (handle_code/profile_share/group_invite)
+    // pasted invite  → keep the source the claim detected (same as captured)
     // organic typed  → use manual_entry source
     // empty organic  → omit both (same as original organic flow)
     let referralCode: string | undefined;
@@ -324,6 +333,9 @@ export default function OnboardingScreen() {
     if (recognizedRef) {
       referralCode = recognizedRef;
       attributionSource = recognizedSource ?? undefined;
+    } else if (pastedClaim) {
+      referralCode = pastedClaim.ref;
+      attributionSource = pastedClaim.source;
     } else if (typedReferrer.trim()) {
       referralCode = typedReferrer.trim().toLowerCase();
       attributionSource = 'manual_entry';
@@ -398,10 +410,12 @@ export default function OnboardingScreen() {
       // throws before that, so a backgrounded app keeps its captured ref.
       if (isReferralReviewRequiredError(err)) {
         const typedCode = typedReferrer.trim().toLowerCase();
-        const code = recognizedRef ?? (typedCode || null);
+        const code = recognizedRef ?? pastedClaim?.ref ?? (typedCode || null);
         const source = recognizedRef
           ? (recognizedSource ?? 'handle_code')
-          : ('manual_entry' as const);
+          : pastedClaim
+            ? pastedClaim.source
+            : ('manual_entry' as const);
         goToApplyForAccess('replace', code ? { code, source } : undefined);
         return;
       }
@@ -477,7 +491,9 @@ export default function OnboardingScreen() {
     // deep-link ref and no code already validated on the follow-up screen.
     // Uses isValidatingReferral (not isSubmitting) so this never
     // double-toggles the submit spinner against submitOnboarding below.
-    if (!recognizedRef && !referralValidated) {
+    // A pasted invite is treated like a captured ref: it skips /validate and
+    // the server decides at onboarding (referral-review-required below).
+    if (!recognizedRef && !pastedClaim && !referralValidated) {
       const trimmed = typedReferrer.trim();
       if (!trimmed) {
         // Blank: send to the follow-up referral screen. No request, no
@@ -746,11 +762,12 @@ export default function OnboardingScreen() {
                         placeholder="referral code"
                         placeholderTextColor={COLORS.textMuted}
                         value={typedReferrer}
-                        onChangeText={(text) =>
+                        onChangeText={(text) => {
+                          setPastedClaim(null);
                           setTypedReferrer(
                             text.toLowerCase().replace(/[^a-z0-9_]/g, ''),
-                          )
-                        }
+                          );
+                        }}
                         autoCapitalize="none"
                         autoCorrect={false}
                         maxLength={30}
@@ -871,6 +888,7 @@ export default function OnboardingScreen() {
                     placeholderTextColor={COLORS.textMuted}
                     value={typedReferrer}
                     onChangeText={(text) => {
+                      setPastedClaim(null);
                       setTypedReferrer(
                         text.toLowerCase().replace(/[^a-z0-9_]/g, ''),
                       );
