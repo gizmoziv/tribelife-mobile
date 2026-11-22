@@ -8,7 +8,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useNotificationStore, selectBellCount } from '@/store/notificationStore';
 import { useChatsStore } from '@/store/chatsStore';
@@ -149,7 +149,14 @@ export default function NotificationsScreen() {
   const { notifications, summary, setNotifications, setSummary, markTypeRead, markOneRead } = useNotificationStore();
   const bellCount = useNotificationStore(selectBellCount);
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabKey>('groups');
+  // Deep links (e.g. the Shabbat summary push) may open a specific tab: /notifications?tab=system
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : 'groups',
+  );
+  useEffect(() => {
+    if (tabParam && TABS.some((t) => t.key === tabParam)) setActiveTab(tabParam as TabKey);
+  }, [tabParam]);
 
   useEffect(() => {
     notificationsApi.list().then(({ notifications: notifs, unreadCount: count }) => {

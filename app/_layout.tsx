@@ -340,7 +340,7 @@ function RootLayoutInner() {
               deepLinkHandled = true;
             } else if (nData?.type === 'shabbat_summary') {
               // Post-Havdalah "While you were away" summary: open the bell (notifications) screen.
-              scheduleColdStartNav('shabbatSummaryTap', () => router.push('/notifications'));
+              scheduleColdStartNav('shabbatSummaryTap', () => router.push({ pathname: '/notifications', params: { tab: 'system' } }));
               deepLinkHandled = true;
             } else if (nData?.type === 'org_invite' && nData?.token) {
               scheduleColdStartNav('orgInviteTap', () => router.push({
@@ -502,8 +502,8 @@ function RootLayoutInner() {
         useTribeHubStore.getState().openSheet('details');
         useTribeHubStore.getState().refreshTodayIfStale();
       } else if (data?.type === 'shabbat_summary') {
-        // Post-Havdalah summary tap while running: open the bell (notifications) screen.
-        router.push('/notifications');
+        // Post-Havdalah summary tap while running: open the bell's System tab.
+        router.push({ pathname: '/notifications', params: { tab: 'system' } });
       } else if (data?.type === 'org_invite' && data?.token) {
         router.push({
           pathname: '/org/invite/[token]',
