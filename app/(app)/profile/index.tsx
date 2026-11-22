@@ -31,6 +31,7 @@ import {
   newsPushApi,
   ApiError,
   type ShabbatStatus,
+  type CandleLeadMinutes,
 } from '@/services/api';
 import { clearToken } from '@/services/api';
 import { disconnectSocket } from '@/services/socket';
@@ -396,21 +397,43 @@ export default function ProfileScreen() {
   // (older backend 404 / network error) — the caption + Change link hide.
   const [shabbatStatus, setShabbatStatus] = useState<ShabbatStatus | null>(null);
   const [shabbatLocationVisible, setShabbatLocationVisible] = useState(false);
+  // Phase 47 (CANDLE-01/03): candle-lighting reminder. available=false (older
+  // backend, no candleLocationSet in the GET) hides the whole row.
+  const [candlePrefs, setCandlePrefs] = useState<{
+    available: boolean;
+    enabled: boolean;
+    locationSet: boolean;
+    lead: CandleLeadMinutes;
+  }>({ available: false, enabled: false, locationSet: false, lead: 60 });
   const [newsPushEnabled, setNewsPushEnabled] = useState(true); // default true matches DB column default
+
+  // Load server-side preferences. Merge into prev (not replace) so an absent
+  // readReceipts in the GET keeps its default-ON value (Pitfall 7) — the GET
+  // type marks readReceipts optional, so a wholesale set would widen it to
+  // undefined and break the typed toggle. Also derives the candle reminder
+  // state (Phase 47); runs on every Profile focus so a location set on the
+  // Tribe tab flips the auto-ON default here.
+  const refreshNotifPrefs = useCallback(() => {
+    notificationsApi
+      .getPreferences()
+      .then((prefs) => {
+        setNotifPrefs((prev) => ({ ...prev, ...prefs }));
+        const lead = prefs.candleReminderLeadMinutes;
+        setCandlePrefs({
+          available: typeof prefs.candleLocationSet === 'boolean',
+          enabled: prefs.candleReminder === true,
+          locationSet: prefs.candleLocationSet === true,
+          lead: lead === 30 || lead === 60 || lead === 120 ? lead : 60,
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Check device push permission status
     Notifications.getPermissionsAsync().then(({ status }) => {
       setPushEnabled(status === 'granted');
     });
-    // Load server-side preferences. Merge into prev (not replace) so an absent
-    // readReceipts in the GET keeps its default-ON value (Pitfall 7) — the GET
-    // type marks readReceipts optional, so a wholesale set would widen it to
-    // undefined and break the typed toggle.
-    notificationsApi
-      .getPreferences()
-      .then((prefs) => setNotifPrefs((prev) => ({ ...prev, ...prefs })))
-      .catch(() => {});
     newsPushApi
       .getPreference()
       .then(({ newsPushEnabled }) => setNewsPushEnabled(newsPushEnabled))
@@ -457,7 +480,30 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshShabbatStatus();
-    }, [refreshShabbatStatus]),
+      refreshNotifPrefs();
+    }, [refreshShabbatStatus, refreshNotifPrefs]),
+  );
+
+  // Phase 47 (D-01, D-02): turning the reminder ON without a saved candle
+  // location never PUTs first — it asks for the location instead.
+  const handleCandleReminderToggle = useCallback(
+    async (value: boolean) => {
+      if (value && !candlePrefs.locationSet) {
+        setShabbatLocationVisible(true);
+        return;
+      }
+      setCandlePrefs((prev) => ({ ...prev, enabled: value }));
+      try {
+        await notificationsApi.updatePreferences({ candleReminder: value });
+      } catch {
+        setCandlePrefs((prev) => ({ ...prev, enabled: !value }));
+        Alert.alert(
+          'Something went wrong',
+          "Couldn't update candle-lighting reminders. Please try again.",
+        );
+      }
+    },
+    [candlePrefs.locationSet],
   );
 
   const updateNotifPref = useCallback(
@@ -975,6 +1021,34 @@ export default function ProfileScreen() {
                   Change location
                 </Text>
               </TouchableOpacity>
+            ) : null}
+            {/* Phase 47 (CANDLE-01, D-01/D-02/D-08): hidden against an older
+                backend. Disabled with the Push master switch like the other
+                push sub-toggles. */}
+            {candlePrefs.available ? (
+              <>
+                <SettingsRow
+                  label="Candle-lighting reminder"
+                  right={
+                    <Switch
+                      value={pushEnabled && candlePrefs.enabled}
+                      onValueChange={handleCandleReminderToggle}
+                      trackColor={{ false: colors.border, true: COLORS.primary }}
+                      thumbColor="#FFF"
+                      disabled={!pushEnabled}
+                    />
+                  }
+                />
+                <Text style={[styles.privacyCaption, { color: colors.textMuted }]}>
+                  {candlePrefs.locationSet
+                    ? `A push before candle lighting on Fridays and Erev Yom Tov.${
+                        shabbatStatus
+                          ? ` Times based on ${shabbatStatus.location.label}.`
+                          : ''
+                      }`
+                    : 'Turning this on asks for your candle-lighting location first.'}
+                </Text>
+              </>
             ) : null}
           </SettingsSection>
         </AnimatedEntry>

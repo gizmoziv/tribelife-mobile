@@ -548,6 +548,12 @@ export const notificationsApi = {
       // backend — callers treat undefined as false.
       shabbatMode?: boolean;
       shabbatAnnouncementSeen?: boolean;
+      // Phase 47 (CANDLE-01/03): candle-lighting reminder. Absent on an older
+      // backend — callers treat undefined candleLocationSet as "feature
+      // unavailable" and hide the row.
+      candleReminder?: boolean;
+      candleReminderLeadMinutes?: CandleLeadMinutes;
+      candleLocationSet?: boolean;
     }>('/api/notifications/preferences'),
 
   updatePreferences: (prefs: {
@@ -560,6 +566,9 @@ export const notificationsApi = {
     readReceipts?: boolean;
     shabbatMode?: boolean;
     shabbatAnnouncementSeen?: true;
+    // Phase 47 (CANDLE-01/03): 422 when candleReminder is true with no location.
+    candleReminder?: boolean;
+    candleReminderLeadMinutes?: CandleLeadMinutes;
   }) =>
     request('/api/notifications/preferences', {
       method: 'PUT',
@@ -570,6 +579,8 @@ export const notificationsApi = {
   getShabbatStatus: () =>
     request<ShabbatStatus>('/api/notifications/shabbat-status'),
 };
+
+export type CandleLeadMinutes = 30 | 60 | 120;
 
 export type ShabbatStatus = {
   enabled: boolean;
