@@ -76,7 +76,7 @@ function inviteSmsModule(): SmsModule | null {
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────
-type Step = 'boot' | 'intro' | 'loading' | 'denied' | 'pick' | 'list';
+type Step = 'boot' | 'intro' | 'loading' | 'denied' | 'error' | 'pick' | 'list';
 type Access = 'all' | 'limited' | 'denied';
 type SendResult = 'sent' | 'cancelled' | 'unknown' | 'failed';
 type Channel = 'text' | 'whatsapp';
@@ -121,7 +121,8 @@ async function inviteLoadContacts(): Promise<LoadedContacts> {
       C.ContactField.FULL_NAME,
       C.ContactField.PHONES,
     ] as const,
-    { sortOrder: C.ContactsSortOrder.UserDefault },
+    // No sortOrder: expo-contacts 57.0.9 sends ContactsSortOrder.UserDefault as 'userDefault' but the
+    // iOS native enum only accepts 'useDefault' → ERR_ARGUMENT_CAST on every load. Sorted in JS below.
   );
   const contacts: InviteContact[] = [];
   let hiddenCount = 0;
@@ -138,6 +139,7 @@ async function inviteLoadContacts(): Promise<LoadedContacts> {
       phones,
     });
   }
+  contacts.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   return { contacts, hiddenCount };
 }
 
@@ -307,8 +309,8 @@ export default function InviteScreen() {
       await loadForLevel(level);
     } catch (err) {
       console.error('[invite]', err);
-      Alert.alert("Couldn't load contacts", 'Please try again in a moment.');
-      setStep('denied');
+      // A load failure is not a permission denial: show a retry, not "access is off".
+      setStep('error');
     }
   }, [loadForLevel]);
 
@@ -573,6 +575,25 @@ export default function InviteScreen() {
     </ScrollView>
   );
 
+  const renderError = () => (
+    <ScrollView contentContainerStyle={{ paddingBottom: bottomPad }}>
+      {shareRow}
+      <View style={styles.deniedWrap}>
+        <Text style={[styles.deniedText, { color: colors.text }]}>
+          Couldn't load your contacts. Please try again.
+        </Text>
+        <PillButton
+          title="Try again"
+          onPress={() => {
+            void accessAndLoad();
+          }}
+          variant="primary"
+          style={{ marginTop: SPACING.md }}
+        />
+      </View>
+    </ScrollView>
+  );
+
   const renderPickItem = ({ item }: { item: InviteContact }) => (
     <PickRow
       item={item}
@@ -755,6 +776,7 @@ export default function InviteScreen() {
       </View>
     );
   } else if (step === 'denied') body = renderDenied();
+  else if (step === 'error') body = renderError();
   else if (step === 'pick') body = renderPick();
   else body = renderList();
 
