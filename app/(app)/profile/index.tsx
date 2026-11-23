@@ -1004,16 +1004,17 @@ export default function ProfileScreen() {
                   </Text>
                 </>
               )}
+              {/* With Invite Contacts available, it is the gradient (primary) action and Share is the outline one. */}
               <PillButton
                 title="Share TribeLife"
                 onPress={handleShare}
-                variant="primary"
+                variant={CONTACTS_NATIVE ? 'outline' : 'primary'}
                 style={{ marginTop: 12 }}
               />
               {CONTACTS_NATIVE && (
                 <PillButton
                   title="Invite Contacts"
-                  variant="outline"
+                  variant="primary"
                   onPress={() => router.push('/(app)/profile/invite')}
                   style={{ marginTop: 8 }}
                 />

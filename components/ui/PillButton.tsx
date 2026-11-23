@@ -27,6 +27,8 @@ interface PillButtonProps {
   textStyle?: TextStyle;
 }
 
+const OUTLINE_BORDER = 1.5;
+
 const SIZE_STYLES = {
   sm: { paddingVertical: 8, paddingHorizontal: 16, fontSize: 13 },
   md: { paddingVertical: 14, paddingHorizontal: 24, fontSize: 15 },
@@ -110,8 +112,10 @@ export function PillButton({
     gap: 8,
     opacity: disabled ? 0.5 : 1,
     ...(variant === 'outline' ? {
-      borderWidth: 1.5,
+      borderWidth: OUTLINE_BORDER,
       borderColor: COLORS.primary,
+      // Subtract the border so outline pills are exactly as tall as gradient pills of the same size.
+      paddingVertical: sizeStyle.paddingVertical - OUTLINE_BORDER,
     } : {}),
     ...(isGradient ? SHADOWS.md : {}),
   };
